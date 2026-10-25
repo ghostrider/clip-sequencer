@@ -1,0 +1,1821 @@
+{
+  "type": "effects_update",
+  "value": {
+    "audio": [
+      {
+        "category": "Audio Effects",
+        "description": "Resolume Bitcrusher",
+        "idstring": "Bitcrusher",
+        "name": "Bitcrusher",
+        "presets": []
+      },
+      {
+        "category": "Audio Effects",
+        "description": "Resolume Distortion",
+        "idstring": "Distortion",
+        "name": "Distortion",
+        "presets": []
+      },
+      {
+        "category": "Audio Effects",
+        "description": "Resolume EQ-3",
+        "idstring": "EQ-3",
+        "name": "EQ-3",
+        "presets": []
+      },
+      {
+        "category": "Audio Effects",
+        "description": "Resolume Flanger",
+        "idstring": "Flanger",
+        "name": "Flanger",
+        "presets": []
+      },
+      {
+        "category": "Audio Effects",
+        "description": "Resolume HighPass",
+        "idstring": "HighPass",
+        "name": "HighPass",
+        "presets": []
+      },
+      {
+        "category": "Audio Effects",
+        "description": "Resolume LowPass",
+        "idstring": "LowPass",
+        "name": "LowPass",
+        "presets": []
+      }
+    ],
+    "video": [
+      {
+        "category": "Video Effects",
+        "description": "Blends between the input and an AI depth map (MiDaS)",
+        "idstring": "VJDM",
+        "name": "1000A DepthMap",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Golden-ratio rectangle mosaic along image gradients, 7 palettes (Hololoop mode 2)",
+        "idstring": "VJHP",
+        "name": "1000A HoloPaths",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Psychedelic colour chaos, block displacement and palette tinting (Hololoop psycho mode)",
+        "idstring": "VJHS",
+        "name": "1000A HoloPsycho",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Expanding pulse rings from bright grid points (Hololoop mode 3)",
+        "idstring": "VJHU",
+        "name": "1000A HoloPulses",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Grid of nodes emitting rotating rays towards bright image regions (Hololoop mode 1)",
+        "idstring": "VJHR",
+        "name": "1000A HoloRays",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keys out the darkest part of the input (luma-based) with chromaKey-style controls: range/gamma shaping, pre-blur denoise, feather and choke",
+        "idstring": "VJLK",
+        "name": "1000A LumaKeyer",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Layered liquid mercury / chrome look: chromatic mercury distortion, procedural emerald facets, mercury surface reflection",
+        "idstring": "MRCS",
+        "name": "1000A MercuryStk",
+        "presets": [
+          {
+            "id": 1792956570334,
+            "name": "x1"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Sheds pixels upward from the input's opaque/masked area, like a picture evaporating",
+        "idstring": "VJPB",
+        "name": "1000A PixelBleed",
+        "presets": [
+          {
+            "id": 1792956570335,
+            "name": "cool"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Retriggerable camera-shake impact: inverts colour and shakes the frame for a set duration",
+        "idstring": "VJSH",
+        "name": "1000A Shake",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Projects a dead-centre crop of a 4-wide video wall onto chosen slices, each independently mirrorable",
+        "idstring": "VJSW",
+        "name": "1000A SliceWall",
+        "presets": [
+          {
+            "id": 1792956570336,
+            "name": "all 4 - rights mirrored"
+          },
+          {
+            "id": 1792956570337,
+            "name": "all 4 - seamless mirrored"
+          },
+          {
+            "id": 1792956570338,
+            "name": "random on all 4 - fast"
+          },
+          {
+            "id": 1792956570339,
+            "name": "random on all 4 - slow"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Like SliceWall, but each slice has an Opacity slider instead of an on/off Active toggle",
+        "idstring": "VJW2",
+        "name": "1000A SliceWall2",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "An video effect needs to have at least a texture in and a texture out. The patch Category needs to be set to \"Effect\".",
+        "idstring": "f3ff8268-6bd1-4de7-bb1f-c3d03502e23d",
+        "name": "ASCII Video Effect",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Turns your content into watery smoke. Smoooooke on the waaaaater!",
+        "idstring": "c_c7106a57-878e-429a-ae83-313d07e6d943",
+        "name": "Acuarela",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Manipulate the RGB channels of the clip by adding or subtracting to/from each individual channel.",
+        "idstring": "A101",
+        "name": "Add Subtract",
+        "presets": [
+          {
+            "id": 1792956569847,
+            "name": "Blue"
+          },
+          {
+            "id": 1792956569848,
+            "name": "Green"
+          },
+          {
+            "id": 1792956569849,
+            "name": "Red"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates alpha channel based on luminance or a color channel. This is very useful to get rid of black backgrounds in your content.",
+        "idstring": "A120",
+        "name": "Auto Mask",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nUses a human segmentation model to separate the subject from the background. It has options to output the mask, invert, smooth edges and filter the mask boundaries.\n\n",
+        "idstring": "c_0b5fa671-c810-401a-ba3e-cf97112ac1aa",
+        "name": "Background Removal",
+        "presets": [
+          {
+            "id": 1792956572596,
+            "name": "Light-Weight"
+          },
+          {
+            "id": 1792956572597,
+            "name": "Low-Light"
+          },
+          {
+            "id": 1792956572598,
+            "name": "Moving Subject"
+          },
+          {
+            "id": 1792956572599,
+            "name": "Multiple Subjects"
+          },
+          {
+            "id": 1792956572600,
+            "name": "Music Video"
+          },
+          {
+            "id": 1792956572601,
+            "name": "Static Subject"
+          },
+          {
+            "id": 1792956572602,
+            "name": "Webcam"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Bend over and relax",
+        "idstring": "A124",
+        "name": "Bendoscope",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Makes the bright parts of an image glow and spread light around. Great for neon effects, glowing bits or hazy looks. GPU Intensive!",
+        "idstring": "6980402605",
+        "name": "Bloom",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "da2405a2-65ba-4be3-b52c-9d5e4af6bbf8",
+        "name": "Bloom_lut",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "7e8315c5-9f3f-4382-b855-94b3bc67f00a",
+        "name": "Bloomandmore",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Smear parts of image",
+        "idstring": "A139",
+        "name": "Blow",
+        "presets": [
+          {
+            "id": 1792956569850,
+            "name": "Bright Lines"
+          },
+          {
+            "id": 1792956569851,
+            "name": "Solid"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Blurs the image",
+        "idstring": "A140",
+        "name": "Blur",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Adjust Brightness and Contrast",
+        "idstring": "A102",
+        "name": "Bright.Contrast",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Mimics old Cathode Ray Tube screens.\n\nWorks by squeezing the input texture into an \"emulated\" CRT resolution space, using 1 pixel to light up 1 R,G,B triad. Light emission is faked by a simple blur in that emulated low-res space.\n\nGreetings to Matze <3",
+        "idstring": "c_be77e0d5-1404-4399-b8ae-7cdd64cba5ab",
+        "name": "CRT",
+        "presets": [
+          {
+            "id": 1792956572603,
+            "name": "Big Beautiful Beams"
+          },
+          {
+            "id": 1792956572604,
+            "name": "Big Grid Energy"
+          },
+          {
+            "id": 1792956572605,
+            "name": "Bit of a Grid"
+          },
+          {
+            "id": 1792956572606,
+            "name": "Jagged Lines"
+          },
+          {
+            "id": 1792956572607,
+            "name": "Mind the Gap"
+          },
+          {
+            "id": 1792956572608,
+            "name": "Red-Green Lensch Flare"
+          },
+          {
+            "id": 1792956572609,
+            "name": "Scanlines Horizontal"
+          },
+          {
+            "id": 1792956572610,
+            "name": "Scanlines Vertical"
+          },
+          {
+            "id": 1792956572611,
+            "name": "Trinitron"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keys out a certain color",
+        "idstring": "RhCk",
+        "name": "ChromaKey",
+        "presets": [
+          {
+            "id": 1792956569852,
+            "name": "green key"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates circles of colors based on the content.",
+        "idstring": "A125",
+        "name": "Circles",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Filters out a range of colors, makes them greyscale",
+        "idstring": "A143",
+        "name": "Color Pass",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Applies a color filter to the content which is either a single color or based on a palette.",
+        "idstring": "A103",
+        "name": "Colorize",
+        "presets": [
+          {
+            "id": 1792956569853,
+            "name": "Blue"
+          },
+          {
+            "id": 1792956569854,
+            "name": "Pink"
+          },
+          {
+            "id": 1792956569855,
+            "name": "Rainbow Palette"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Crops the content using pixel values. The cropped output can be inverted to create a frame look.",
+        "idstring": "A166",
+        "name": "Crop",
+        "presets": [
+          {
+            "id": 1792956569856,
+            "name": "a bit wider"
+          },
+          {
+            "id": 1792956569857,
+            "name": "no crop"
+          },
+          {
+            "id": 1792956569858,
+            "name": "slit1"
+          },
+          {
+            "id": 1792956569859,
+            "name": "square"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates cube and uses the tiled content to fill its sides.",
+        "idstring": "A117",
+        "name": "Cube Tiles",
+        "presets": [
+          {
+            "id": 1792956569860,
+            "name": "Closeup"
+          },
+          {
+            "id": 1792956569861,
+            "name": "Complex"
+          },
+          {
+            "id": 1792956569862,
+            "name": "Inside Cube"
+          },
+          {
+            "id": 1792956569863,
+            "name": "Nauseating"
+          },
+          {
+            "id": 1792956569864,
+            "name": "Rotation"
+          },
+          {
+            "id": 1792956569865,
+            "name": "Slow Rotate"
+          },
+          {
+            "id": 1792956569866,
+            "name": "Tiles"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Delay per color channel",
+        "idstring": "A152",
+        "name": "Delay RGB",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nSoft, depth-of-field blur. Pick what stays in focus and watch everything closer or farther melt into smooth, bokeh. Bright spots round into glowing discs. Works on any clip â€” depth captured from input",
+        "idstring": "c_e18708c3-034f-4f95-99ea-7745f8db95b2",
+        "name": "Depth Blur",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nDepth-driven displacement warp: noise bends the image where a sweepable depth slice bites. Falloff curves the onset, Min/Max set the strength, Detail and Speed shape the motion.",
+        "idstring": "c_744c3576-98a7-4363-b471-81a99a2943b2",
+        "name": "Depth Displace",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nGenerates a depth map from a 2D image. Includes temporal filtering and smoothing to reduce flickering between frames.",
+        "idstring": "c_77f10c10-9e89-41be-91ea-305f7f7439d2",
+        "name": "Depth Estimation",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nTwo-stage depth effect: Ghost recedes the picture into the background, Xray highlights a glowing slab at a chosen depth. Pair them for a depth-driven xray look, or bypass either stage.",
+        "idstring": "c_2e907486-7c91-4462-ab83-53c581eb1063",
+        "name": "Depth Field",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nDepth pixelation\n\nDepth-driven pixelation effect. Block size varies with depth so distant areas read chunky while near areas stay sharp. ",
+        "idstring": "c_b913e435-0f70-4c38-aa72-9cfde5f0ebc0",
+        "name": "Depth Pixelation",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tip! Place before Transform: AI works best at native resolution.\nCreates a parallax effect by slicing the image into depth layers and shifting each layer independently.\nCloser layers shift more than distant layers, simulating 3D parallax from a 2D image.",
+        "idstring": "c_e11a7fa8-6368-47ec-bd2c-04792d1d4171",
+        "name": "Depth Shift",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Dilates the colors, creating a painterly look.",
+        "idstring": "725725449995",
+        "name": "Dilate",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Displaces pixels based on luminance",
+        "idstring": "A131",
+        "name": "Displace",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Distorts the image",
+        "idstring": "A129",
+        "name": "Distortion",
+        "presets": [
+          {
+            "id": 1792956569867,
+            "name": "Dr Bibber"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Simulates shades and gradients using tiny patterns of pixels. It’s often used to give images a lo-fi, pixelated, or vintage look by reducing color detail.",
+        "idstring": "725733762308",
+        "name": "Dither",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Combines the content with a dot pattern, creating a halftone look.",
+        "idstring": "A176",
+        "name": "Dot Screen",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "a9fe06b1-ab2b-4a1e-95e7-f20050e09441",
+        "name": "Dot matrix v2",
+        "presets": [
+          {
+            "id": 1792956572579,
+            "name": "0 alpha background"
+          },
+          {
+            "id": 1792956572580,
+            "name": "reasonable"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Adds a soft-edged shadow behind the content. It helps to create a sense of depth by seperating the content from the background.",
+        "idstring": "372541077550622327",
+        "name": "Drop Shadow",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Finds the outlines of the content by highlighting areas where colors or brightness change sharply. The result looks like a sketch or blueprint.",
+        "idstring": "MEDG",
+        "name": "Edge Detection",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Controls how bright or dark your content looks, like adjusting the light settings on a camera.",
+        "idstring": "A134",
+        "name": "Exposure",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Go pro with feedback and let your inner psychonaut out.",
+        "idstring": "c_4d38020a-b010-41ee-b0eb-b9014468aed9",
+        "name": "FeedbackPro",
+        "presets": [
+          {
+            "id": 1792956572581,
+            "name": "x1"
+          },
+          {
+            "id": 1792956572582,
+            "name": "x2"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "1d11feea-7890-4c71-bdd7-ec4a11ba7389",
+        "name": "Film Grain",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Warps the content in a curved, bubble-like way—like looking through a peephole.",
+        "idstring": "A123",
+        "name": "Fish Eye",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Flips image horizontaly, vertically or both",
+        "idstring": "A104",
+        "name": "Flip",
+        "presets": [
+          {
+            "id": 1792956569868,
+            "name": "Ace of Spades"
+          },
+          {
+            "id": 1792956569869,
+            "name": "Soft Mirror H"
+          },
+          {
+            "id": 1792956569870,
+            "name": "Soft Mirror V"
+          },
+          {
+            "id": 1792956569871,
+            "name": "Surface Refraction"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Radial fragmentation",
+        "idstring": "sy08",
+        "name": "Fragment",
+        "presets": [
+          {
+            "id": 1792956569872,
+            "name": "Horizon"
+          },
+          {
+            "id": 1792956569873,
+            "name": "Mist"
+          },
+          {
+            "id": 1792956569874,
+            "name": "Shake"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Freezes part of image",
+        "idstring": "A132",
+        "name": "Freeze",
+        "presets": [
+          {
+            "id": 1792956569875,
+            "name": "Frozen Solid"
+          },
+          {
+            "id": 1792956569876,
+            "name": "Stop & Fade"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "7382fa55-037a-446f-b758-b786f2f6d421",
+        "name": "Ghosting",
+        "presets": [
+          {
+            "id": 1792956572577,
+            "name": "longer trails"
+          },
+          {
+            "id": 1792956572578,
+            "name": "print blue"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "c66a2d38-8d3f-465d-bc7c-c0a1d49bd4dd",
+        "name": "Glic",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "1e463024-052d-4e68-aaa2-720f56463825",
+        "name": "Glitch_1",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Oozing Goo Effect",
+        "idstring": "sy06",
+        "name": "Goo",
+        "presets": [
+          {
+            "id": 1792956569877,
+            "name": "Jagged"
+          },
+          {
+            "id": 1792956569878,
+            "name": "Pieces"
+          },
+          {
+            "id": 1792956569879,
+            "name": "Shimmer"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "This effect is very griddly",
+        "idstring": "A413",
+        "name": "Grid",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Clones the content into an adjustable grid with distortion and randomization parameters.",
+        "idstring": "c_5f16e905-6ba4-4789-a0a4-f1bfcfb60ba3",
+        "name": "Grid Cloner",
+        "presets": [
+          {
+            "id": 1792956572612,
+            "name": "x1"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Applies a hatched pattern to the content.",
+        "idstring": "77461104669389",
+        "name": "Hatched",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Fakes thermal imaging",
+        "idstring": "A107",
+        "name": "Heat",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Rotates colours based on Hue",
+        "idstring": "A128",
+        "name": "Hue Rotate",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates the illusion that the camera is endlessly zooming into the content.",
+        "idstring": "P205",
+        "name": "Infinite Zoom",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Invert per color channel",
+        "idstring": "A105",
+        "name": "Invert RGB",
+        "presets": [
+          {
+            "id": 1792956569880,
+            "name": "Sweded"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Complex iterative compositing tool. A cloner effect on steroids.",
+        "idstring": "sy13",
+        "name": "Iterate",
+        "presets": [
+          {
+            "id": 1792956569881,
+            "name": "hBlur"
+          },
+          {
+            "id": 1792956569882,
+            "name": "Rotator"
+          },
+          {
+            "id": 1792956569883,
+            "name": "Shards"
+          },
+          {
+            "id": 1792956569884,
+            "name": "Swirly"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Kaleidoscope mirrors and rotates parts of your content to create symmetrical, geometric patterns. It turns any visual into a trippy, repeating mosaic.",
+        "idstring": "sy02",
+        "name": "Kaleidoscope",
+        "presets": [
+          {
+            "id": 1792956569885,
+            "name": "Insanity"
+          },
+          {
+            "id": 1792956569886,
+            "name": "Moving"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keystone stretches and skews your content so it fits properly on a surface that isn’t straight, like a wall at an angle. It’s generally used for fixing perspective distortion created by a projector.",
+        "idstring": "A137",
+        "name": "Keystone",
+        "presets": [
+          {
+            "id": 1792956569887,
+            "name": "Pyramid"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keystone Crop works similar to Keystone, but it removes the stretched edges instead of trying to fit the image into a warped shape.",
+        "idstring": "A156",
+        "name": "Keystone Crop",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keystone Mask works similar to Keystone, but it creates a mask out of the stretched edges instead of trying to fit the image into a warped shape. This allows you to 'poke holes' into your content.",
+        "idstring": "A155",
+        "name": "Keystone Mask",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Kuwahara smooths out your content while keeping sharp edges. It gives visuals a stylized, brush-stroke feel. Fun fact: the algorithm was originally invented for medical imaging of the heart back in the 70s!",
+        "idstring": "8166473902393820",
+        "name": "Kuwahara",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Applies a LUT (Lookup Table) to the content.",
+        "idstring": "c_374f5d67-85db-4fa7-afd8-d86621b6926e",
+        "name": "LUT",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Levels affects the dark and bright parts of your content. The Base sets the darkest point, the Midpoint shifts the balance between shadows and highlights, and the Ratio controls how stretched or compressed the range between dark and light areas becomes.",
+        "idstring": "A141",
+        "name": "Levels",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "df90c7ea-8557-4035-9096-801e645dbc2f",
+        "name": "Line_grid",
+        "presets": [
+          {
+            "id": 1792956572574,
+            "name": "h2"
+          },
+          {
+            "id": 1792956572575,
+            "name": "h3"
+          },
+          {
+            "id": 1792956572576,
+            "name": "horizontal 1"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates duplicates of your content in a linear line, which can be distorted and twisted.",
+        "idstring": "9611534302831352414",
+        "name": "Linear Cloner",
+        "presets": [
+          {
+            "id": 1792956569888,
+            "name": "Basic"
+          },
+          {
+            "id": 1792956569889,
+            "name": "Comet Spin"
+          },
+          {
+            "id": 1792956569890,
+            "name": "Dual Head"
+          },
+          {
+            "id": 1792956569891,
+            "name": "Octopussy"
+          },
+          {
+            "id": 1792956569892,
+            "name": "Trail Twist"
+          },
+          {
+            "id": 1792956569893,
+            "name": "Wokkel"
+          },
+          {
+            "id": 1792956569894,
+            "name": "Worm Twist"
+          },
+          {
+            "id": 1792956569895,
+            "name": "Xenomorph"
+          },
+          {
+            "id": 1792956569896,
+            "name": "Yin&Yang"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates low res version of image",
+        "idstring": "A142",
+        "name": "LoRez",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Masks your content using an image.",
+        "idstring": "80334396",
+        "name": "Mask",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Maps the input onto a grid of geometric shapes, with each cell's size and form driven by the brightness of the source.",
+        "idstring": "844752394952286288",
+        "name": "Meta Shape",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Mirrors the content over the X and Y axis separately.",
+        "idstring": "A108",
+        "name": "Mirror",
+        "presets": [
+          {
+            "id": 1792956569897,
+            "name": "Basic"
+          },
+          {
+            "id": 1792956569898,
+            "name": "Black Hole"
+          },
+          {
+            "id": 1792956569899,
+            "name": "Horizontal"
+          },
+          {
+            "id": 1792956569900,
+            "name": "xy mirror (4x)"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Mirrors the X and Y axis simultaneously and symmetrically.",
+        "idstring": "A180",
+        "name": "Mirror Quad",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "c7eeab16-2004-4e57-af6b-ece0725e1dc5",
+        "name": "Noise HLS",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Applies noise to the content.",
+        "idstring": "A185",
+        "name": "Noisy",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates a particle system using the content as base image.",
+        "idstring": "A191",
+        "name": "Particle System",
+        "presets": [
+          {
+            "id": 1792956569901,
+            "name": "BlurryButterfly"
+          },
+          {
+            "id": 1792956569902,
+            "name": "Fountain"
+          },
+          {
+            "id": 1792956569903,
+            "name": "Rain"
+          },
+          {
+            "id": 1792956569904,
+            "name": "Random"
+          },
+          {
+            "id": 1792956569905,
+            "name": "Starfield"
+          },
+          {
+            "id": 1792956569906,
+            "name": "Windows95"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "9d357802-ceb3-479b-83d4-6901b51f31c8",
+        "name": "Pin screen",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Blurs the image",
+        "idstring": "877671240945447219",
+        "name": "Pixel Blur",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "High pass colors",
+        "idstring": "A130",
+        "name": "Pixel High Pass",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Flexible pixel-sorting patch. Based on a shader by Crespy Baptiste: https://www.shadertoy.com/view/wsSczw",
+        "idstring": "c_b1afc180-5cfc-4b0a-81ac-4dbc2a4ee346",
+        "name": "PixelSort XTC",
+        "presets": [
+          {
+            "id": 1792956572573,
+            "name": "soft_upwards"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "24c918ba-c97d-4fc1-ae9a-d3ff46126fc6",
+        "name": "Plexus_v1",
+        "presets": [
+          {
+            "id": 1792956572572,
+            "name": "strong"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates grid of points in 3D",
+        "idstring": "A148",
+        "name": "Point Grid",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Polar Kaleidoscope",
+        "idstring": "A190",
+        "name": "PolarKaleido",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Polka like you mean it",
+        "idstring": "A181",
+        "name": "Polkadot",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Reduces amount of colours used",
+        "idstring": "A109",
+        "name": "Posterize",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates a radar effect by masking the content in a pie shape.",
+        "idstring": "J004",
+        "name": "Radar",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Instantiates the content in a radial fashion. Allows for rotation and scale modulation.",
+        "idstring": "15777305184926876320",
+        "name": "Radial Cloner",
+        "presets": [
+          {
+            "id": 1792956569908,
+            "name": "Beat Bounce"
+          },
+          {
+            "id": 1792956569909,
+            "name": "Divide"
+          },
+          {
+            "id": 1792956569910,
+            "name": "Fibonacci Spiral"
+          },
+          {
+            "id": 1792956569911,
+            "name": "Fibonacci Twist"
+          },
+          {
+            "id": 1792956569912,
+            "name": "Half Gate"
+          },
+          {
+            "id": 1792956569913,
+            "name": "Revealer"
+          },
+          {
+            "id": 1792956569914,
+            "name": "Springy"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Radial Blur creates the look of motion radiating outward from a central point, like zooming through a tunnel or spinning in place.",
+        "idstring": "sy03",
+        "name": "RadialBlur",
+        "presets": [
+          {
+            "id": 1792956569907,
+            "name": "Spiral"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Applies a scalable raster to the content.",
+        "idstring": "872041778225",
+        "name": "Raster",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Palette remap",
+        "idstring": "sy99",
+        "name": "Recolor",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Reveals the content over time using a grid pattern.",
+        "idstring": "872460957307",
+        "name": "Reveal",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Rippling video effect",
+        "idstring": "sy05",
+        "name": "Ripples",
+        "presets": [
+          {
+            "id": 1792956569915,
+            "name": "Gentle"
+          },
+          {
+            "id": 1792956569916,
+            "name": "Spikes"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "894c6471-bc66-409a-b902-76b5a74d09f9",
+        "name": "Risograph",
+        "presets": [
+          {
+            "id": 1792956572570,
+            "name": "style 2 - less contrast darker"
+          },
+          {
+            "id": 1792956572571,
+            "name": "style1"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Saturation controls how intense or vivid the colors in your content are—like turning the volume up or down on color. Lowering it makes things look more gray or muted, while raising it makes the colors pop with extra energy and brightness.",
+        "idstring": "A110",
+        "name": "Saturation",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Are you ready to have your universe shaken to its core?",
+        "idstring": "c_70353e8e-1dba-4d36-ab54-fa130b43865f",
+        "name": "Screen Shake",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates a moving spotlight that highlights only part of the content, like a flashlight sweeping through darkness.",
+        "idstring": "c_91031d74-c9cb-4506-9fad-6fcbb8752975",
+        "name": "SearchLight",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Like a wipe, but then as filter",
+        "idstring": "HTSS",
+        "name": "ShakeShake",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Mask your content with the most common geometric shapes.",
+        "idstring": "c_2e17262c-0835-4537-b17a-57a6a69e3e59",
+        "name": "Shape Mask",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Generates many different shapes by adding, subtracting and merging two different geometric shapes.",
+        "idstring": "883261715311",
+        "name": "Shaper",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Sharpen enhances the edges and fine details in an image, making it look crisper and more defined. It works by increasing contrast around edges, which helps textures stand out and gives visuals a cleaner, punchier appearance.",
+        "idstring": "89209435418021",
+        "name": "Sharpen",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates a glitch effect by randomly shifting horizontal and/or veritcal parts of the content around",
+        "idstring": "MBSH",
+        "name": "Shift Glitch",
+        "presets": [
+          {
+            "id": 1792956569917,
+            "name": "Hoirzontal"
+          },
+          {
+            "id": 1792956569918,
+            "name": "Kapot"
+          },
+          {
+            "id": 1792956569919,
+            "name": "Lines"
+          },
+          {
+            "id": 1792956569920,
+            "name": "Vertical"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Shift, rotate or scale the individual color channels",
+        "idstring": "A153",
+        "name": "Shift RGB",
+        "presets": [
+          {
+            "id": 1792956569921,
+            "name": "3D Glasses"
+          },
+          {
+            "id": 1792956569922,
+            "name": "Acid Trip"
+          },
+          {
+            "id": 1792956569923,
+            "name": "Just Good"
+          },
+          {
+            "id": 1792956569924,
+            "name": "RGB Rotated"
+          },
+          {
+            "id": 1792956569925,
+            "name": "slight_shift"
+          },
+          {
+            "id": 1792956569926,
+            "name": "Up & Down"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Slice'n Delay",
+        "idstring": "c_efd94a55-93f8-4d54-a137-ae9e90d8b9d5",
+        "name": "Slice Delay",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Slice Transform",
+        "idstring": "2926698234881442469",
+        "name": "Slice Transform",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Moves and wraps the content over the X and Y axis.",
+        "idstring": "A136",
+        "name": "Slide",
+        "presets": [
+          {
+            "id": 1792956569927,
+            "name": "4D"
+          },
+          {
+            "id": 1792956569928,
+            "name": "Down"
+          },
+          {
+            "id": 1792956569929,
+            "name": "Left"
+          },
+          {
+            "id": 1792956569930,
+            "name": "Right"
+          },
+          {
+            "id": 1792956569931,
+            "name": "Up"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Snow simulation.",
+        "idstring": "A159",
+        "name": "Snow",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Let it snow, let it snow, let it snow.",
+        "idstring": "A189",
+        "name": "Snowy",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Solid Color",
+        "idstring": "A175",
+        "name": "Solid Color",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates sparkles on top of your content. Get your glitter going baby!",
+        "idstring": "A188",
+        "name": "Sparkles",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Transforms your content into an extruded sphere.",
+        "idstring": "884101299715",
+        "name": "Sphere",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Layers static noise on top of your content. Use the opacity slider and blend modes for interesting mixes.",
+        "idstring": "MSTF",
+        "name": "Static",
+        "presets": [
+          {
+            "id": 1792956569932,
+            "name": "Difference"
+          },
+          {
+            "id": 1792956569933,
+            "name": "Subtle"
+          },
+          {
+            "id": 1792956569934,
+            "name": "White Only"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Sphere with spikes based on luminance",
+        "idstring": "A147",
+        "name": "Stingy Sphere",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Stop Motion effect",
+        "idstring": "MSTP",
+        "name": "Stop Motion",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Removes or recolors strips of your content. Allows for multiple ways to modulate and animate the strips",
+        "idstring": "sy69",
+        "name": "Stripper",
+        "presets": [
+          {
+            "id": 1792956569935,
+            "name": "Both Ways"
+          },
+          {
+            "id": 1792956569936,
+            "name": "Crossing Strips"
+          },
+          {
+            "id": 1792956569937,
+            "name": "Invert Strips"
+          },
+          {
+            "id": 1792956569938,
+            "name": "Rotating Strips"
+          },
+          {
+            "id": 1792956569939,
+            "name": "Sliding Strips"
+          },
+          {
+            "id": 1792956569940,
+            "name": "Soft Strips"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Strobes a solid color over the content with adjustable frequency",
+        "idstring": "MSTX",
+        "name": "Strobe",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Van Gogh in a box. Left ear sold separately.",
+        "idstring": "c_5b6f83f8-6d96-4aef-a332-ec4d016e80b7",
+        "name": "Strokes",
+        "presets": [
+          {
+            "id": 1792956572613,
+            "name": "Adamantium Claws"
+          },
+          {
+            "id": 1792956572614,
+            "name": "Arrow Cloud"
+          },
+          {
+            "id": 1792956572615,
+            "name": "Bubble Bath"
+          },
+          {
+            "id": 1792956572616,
+            "name": "Floating Oil"
+          },
+          {
+            "id": 1792956572617,
+            "name": "Product Placement"
+          },
+          {
+            "id": 1792956572618,
+            "name": "Starry Night"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Sucks the content into the center.",
+        "idstring": "A126",
+        "name": "Suckr",
+        "presets": [
+          {
+            "id": 1792956569941,
+            "name": "Lazer"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Uses your content for terrain generation, similar to the Line Scape source.",
+        "idstring": "P202",
+        "name": "Terrain",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Overlays animated text on top of your content as an effect. Perfect for making text look more dynamic. It stays on top of whatever visual is playing underneath.",
+        "idstring": "742517306102898930",
+        "name": "Text Animator",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Overlays text on top of your content as an effect. Useful for adding a label or message. It stays on top of whatever visual is playing underneath.",
+        "idstring": "920556808353999712",
+        "name": "Text Block",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Color threshold",
+        "idstring": "A106",
+        "name": "Threshold",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Tile and skew image",
+        "idstring": "A113",
+        "name": "Tile",
+        "presets": [
+          {
+            "id": 1792956569942,
+            "name": "Blow"
+          },
+          {
+            "id": 1792956569943,
+            "name": "Lamellen"
+          },
+          {
+            "id": 1792956569944,
+            "name": "Lines"
+          },
+          {
+            "id": 1792956569945,
+            "name": "MetaImage"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Keeps part of the content focused while blurring others, kind of like using a miniaturized lens. It creates the illusion that real-life scenes are actually tiny models or toy sets.",
+        "idstring": "c_422e7ca0-017a-4430-a61e-316e5ad2c8df",
+        "name": "Tilt Shift",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates tint filter",
+        "idstring": "A179",
+        "name": "Tint",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "",
+        "idstring": "c_7e9c4b6b-92ff-4bbd-9e07-400e0057794c",
+        "name": "Total Visual Annihilation",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Creates ghosting trails from the movement within your content. A feedback effect which works best with content that has an alpha channel.",
+        "idstring": "A111",
+        "name": "Trails",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Move, scale and rotate your content.",
+        "idstring": "17122039101699797593",
+        "name": "Transform",
+        "presets": [
+          {
+            "id": 1792956569946,
+            "name": "16 beats zoom out"
+          },
+          {
+            "id": 1792956569947,
+            "name": "left sidepanel"
+          },
+          {
+            "id": 1792956569948,
+            "name": "right sidepanel"
+          },
+          {
+            "id": 1792956569949,
+            "name": "watermark top right"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Triangular pixellation with some Sierpinksi fractaliciousness",
+        "idstring": "A182",
+        "name": "Triangulate",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "There is light at the end",
+        "idstring": "sy04",
+        "name": "Tunnel",
+        "presets": [
+          {
+            "id": 1792956569950,
+            "name": "Basic"
+          },
+          {
+            "id": 1792956569951,
+            "name": "Spiral"
+          },
+          {
+            "id": 1792956569952,
+            "name": "Streams"
+          },
+          {
+            "id": 1792956569953,
+            "name": "Turning"
+          },
+          {
+            "id": 1792956569954,
+            "name": "Wobbly"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Pixel twister",
+        "idstring": "A122",
+        "name": "Twisted",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "A random combination of erratic movement, strobing, color shifting and blurring.",
+        "idstring": "A183",
+        "name": "Twitch",
+        "presets": [
+          {
+            "id": 1792956569955,
+            "name": "Bzzzt"
+          },
+          {
+            "id": 1792956569956,
+            "name": "Chaos"
+          },
+          {
+            "id": 1792956569957,
+            "name": "Subtle"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "UV Map lets you use an uv map image to warp and remap how your content appears on screen. The UV map tells the content how to twist, stretch, or reposition each pixel.",
+        "idstring": "8934535357",
+        "name": "UV Map",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Selective saturation preserving midtones",
+        "idstring": "9332865597739610",
+        "name": "Vibrance",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Video Wall slices your content into a grid of smaller screens, like it's being displayed across multiple monitors.",
+        "idstring": "sy88",
+        "name": "VideoWall",
+        "presets": [
+          {
+            "id": 1792956569958,
+            "name": "BouncingSquares"
+          },
+          {
+            "id": 1792956569959,
+            "name": "Panning"
+          },
+          {
+            "id": 1792956569960,
+            "name": "RandomTiles"
+          },
+          {
+            "id": 1792956569961,
+            "name": "Subscreens"
+          },
+          {
+            "id": 1792956569962,
+            "name": "Tiles"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Vignette crops and softens the edges of your image to draw focus toward the center. It can adds a subtle cinematic feel and can help guide the viewer’s eye or hide the edges of a projection.",
+        "idstring": "sy77",
+        "name": "Vignette",
+        "presets": [
+          {
+            "id": 1792956569963,
+            "name": "Round"
+          },
+          {
+            "id": 1792956569964,
+            "name": "Soft"
+          }
+        ]
+      },
+      {
+        "category": "Video Effects",
+        "description": "Helm, Warp One, Engage!",
+        "idstring": "c_d6ae9f13-8177-4423-a808-18173a3db933",
+        "name": "WarpSpeed",
+        "presets": []
+      },
+      {
+        "category": "Video Effects",
+        "description": "Warps the image according to a waveform",
+        "idstring": "MWWP",
+        "name": "Wave Warp",
+        "presets": [
+          {
+            "id": 1792956569965,
+            "name": "Big Wave"
+          },
+          {
+            "id": 1792956569966,
+            "name": "Curly"
+          },
+          {
+            "id": 1792956569967,
+            "name": "MMM"
+          },
+          {
+            "id": 1792956569968,
+            "name": "Rotating Panels"
+          },
+          {
+            "id": 1792956569969,
+            "name": "Strokes"
+          },
+          {
+            "id": 1792956569970,
+            "name": "Sync Disturbance"
+          },
+          {
+            "id": 1792956569971,
+            "name": "Twitch"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "s1gnal : 0sc Lite v1\nJust an oscillator, until you modulate.\n\ns1gnal ecosystem’s core module lite version — Generate raw signals in Resolume, ready to be shaped with functi0ns, bl3nder, filt7er, or key3r.\n\nBuilt to be modulated and to modulate others, 0sc reacts to video inputs or any plugin chain, driving and shaping everything downstream like a true modular source.",
+        "idstring": "c_b234212c-95de-4381-952c-e1f346cc91c6",
+        "name": "s1gnal 0sc Lite",
+        "presets": [
+          {
+            "id": 1792956572693,
+            "name": "gentle_top_down"
+          },
+          {
+            "id": 1792956572694,
+            "name": "rough"
+          }
+        ]
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Modular-style mixing utility featuring analog-inspired composing tools.",
+        "idstring": "c_92baf23d-3f09-412c-bc24-a08f7d203484",
+        "name": "s1gnal bl3nder",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Modular-style channel mixer.",
+        "idstring": "c_27475b9b-c832-4f0d-aacf-74eebfe38413",
+        "name": "s1gnal chann3ls",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Modular-style high pass filter utility featuring analog-inspired response and CV input.",
+        "idstring": "c_875ffd83-e56f-4dcb-b696-6b59be0ab00d",
+        "name": "s1gnal fil7er",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Modular-style function generator and signal processor featuring analog-inspired shaping tools.",
+        "idstring": "c_16920ad5-25d4-4d80-ae5c-6df83a71dbd0",
+        "name": "s1gnal functi0ns",
+        "presets": []
+      },
+      {
+        "category": "Wire Effects",
+        "description": "Modular-style key mask creation utility featuring analog-inspired  tools.",
+        "idstring": "c_e63a6d2c-7216-4ff7-b6ff-e8272bfefea6",
+        "name": "s1gnal key3r",
+        "presets": [
+          {
+            "id": 1792956572775,
+            "name": "hard_keyer_bw"
+          },
+          {
+            "id": 1792956572776,
+            "name": "soft_keyer_bw"
+          }
+        ]
+      }
+    ]
+  }
+}
