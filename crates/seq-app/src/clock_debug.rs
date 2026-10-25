@@ -27,7 +27,7 @@ pub async fn run(port: String) -> anyhow::Result<()> {
                         println!("clock running");
                         lost = false;
                     }
-                    if ticks % TICKS_PER_BEAT == 0 {
+                    if ticks.is_multiple_of(TICKS_PER_BEAT) {
                         println!("{}  {}", position(ticks), bpm(&tempo));
                     }
                     ticks += 1;
