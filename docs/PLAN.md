@@ -49,14 +49,16 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
       OSC sender.
 - [x] Integration test: app + mock — composition loads, a trigger produces a confirmed `connected`.
 
-## M6 — Engine wiring (headless)  ⟵ next
-- [ ] Engine task: clock + WS + commands → scheduler → OSC; state broadcast.
-- [ ] SEQ layer binding (§ clips start/stop sequences), deck-switch-on-start flow with timeout,
+## M6 — Engine wiring (headless)  ✓ done 2026-10-25 (visual check pending)
+- [x] Engine task: clock + WS + commands → scheduler → OSC; state broadcast.
+- [x] SEQ layer binding (§ clips start/stop sequences), deck-switch-on-start flow with timeout,
       deck change stops sequences, manual-override detection, trigger confirmation.
-- [ ] Temporary CLI commands to start/stop a sequence from a file, for testing against real Resolume.
+- [x] Temporary CLI commands to start/stop a sequence from a file, for testing against real Resolume.
 - [ ] Manual test with Uli in Resolume: a 2-lane sequence plays in time with the clock.
+      (Automated live run done 2026-10-25: real Arena 7.28.1 + 128 BPM loopback clock, bar
+      boundaries 1.875 s ± 0.2 ms, all triggers confirmed. Visual check by Uli pending.)
 
-## M7 — UI server + UI skeleton
+## M7 — UI server + UI skeleton  ⟵ next
 - [ ] axum: static files (rust-embed), `/ws` protocol (SPEC §9.6), `/thumbs/...`.
 - [ ] Svelte app with tokens from `docs/ui/editor-mockup.html`; layout of all four regions.
 - [ ] Live state: deck tabs + LIVE badge, connection chips, sequence list, read-only lane grid

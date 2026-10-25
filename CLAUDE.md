@@ -63,6 +63,7 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
   `cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128`
 - Mock Resolume (no Resolume needed): `cargo run -p mock-resolume -- --rest-port 8080 --osc-port 7000`
 - Smoke test vs. real Resolume (triggers + clears the first clip): `cargo run -p resolume-client --example live_check`
+- Headless test run: `cargo run -p seq-app -- --midi-port "Default App Loopback (B)" --start "<sequence>" --exit-when-done`
 - Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
 
 Run tests, clippy and fmt before declaring a milestone done.

@@ -8,6 +8,9 @@ description = "Resolume clip sequencer: engine, storage, UI server"
 [dependencies]
 seq-core.workspace = true
 clock-in = { path = "../clock-in" }
+resolume-client = { path = "../resolume-client" }
+serde.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
@@ -18,4 +21,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-uuid.workspace = true
+mock-resolume = { path = "../../tools/mock-resolume" }

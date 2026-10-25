@@ -36,6 +36,12 @@ pub struct Config {
     /// Print the incoming clock live (bar.beat.tick, BPM) instead of running the sequencer.
     #[arg(long)]
     pub clock_debug: bool,
+    /// Start this sequence (by name, live deck preferred) once connected. For testing.
+    #[arg(long, value_name = "NAME")]
+    pub start: Option<String>,
+    /// Exit when no sequence is running any more (after --start). For testing.
+    #[arg(long)]
+    pub exit_when_done: bool,
 }
 
 impl Config {
