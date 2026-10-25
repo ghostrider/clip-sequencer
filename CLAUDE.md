@@ -61,6 +61,8 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - MIDI: `cargo run -p seq-app -- --list-midi-ports`; live clock check `--clock-debug --midi-port <name>`.
   Test clock without the Clock Shifter (Windows MIDI loopback A→B):
   `cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128`
+- Mock Resolume (no Resolume needed): `cargo run -p mock-resolume -- --rest-port 8080 --osc-port 7000`
+- Smoke test vs. real Resolume (triggers + clears the first clip): `cargo run -p resolume-client --example live_check`
 - Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
 
 Run tests, clippy and fmt before declaring a milestone done.

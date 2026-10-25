@@ -43,13 +43,13 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Tempo estimate; clock-loss detection; reconnect on port loss.
 - [x] `seq-app --list-midi-ports`; a debug mode that prints bar.beat.tick live.
 
-## M5 — Resolume client + mock  ⟵ next
-- [ ] `tools/mock-resolume` implementing the M0-confirmed REST/WS/OSC surface.
-- [ ] REST client (composition, thumbnails, deck select), WS client (reconnect, resubscribe),
+## M5 — Resolume client + mock  ✓ done 2026-10-25
+- [x] `tools/mock-resolume` implementing the M0-confirmed REST/WS/OSC surface.
+- [x] REST client (composition, thumbnails, deck select), WS client (reconnect, resubscribe),
       OSC sender.
-- [ ] Integration test: app + mock — composition loads, a trigger produces a confirmed `connected`.
+- [x] Integration test: app + mock — composition loads, a trigger produces a confirmed `connected`.
 
-## M6 — Engine wiring (headless)
+## M6 — Engine wiring (headless)  ⟵ next
 - [ ] Engine task: clock + WS + commands → scheduler → OSC; state broadcast.
 - [ ] SEQ layer binding (§ clips start/stop sequences), deck-switch-on-start flow with timeout,
       deck change stops sequences, manual-override detection, trigger confirmation.
