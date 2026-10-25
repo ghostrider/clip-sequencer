@@ -11,6 +11,7 @@ pub mod file;
 pub mod index;
 pub mod model;
 pub mod resolve;
+pub mod scheduler;
 pub mod validate;
 
 pub use file::{from_json, to_json, LoadError, FORMAT_VERSION};

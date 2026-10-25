@@ -31,14 +31,14 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Resolution chain id → name (layer first) → file, per SPEC §4.3; layer lookup by name.
 - [x] Tests: renamed clip, moved column, inserted layer, deleted clip, duplicate names.
 
-## M3 — Scheduler (pure)  ⟵ next
-- [ ] `Scheduler` in `seq-core`: start/stop, ticks → actions, 12 ticks per eighth.
-- [ ] Lane end behaviours, repeat modes, after-last-pass, snapshot on start.
-- [ ] Layer ownership and partial takeover; yield/resume; clock-loss freeze/resume.
-- [ ] Unresolved steps behave as rests.
-- [ ] Tests with simulated tick streams covering every rule in SPEC §5 and §7.
+## M3 — Scheduler (pure)  ✓ done 2026-10-25
+- [x] `Scheduler` in `seq-core`: start/stop, ticks → actions, 12 ticks per eighth.
+- [x] Lane end behaviours, repeat modes, after-last-pass, snapshot on start.
+- [x] Layer ownership and partial takeover; yield/resume; clock-loss freeze/resume.
+- [x] Unresolved steps behave as rests.
+- [x] Tests with simulated tick streams covering every rule in SPEC §5 and §7.
 
-## M4 — Clock input
+## M4 — Clock input  ⟵ next
 - [ ] `clock-in` with midir: list ports, open by name, parse 0xF8/0xFA/0xFB/0xFC.
 - [ ] Tempo estimate; clock-loss detection; reconnect on port loss.
 - [ ] `seq-app --list-midi-ports`; a debug mode that prints bar.beat.tick live.

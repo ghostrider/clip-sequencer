@@ -111,8 +111,11 @@ name is unresolved.
 - **Composition** — the open `.avc`. Sequences are stored per composition.
 - **Deck** — every sequence belongs to exactly one deck. Sequences never use clips from another deck.
 - **Sequence** — name, deck, repeat setting, end action, one or more lanes.
-- **Lane** — targets one layer (by name). Has its own steps and its own length.
-- **Step** — a clip reference (or `null` = rest) and a length in eighths.
+- **Lane** — targets one layer (by name). Has its own steps and its own length. The lanes of one
+  sequence target different layers. A lane without steps, or whose layer is not found, is silent.
+- **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
+  lane's layer** when it starts (silence). An *unresolved* step triggers nothing, so the
+  previous clip keeps playing through it.
 - **Sequence length (one pass)** — the length of its longest lane.
 - **Lane end behaviour** (when a lane is shorter than the sequence):
   - `loop_to_end` — restart the lane's steps until the pass ends.
@@ -178,7 +181,10 @@ automatically. Sequences are grouped by deck name.
   bypass on (*notes §7*).
 - On start, the engine takes a **snapshot** of the sequence. Edits made while it runs do
   **not** affect it; they apply at the next start (UI shows "edited · applies at next start").
-  The next pass of a repeating sequence is not a new start.
+  The next pass of a repeating sequence is not a new start. Starting a running sequence again
+  restarts it with a fresh snapshot (layers it no longer uses get its `after_last_pass`).
+- When a sequence started from its `§` clip **finishes by itself**, the sequencer clears the SEQ
+  layer (if that `§` clip is still the connected one), so the next click on it starts it again.
 
 ### 7.2 Decks
 - The UI shows deck tabs. The tab marked **LIVE** is the active deck in Resolume.
@@ -193,8 +199,9 @@ automatically. Sequences are grouped by deck name.
      100–190 ms after the select). Do not read REST meanwhile (it returns mixed states).
      The start button shows "switching…". Timeout 2 s → error, nothing starts.
   5. Start the sequence (its tick count starts now).
-- If the deck changes in Resolume by other means, all running sequences stop and the LIVE
-  marker moves. The tab being viewed does not change.
+- If the deck changes in Resolume by other means, all running sequences stop **without clearing**
+  (layers are shared by all decks, so a clear would hit the new deck) and the LIVE marker moves.
+  The tab being viewed does not change.
 - Resolume itself does not stop playing clips on a deck switch, so "stop" in step 2 means applying
   each sequence's `after_last_pass` (clears are sent before the deck select).
 
@@ -208,8 +215,9 @@ automatically. Sequences are grouped by deck name.
   at its next step boundary, or at the next start of the sequence.
 
 ### 7.4 Stopping
-- Stop sequence: apply `after_last_pass` to its owned layers, release ownership.
-- Stop all / panic: stop all sequences; `clear` all owned layers.
+- Stop sequence: apply `after_last_pass` to its owned layers, release ownership. Yielded lanes
+  (manually overridden layers) are left alone.
+- Stop all / panic: stop all sequences; `clear` all owned layers, yielded ones included.
 
 ### 7.5 Confirmation
 Each trigger is expected to show up as `connected` on the WebSocket. If it does not within
@@ -302,8 +310,11 @@ Cargo workspace (see `CLAUDE.md` for layout).
 
 - **`seq-core`** (pure): data model + serde, clip resolution against a `CompositionIndex`
   value, and the **scheduler state machine**: `fn on_tick(&mut self) -> Vec<Action>` where
-  `Action` = `Trigger { layer, column }`, `ClearLayer { layer }`, `StateChanged`. Handles
-  passes, lane end behaviours, ownership, yielding. Exhaustively unit-tested with simulated ticks.
+  `Action` = `Trigger { clip_id, layer_id, … }`, `Clear { layer_id, … }` and state notifications
+  (`Started`, `PassStarted`, `StepStarted`, `LaneStateChanged`, `Ended`). Actions carry Resolume
+  **ids**, not positions, because ids follow clips and layers when columns or layers are inserted
+  mid-run; the engine maps them to the current OSC address at send time. Handles passes, lane end
+  behaviours, ownership, yielding. Exhaustively unit-tested with simulated ticks.
 - **`clock-in`**: opens the MIDI port with `midir`, converts bytes to `ClockEvent`, sends them on
   a channel. Reconnects if the port disappears.
 - **`resolume-client`**: REST client, WebSocket client (reconnect with backoff, resubscribe),

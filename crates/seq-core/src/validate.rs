@@ -41,6 +41,11 @@ pub enum ValidationErrorKind {
     ZeroLength,
     /// A clip reference with no id, name or file can never resolve; use `null` for a rest.
     EmptyClipRef,
+    /// Two lanes of one sequence target the same layer.
+    DuplicateLayer {
+        layer: String,
+        first_lane: usize,
+    },
 }
 
 impl fmt::Display for ValidationErrorKind {
@@ -64,6 +69,10 @@ impl fmt::Display for ValidationErrorKind {
             Self::EmptyLayer => write!(f, "layer name is empty"),
             Self::ZeroLength => write!(f, "step length must be at least 1 eighth"),
             Self::EmptyClipRef => write!(f, "clip has no id, name or file; use null for a rest"),
+            Self::DuplicateLayer { layer, first_lane } => write!(
+                f,
+                "layer {layer:?} is already used by lanes[{first_lane}] of this sequence"
+            ),
         }
     }
 }
@@ -137,6 +146,7 @@ fn validate_sequence(
     if seq.lanes.is_empty() {
         err(format!("{seq_path}.lanes"), ValidationErrorKind::NoLanes);
     }
+    let mut layers: HashMap<&str, usize> = HashMap::new();
     for (li, lane) in seq.lanes.iter().enumerate() {
         let lane_path = format!("{seq_path}.lanes[{li}]");
         if lane.layer.trim().is_empty() {
@@ -144,6 +154,16 @@ fn validate_sequence(
                 format!("{lane_path}.layer"),
                 ValidationErrorKind::EmptyLayer,
             );
+        } else if let Some(&first_lane) = layers.get(lane.layer.as_str()) {
+            err(
+                format!("{lane_path}.layer"),
+                ValidationErrorKind::DuplicateLayer {
+                    layer: lane.layer.clone(),
+                    first_lane,
+                },
+            );
+        } else {
+            layers.insert(&lane.layer, li);
         }
         for (ti, step) in lane.steps.iter().enumerate() {
             let step_path = format!("{lane_path}.steps[{ti}]");
@@ -343,6 +363,19 @@ mod tests {
         s.repeat = Repeat::Count { count: 1 };
         s.lanes[0].steps[0].length = 0;
         assert_eq!(kinds(&file_with("D", vec![s, seq("A", 2)])).len(), 3);
+    }
+
+    #[test]
+    fn two_lanes_on_one_layer_are_rejected() {
+        let mut s = seq("A", 1);
+        s.lanes.push(s.lanes[0].clone());
+        assert_eq!(
+            kinds(&file_with("D", vec![s])),
+            vec![ValidationErrorKind::DuplicateLayer {
+                layer: "BG".into(),
+                first_lane: 0
+            }]
+        );
     }
 
     #[test]
