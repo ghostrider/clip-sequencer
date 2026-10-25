@@ -41,6 +41,7 @@ Sample: `docs/samples/composition.json` (deck `2132323` live), `docs/samples/dec
 | Clips | `layers[L-1].clips[C-1]`; `clips.length == columns.length`. Empty slots exist as clip objects with `connected.value == "Empty"` and `name.value == ""`. | ✅ |
 | Layer order | `layers[0]` is layer 1 (OSC/REST index 1). In Resolume's UI layer 1 is the bottom row, so the clip browser must list `layers` reversed (top first). The UI order was not checked by the probe. | ✅ (index) / convention (UI) |
 | Clip id | `clip.id` (int64). **Stable** across deck switches and across REST/WS reads (`/thumbnail` by id, by-id subscriptions kept working after deck round trips). OpenAPI: "IDs remain constant across sessions and reordering." | ✅ + 📄 |
+| What a clip id identifies | See §2.1. |
 | Clip name | `clip.name.value`. Defaults to the file name without extension (`probe.png` → `probe`) or the source name (`Blank`). Duplicates are common (deck 1 has two clips `Clip 02…` on layer 2). | ✅ |
 | Media file | `clip.video.fileinfo.path` (Windows path, e.g. `D:\media\…\x.mov`), plus `fileinfo.exists`, `format`, `width`, `height`, `duration_ms`. `null` for sources (generators) and empty slots. `clip.video.description` = `"<file name>\n<codec…>\n<duration>"`. | ✅ |
 | Connected state | `clip.connected` is a `ParamState` choice: `Empty`, `Disconnected`, `Previewing`, `Connected`, `Connected & previewing`. Treat `Connected` and `Connected & previewing` as "playing". | ✅ |
@@ -49,6 +50,28 @@ Sample: `docs/samples/composition.json` (deck `2132323` live), `docs/samples/dec
 | Layer names | `layer.name.value`. New layers are called `"Layer #"`; the raw API value stays `"Layer #"` for every unnamed layer (all three non-SEQ layers in `dev`). `#` appears to be a display-time placeholder for the index. | ✅ (raw value) |
 | Layer opacity / master / bypass | `layer.video.opacity`, `layer.master`, `layer.bypassed` | ✅ |
 | Composition-wide beat snap | `clipbeatsnap` choice, currently `None` (SPEC §3 requires off) | ✅ |
+
+### 2.1 Clip id identity (probed for M2, 2026-10-25)
+
+Script: `tools/resolume-probe/scripts/clip_id_identity.py`; output: `docs/samples/clip-id-identity.txt`.
+Each operation was undone afterwards; the final snapshot equals the baseline.
+
+| Operation | Effect on clip ids | Status |
+|---|---|---|
+| `POST /composition/clips/swap` (two clips with content) | ids move with the clips | ✅ |
+| same, clip with content ↔ empty slot | ids move with the clip objects; the empty slot's id moves too | ✅ |
+| `POST /composition/columns/swap`, `…/columns/{i}/insert-move` | every clip id moves with its column; column ids move too | ✅ |
+| `POST /composition/columns/add` before column 1 | existing ids keep their clip and shift right; the new column's slots get **new** ids | ✅ |
+| `POST /composition/layers/add` before layer 1 | existing layer and clip ids keep and shift up; new layer and slots get new ids | ✅ |
+| `POST /composition/layers/{i}/move` | layer id and its clip ids move together | ✅ |
+| `POST /composition/clips/by-id/{id}/open` into an **empty** slot | the slot **keeps its id**: the new content gets the empty slot's id | ✅ |
+| `POST /composition/clips/by-id/{id}/clear` | the id stays, now on an `Empty` clip object (M0 §7/§8) | ✅ |
+
+So a clip id identifies a **grid cell object** that travels with drag/swap/move. Loading
+content into it or clearing it does not change the id. Consequences for clip resolution:
+- An id may point to an `Empty` slot (clip deleted): ignore that match.
+- An id may point to **different media** (slot reloaded with another file): check content.
+- Empty slots have `video: null`; generator/source clips have `video.fileinfo: null`.
 
 ## 3. Thumbnails
 
