@@ -7,6 +7,7 @@ description = "Resolume clip sequencer: engine, storage, UI server"
 
 [dependencies]
 seq-core.workspace = true
+clock-in = { path = "../clock-in" }
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true

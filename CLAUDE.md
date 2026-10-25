@@ -58,6 +58,9 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - All checks (fmt, clippy, test): `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` (`-Fix` to format)
 - UI: `cd web && npm install && npm run build` (dev: `npm run dev`, proxies to the app)
 - Validate a sequence file: `cargo run -p seq-app -- --validate <file.seq.json>`
+- MIDI: `cargo run -p seq-app -- --list-midi-ports`; live clock check `--clock-debug --midi-port <name>`.
+  Test clock without the Clock Shifter (Windows MIDI loopback A→B):
+  `cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128`
 - Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
 
 Run tests, clippy and fmt before declaring a milestone done.

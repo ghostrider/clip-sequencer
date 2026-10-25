@@ -30,6 +30,12 @@ pub struct Config {
     /// Check a sequence file and exit (0 = valid, 1 = problems found).
     #[arg(long, value_name = "FILE")]
     pub validate: Option<PathBuf>,
+    /// Print the MIDI input ports and exit.
+    #[arg(long)]
+    pub list_midi_ports: bool,
+    /// Print the incoming clock live (bar.beat.tick, BPM) instead of running the sequencer.
+    #[arg(long)]
+    pub clock_debug: bool,
 }
 
 impl Config {

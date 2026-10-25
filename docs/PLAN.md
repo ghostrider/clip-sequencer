@@ -38,12 +38,12 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Unresolved steps behave as rests.
 - [x] Tests with simulated tick streams covering every rule in SPEC §5 and §7.
 
-## M4 — Clock input  ⟵ next
-- [ ] `clock-in` with midir: list ports, open by name, parse 0xF8/0xFA/0xFB/0xFC.
-- [ ] Tempo estimate; clock-loss detection; reconnect on port loss.
-- [ ] `seq-app --list-midi-ports`; a debug mode that prints bar.beat.tick live.
+## M4 — Clock input  ✓ done 2026-10-25
+- [x] `clock-in` with midir: list ports, open by name, parse 0xF8/0xFA/0xFB/0xFC.
+- [x] Tempo estimate; clock-loss detection; reconnect on port loss.
+- [x] `seq-app --list-midi-ports`; a debug mode that prints bar.beat.tick live.
 
-## M5 — Resolume client + mock
+## M5 — Resolume client + mock  ⟵ next
 - [ ] `tools/mock-resolume` implementing the M0-confirmed REST/WS/OSC surface.
 - [ ] REST client (composition, thumbnails, deck select), WS client (reconnect, resubscribe),
       OSC sender.
