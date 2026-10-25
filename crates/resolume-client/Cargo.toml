@@ -3,6 +3,13 @@ name = "resolume-client"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Resolume REST, WebSocket and OSC client plus composition index. Implemented in M2/M5."
+description = "Resolume REST, WebSocket and OSC client plus composition index builder"
 
 [dependencies]
+seq-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

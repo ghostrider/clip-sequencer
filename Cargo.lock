@@ -942,6 +942,13 @@ dependencies = [
 [[package]]
 name = "resolume-client"
 version = "0.1.0"
+dependencies = [
+ "seq-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "uuid",
+]
 
 [[package]]
 name = "resolume-probe"
