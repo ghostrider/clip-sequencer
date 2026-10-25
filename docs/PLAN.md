@@ -19,14 +19,14 @@ Goal: replace every **[verify]** in `docs/SPEC.md` with facts.
 - [x] Write findings to `docs/resolume-api-notes.md` (endpoint, method, payload, sample response).
 Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.md is updated.
 
-## M1 — Workspace + data model  ⟵ next
-- [ ] Cargo workspace with the crates from `CLAUDE.md`, CI-style script for test/clippy/fmt.
-- [ ] `seq-core` model types + serde for the file format (SPEC §6), with round-trip tests
+## M1 — Workspace + data model  ✓ done 2026-10-25
+- [x] Cargo workspace with the crates from `CLAUDE.md`, CI-style script for test/clippy/fmt.
+- [x] `seq-core` model types + serde for the file format (SPEC §6), with round-trip tests
       against a fixture file.
-- [ ] Validation (lengths ≥ 1, count ≥ 2, unique names per deck) with clear errors.
-- [ ] Storage in `seq-app`: load/save `<Composition>.seq.json`, atomic write, debounce.
+- [x] Validation (lengths ≥ 1, count ≥ 2, unique names per deck) with clear errors.
+- [x] Storage in `seq-app`: load/save `<Composition>.seq.json`, atomic write, debounce.
 
-## M2 — Clip resolution + composition index
+## M2 — Clip resolution + composition index  ⟵ next
 - [ ] `CompositionIndex` built from the composition JSON (use M0 samples as fixtures).
 - [ ] Resolution chain id → name (layer first) → file, per SPEC §4.3; layer lookup by name.
 - [ ] Tests: renamed clip, moved column, inserted layer, deleted clip, duplicate names.

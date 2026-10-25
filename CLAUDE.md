@@ -54,8 +54,10 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 ## Commands
 - Build: `cargo build --workspace`
 - Test: `cargo test --workspace`
-- Lint: `cargo clippy --workspace -- -D warnings` and `cargo fmt --all`
+- Lint: `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all`
+- All checks (fmt, clippy, test): `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` (`-Fix` to format)
 - UI: `cd web && npm install && npm run build` (dev: `npm run dev`, proxies to the app)
-- Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume 127.0.0.1`
+- Validate a sequence file: `cargo run -p seq-app -- --validate <file.seq.json>`
+- Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
 
 Run tests, clippy and fmt before declaring a milestone done.
