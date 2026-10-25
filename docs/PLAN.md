@@ -26,12 +26,12 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Validation (lengths ≥ 1, count ≥ 2, unique names per deck) with clear errors.
 - [x] Storage in `seq-app`: load/save `<Composition>.seq.json`, atomic write, debounce.
 
-## M2 — Clip resolution + composition index  ⟵ next
-- [ ] `CompositionIndex` built from the composition JSON (use M0 samples as fixtures).
-- [ ] Resolution chain id → name (layer first) → file, per SPEC §4.3; layer lookup by name.
-- [ ] Tests: renamed clip, moved column, inserted layer, deleted clip, duplicate names.
+## M2 — Clip resolution + composition index  ✓ done 2026-10-25
+- [x] `CompositionIndex` built from the composition JSON (use M0 samples as fixtures).
+- [x] Resolution chain id → name (layer first) → file, per SPEC §4.3; layer lookup by name.
+- [x] Tests: renamed clip, moved column, inserted layer, deleted clip, duplicate names.
 
-## M3 — Scheduler (pure)
+## M3 — Scheduler (pure)  ⟵ next
 - [ ] `Scheduler` in `seq-core`: start/stop, ticks → actions, 12 ticks per eighth.
 - [ ] Lane end behaviours, repeat modes, after-last-pass, snapshot on start.
 - [ ] Layer ownership and partial takeover; yield/resume; clock-loss freeze/resume.

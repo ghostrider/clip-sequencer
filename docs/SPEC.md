@@ -87,6 +87,18 @@ If none matches, the step is **unresolved**: shown red in the UI, treated as a r
 runtime (nothing triggered, nothing crashes). When resolution succeeds via 2 or 3, the
 stored `id` is refreshed.
 
+Details (from the clip-id probe, *notes §2.1*: an id belongs to a grid cell object that travels
+with drag/swap/move but keeps its id when other media is loaded into it or it is cleared):
+- An `id` match is ignored when the slot is empty, or when every stored content feature
+  contradicts it (stored name ≠ clip name **and** stored file ≠ clip file). A reference without
+  a file fits any clip without a file, so renamed generator clips stay resolved.
+- Name compares exactly; file compares the media file name, case-insensitively.
+- Among several candidates: the lane's layer first, then a candidate that also matches the other
+  feature, then the lowest (layer, column). A pick from several equal candidates is flagged
+  **ambiguous** (UI warning) but still resolved.
+- A clip found on another layer than the lane's plays on its own layer (it is triggered at its
+  own position); the UI flags it.
+
 ### 4.4 Layer references
 Lanes reference layers **by name**. If a layer name is not found in the deck, the whole
 lane is unresolved (red header, silent at runtime).
