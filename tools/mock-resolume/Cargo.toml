@@ -1,0 +1,8 @@
+[package]
+name = "mock-resolume"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Fake Resolume REST/WS/OSC server for integration tests. Implemented in M5."
+
+[dependencies]
