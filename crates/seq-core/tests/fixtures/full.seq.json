@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "composition": "dev",
+  "decks": {
+    "1000A Text3D": {
+      "sequences": [
+        {
+          "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e01",
+          "name": "Intro",
+          "start": "immediate",
+          "repeat": { "mode": "once" },
+          "after_last_pass": "hold",
+          "lanes": [
+            {
+              "layer": "Layer 1",
+              "end": "hold",
+              "steps": [
+                { "clip": { "id": 1791619727004, "name": "Clip 01", "file": "Clip 01.mov" }, "length": 32 }
+              ]
+            },
+            {
+              "layer": "SEQ",
+              "end": "clear",
+              "steps": []
+            }
+          ]
+        },
+        {
+          "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e02",
+          "name": "Loop Forever",
+          "start": "immediate",
+          "repeat": { "mode": "infinite" },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Layer 2",
+              "end": "loop_to_end",
+              "steps": [
+                { "clip": { "name": "Clip 02" }, "length": 4 },
+                { "clip": { "file": "Clip 03.mov" }, "length": 4 },
+                { "clip": null, "length": 1 },
+                { "clip": { "id": 1791619727030 }, "length": 7 }
+              ]
+            },
+            {
+              "layer": "Layer 3",
+              "end": "clear",
+              "steps": [
+                { "clip": { "name": "1000A Shake" }, "length": 8 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "2132323": {
+      "sequences": [
+        {
+          "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e03",
+          "name": "§ odd name: \"quotes\" & ümlauts",
+          "start": "immediate",
+          "repeat": { "mode": "count", "count": 2 },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Layer 2",
+              "end": "loop_to_end",
+              "steps": [
+                { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 16 },
+                { "clip": null, "length": 16 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "empty": {
+      "sequences": []
+    }
+  }
+}
