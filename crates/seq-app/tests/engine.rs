@@ -637,3 +637,68 @@ async fn ui_server_protocol_thumbnails_and_push() {
         .starts_with("<!doctype html"));
     app.shutdown().await;
 }
+
+#[tokio::test]
+async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
+    use seq_core::edit::EditOp;
+    use seq_core::{ClipRef, Step};
+    let h = harness().await;
+    let seq = Uuid::from_u128(0xD);
+    let clip = |name: &str| ClipRef {
+        name: Some(name.into()),
+        ..Default::default()
+    };
+    for op in [
+        EditOp::CreateSequence {
+            deck: "2132323".into(),
+            id: seq,
+            name: "Off layer".into(),
+            layer: "L1".into(),
+        },
+        // TWISTED lives on L2, the lane targets L1.
+        EditOp::InsertStep {
+            seq,
+            lane: 0,
+            index: 0,
+            step: Step {
+                clip: Some(clip(TWISTED)),
+                length: 1,
+            },
+        },
+        EditOp::InsertStep {
+            seq,
+            lane: 0,
+            index: 1,
+            step: Step {
+                clip: None,
+                length: 1,
+            },
+        },
+    ] {
+        h.cmd(EngineCommand::Edit { op });
+    }
+    h.structure(|s| {
+        s.decks.iter().any(|d| {
+            d.sequences
+                .iter()
+                .any(|v| v.sequence.id == seq && v.sequence.lanes[0].steps.len() == 2)
+        })
+    })
+    .await;
+    h.cmd(EngineCommand::Start { seq });
+    h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(h.osc(1).await, vec![connect(2, 1)]);
+    // Wait until Resolume reports the clip playing, then reach the rest.
+    h.runtime(|r| r.last_confirm.is_some()).await;
+    h.ticks(12);
+    let log = h.osc(5).await;
+    let [a, b] = clear(1);
+    let [c, d] = clear(2);
+    assert_eq!(
+        log[1..].to_vec(),
+        vec![a, b, c, d],
+        "lane layer, then the layer the clip plays on"
+    );
+    assert_eq!(h.mock.clip_state(2, 1).as_deref(), Some("Disconnected"));
+    h.app.shutdown().await;
+}

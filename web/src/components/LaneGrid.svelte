@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, EIGHTHS_PER_BAR, TICKS_PER_EIGHTH, formatLength } from '../lib/app.svelte';
+  import { app, EIGHTHS_PER_BAR, TICKS_PER_EIGHTH, formatLength, layerLabel } from '../lib/app.svelte';
   import type { DeckView, SequenceView, Step, LaneEnd } from '../lib/types';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
@@ -117,6 +117,14 @@
     app.zoom = Math.min(60, Math.max(4, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
   }
 
+  function moveLane(from: number, to: number) {
+    app.edit({ op: 'move_lane', seq: seq.id, from, to });
+    // Keep the selected step on the lane it belongs to.
+    const sel = app.selectedStep;
+    if (sel?.lane === from) app.selectedStep = { lane: to, index: sel.index };
+    else if (sel?.lane === to) app.selectedStep = { lane: from, index: sel.index };
+  }
+
   function laneState(li: number): string {
     return run?.lanes[li]?.state ?? 'idle';
   }
@@ -144,12 +152,18 @@
               {/if}
               {#each app.laneLayers as l (l.id)}
                 <option value={l.name} disabled={l.ambiguous && l.name !== lane.layer}>
-                  {l.name}{l.ambiguous ? ' (rename in Resolume)' : ''}
+                  {l.ambiguous || l.name.includes('#') ? layerLabel(l) : l.name}
                 </option>
               {/each}
             </select>
+            <span class="lane-tools">
+              <button class="x" aria-label="Move lane up" title="Move lane up" disabled={li === 0}
+                onclick={() => moveLane(li, li - 1)}>▲</button>
+              <button class="x" aria-label="Move lane down" title="Move lane down" disabled={li === seq.lanes.length - 1}
+                onclick={() => moveLane(li, li + 1)}>▼</button>
             <button class="x" aria-label="Delete lane" title={seq.lanes.length === 1 ? 'A sequence needs at least one lane' : 'Delete lane'}
               disabled={seq.lanes.length === 1} onclick={() => app.edit({ op: 'remove_lane', seq: seq.id, lane: li })}>✕</button>
+            </span>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             <select class="pill-select" value={lane.end}

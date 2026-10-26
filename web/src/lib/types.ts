@@ -150,6 +150,7 @@ export type EditOp =
   | { op: 'set_after_last_pass'; seq: Uuid; value: AfterLastPass }
   | { op: 'add_lane'; seq: Uuid; layer: string }
   | { op: 'remove_lane'; seq: Uuid; lane: number }
+  | { op: 'move_lane'; seq: Uuid; from: number; to: number }
   | { op: 'set_lane_layer'; seq: Uuid; lane: number; layer: string }
   | { op: 'set_lane_end'; seq: Uuid; lane: number; end: LaneEnd }
   | { op: 'insert_step'; seq: Uuid; lane: number; index: number; step: Step }

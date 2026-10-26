@@ -20,8 +20,10 @@ Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolum
 2. **Preferences → OSC:** enable *OSC Input*, port `7000`.
 3. **Composition → Clip Beat Snap: None.** Triggers are sent exactly on the tick; snapping would
    delay them.
-4. **Name your layers.** Lanes target layers by name. New layers are all called `Layer #`, which
-   cannot be told apart; the sequencer shows them as "rename in Resolume".
+4. **Name your layers** (e.g. `BG`, `MID`, `FX`). Lanes target layers by exact, unique name.
+   Resolume *displays* unnamed layers as "Layer 1", "Layer 2", … but reports them all as
+   `Layer #`, so they can't be used until renamed (double-click the layer name, or right-click →
+   Rename). Renames are picked up live.
 5. **Starting from Resolume (optional):** add a layer named `SEQ`. For each sequence, put a clip
    with the *Blank* source on it and name it `§ <sequence name>` (e.g. `§ Drop A`). Clicking the
    clip starts the sequence of that name in the live deck; disconnecting it (or clearing the
@@ -77,7 +79,9 @@ Logging: set `RUST_LOG=debug` to see every OSC message with microsecond timestam
 - **Editor:** drag clips from the browser onto a lane; drag a block's right edge to resize (1/8
   bar steps); drag to reorder, Alt-drag to duplicate; `Del` removes, `R` inserts a rest,
   `Space` starts/stops, `Esc` deselects, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, `Ctrl+wheel` zooms.
-- **Rests** clear the layer. **Red steps** are unresolved (clip not found): they trigger nothing.
+- **Rests** clear the layer (it shows nothing; layers below show through). If the lane's clip
+  lives on another layer (⚠ on the step) and is still playing, that layer is cleared too.
+- **Lanes** can be reordered with ▲ / ▼ on the lane head. **Red steps** are unresolved (clip not found): they trigger nothing.
   The step inspector shows which of clip id / name / file still match and offers *Relink*.
 - **Lane ends** (when a lane is shorter than the sequence): *Loop to end*, *Hold* (last clip keeps
   playing), *Clear*. **Repeat:** once, ×N or ∞; after the last pass the layers are cleared or held.

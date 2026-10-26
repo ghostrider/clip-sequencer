@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, formatLength } from '../lib/app.svelte';
+  import { app, formatLength, layerLabel } from '../lib/app.svelte';
   import type { ClipView, LayerView } from '../lib/types';
 
   let deck = $derived(app.viewDeck);
@@ -55,7 +55,7 @@
       {#each rows as { layer, clips } (layer.id)}
         <div class="layer-row">
           <div class="mono" style="font-size:11px;color:var(--text-2)">
-            {layer.name}{layer.ambiguous ? ' · ambiguous name' : ''}{layer.is_seq_layer ? ' · placeholders' : ''}
+            {layerLabel(layer)}{layer.is_seq_layer ? ' · placeholders' : ''}
           </div>
           <div class="clips">
             {#each clips as c (c.id)}

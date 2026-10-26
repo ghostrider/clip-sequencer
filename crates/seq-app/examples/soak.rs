@@ -23,8 +23,24 @@ const TW: &str = "Clip 13";
 const LQ: &str =
     "Clip 08";
 
+/// Keeps Windows from going to sleep while this process runs (a standby invalidates the run).
+#[cfg(windows)]
+fn keep_awake() {
+    use windows_sys::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED,
+    };
+    // SAFETY: plain Win32 call without pointers; the request ends when the process exits.
+    unsafe {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+    }
+}
+
+#[cfg(not(windows))]
+fn keep_awake() {}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    keep_awake();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let port = args

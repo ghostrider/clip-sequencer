@@ -146,6 +146,8 @@ pub struct Engine {
     redo: Vec<SeqFile>,
 
     last_layer_trigger: HashMap<u64, Instant>,
+    /// Clip each running lane triggered last (it may live on another layer than the lane).
+    lane_last_clip: HashMap<(Uuid, usize), u64>,
     pending: Vec<Pending>,
     not_confirmed: NotConfirmed,
     switch: Option<Switch>,
@@ -208,6 +210,7 @@ impl Engine {
             undo: Vec::new(),
             redo: Vec::new(),
             last_layer_trigger: HashMap::new(),
+            lane_last_clip: HashMap::new(),
             pending: Vec::new(),
             not_confirmed: NotConfirmed::new(),
             switch: None,
@@ -834,7 +837,11 @@ impl Engine {
                     clip_id,
                     ..
                 } => self.trigger(seq, lane, step, clip_id),
-                Action::Clear { layer_id, .. } => self.clear_layer(layer_id),
+                Action::Clear {
+                    seq,
+                    lane,
+                    layer_id,
+                } => self.clear_lane(seq, lane, layer_id),
                 Action::Ended {
                     seq,
                     reason,
@@ -842,6 +849,7 @@ impl Engine {
                 } => {
                     self.snapshots.remove(&seq);
                     self.pending.retain(|p| p.seq != seq);
+                    self.lane_last_clip.retain(|(s, _), _| *s != seq);
                     if let (EndReason::Finished, Origin::SeqClip { clip_id }) = (reason, origin) {
                         self.clear_finished_seq_clip(clip_id);
                     }
@@ -880,6 +888,7 @@ impl Engine {
         if let Some(id) = layer_id {
             self.last_layer_trigger.insert(id, t0);
         }
+        self.lane_last_clip.insert((seq, lane), clip_id);
         if self.states.get(&clip_id).is_some_and(|s| s.is_connected()) {
             // Re-trigger of a playing clip: Resolume reports no change; counts as confirmed.
             return;
@@ -891,6 +900,26 @@ impl Engine {
             clip_id,
             sent: t0,
         });
+    }
+
+    /// A lane's clear (rest, lane end, after last pass, stop all): clears the lane's layer and,
+    /// if the clip this lane started lives on another layer and is still playing, that layer too
+    /// ("stop what the lane started", decided 2026-10-26).
+    fn clear_lane(&mut self, seq: Uuid, lane: usize, layer_id: u64) {
+        self.clear_layer(layer_id);
+        let Some(clip_id) = self.lane_last_clip.get(&(seq, lane)).copied() else {
+            return;
+        };
+        if !self.states.get(&clip_id).is_some_and(|s| s.is_connected()) {
+            return;
+        }
+        let other = self.index.as_ref().and_then(|i| {
+            let clip = i.clip_by_id(clip_id)?;
+            i.layer_by_index(clip.layer).map(|l| l.id)
+        });
+        if let Some(other) = other.filter(|o| *o != layer_id) {
+            self.clear_layer(other);
+        }
     }
 
     fn clear_layer(&mut self, layer_id: u64) {

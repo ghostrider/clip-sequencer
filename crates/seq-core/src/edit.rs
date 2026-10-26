@@ -53,6 +53,12 @@ pub enum EditOp {
         seq: Uuid,
         lane: usize,
     },
+    /// Moves a lane so that it ends up at position `to`.
+    MoveLane {
+        seq: Uuid,
+        from: usize,
+        to: usize,
+    },
     SetLaneLayer {
         seq: Uuid,
         lane: usize,
@@ -167,6 +173,16 @@ pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
                 return Err(EditError::NoSuchLane(*lane));
             }
             s.lanes.remove(*lane);
+        }
+        EditOp::MoveLane { seq, from, to } => {
+            let s = seq_mut(&mut f, *seq)?;
+            for i in [*from, *to] {
+                if i >= s.lanes.len() {
+                    return Err(EditError::NoSuchLane(i));
+                }
+            }
+            let l = s.lanes.remove(*from);
+            s.lanes.insert(*to, l);
         }
         EditOp::SetLaneLayer { seq, lane, layer } => {
             lane_mut(&mut f, *seq, *lane)?.layer = layer.clone()
@@ -526,6 +542,68 @@ mod tests {
                 Repeat::Count { count: 4 },
                 AfterLastPass::Hold
             )
+        );
+    }
+
+    #[test]
+    fn lanes_can_be_reordered() {
+        let f = base();
+        let f = apply(
+            &f,
+            &EditOp::AddLane {
+                seq: A,
+                layer: "FX".into(),
+            },
+        )
+        .unwrap();
+        let f = apply(
+            &f,
+            &EditOp::AddLane {
+                seq: A,
+                layer: "OVL".into(),
+            },
+        )
+        .unwrap();
+        let layers = |f: &SeqFile| {
+            f.find_sequence(A)
+                .unwrap()
+                .1
+                .lanes
+                .iter()
+                .map(|l| l.layer.clone())
+                .collect::<Vec<_>>()
+        };
+        let f = apply(
+            &f,
+            &EditOp::MoveLane {
+                seq: A,
+                from: 2,
+                to: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(layers(&f), ["OVL", "BG", "FX"]);
+        let f = apply(
+            &f,
+            &EditOp::MoveLane {
+                seq: A,
+                from: 0,
+                to: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(layers(&f), ["BG", "OVL", "FX"]);
+        assert_eq!(names(&f), ["a", "b", "c"], "steps travel with their lane");
+        assert_eq!(
+            apply(
+                &f,
+                &EditOp::MoveLane {
+                    seq: A,
+                    from: 0,
+                    to: 3
+                }
+            ),
+            Err(EditError::NoSuchLane(3))
         );
     }
 

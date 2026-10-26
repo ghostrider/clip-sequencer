@@ -102,19 +102,25 @@ with drag/swap/move but keeps its id when other media is loaded into it or it is
 ### 4.4 Layer references
 Lanes reference layers **by name**. If a layer name is not found in the deck, the whole
 lane is unresolved (red header, silent at runtime).
-Unnamed Resolume layers all carry the raw name `Layer #` in the API, so they cannot be told
-apart; the layer picker lists them but marks them "rename in Resolume" and a lane on an ambiguous
-name is unresolved.
+Unnamed Resolume layers all carry the raw name `Layer #` in the API (Resolume only *displays*
+them as "Layer 1", "Layer 2", …), so they cannot be told apart. Lanes require real layer names
+(decided 2026-10-26: no matching on the displayed "Layer N", which would move lanes to another
+layer when layers are inserted or reordered). The UI shows such layers as "Layer N · unnamed,
+rename in Resolume to use it"; a lane on an ambiguous name is unresolved.
 
 ## 5. Concepts
 
 - **Composition** — the open `.avc`. Sequences are stored per composition.
 - **Deck** — every sequence belongs to exactly one deck. Sequences never use clips from another deck.
 - **Sequence** — name, deck, repeat setting, end action, one or more lanes.
-- **Lane** — targets one layer (by name). Has its own steps and its own length. The lanes of one
+- **Lane** — targets one layer (by name). Has its own steps and its own length. Lanes can be
+  reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
 - **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
-  lane's layer** when it starts (silence). An *unresolved* step triggers nothing, so the
+  lane's layer** when it starts (silence). If the clip the lane triggered last lives on another
+  layer (it plays there) and is still playing, that layer is cleared too: a rest stops what the
+  lane started. The same applies to every clear of a lane (lane end `clear`, `after_last_pass`
+  clear, stop all). An *unresolved* step triggers nothing, so the
   previous clip keeps playing through it.
 - **Sequence length (one pass)** — the length of its longest lane.
 - **Lane end behaviour** (when a lane is shorter than the sequence):

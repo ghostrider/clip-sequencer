@@ -54,7 +54,11 @@ fn main() {
                 std::hint::spin_loop();
             }
         }
-        conn.send(&[0xF8]).unwrap();
+        if let Err(e) = conn.send(&[0xF8]) {
+            // E.g. the MIDI driver reset after system standby.
+            eprintln!("sending tick {n} failed: {e}; stopping");
+            std::process::exit(1);
+        }
         n += 1;
     }
     conn.send(&[0xFC]).unwrap();

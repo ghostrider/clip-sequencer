@@ -147,6 +147,16 @@ class AppState {
 
 export const app = new AppState();
 
+/**
+ * Layer label as Resolume shows it. Unnamed layers all report the raw name "Layer #" through the
+ * API; Resolume displays the "#" as the layer number. Lanes cannot target them (SPEC §4.4).
+ */
+export function layerLabel(l: { name: string; index: number; ambiguous: boolean }): string {
+  if (l.name.includes('#')) return `${l.name.replace('#', String(l.index))} · unnamed, rename in Resolume to use it`;
+  if (l.ambiguous) return `${l.name} · name used twice, rename in Resolume`;
+  return l.name;
+}
+
 export function formatLength(eighths: number): string {
   const bars = eighths / EIGHTHS_PER_BAR;
   if (eighths % EIGHTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
