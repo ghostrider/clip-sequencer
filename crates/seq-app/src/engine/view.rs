@@ -22,6 +22,8 @@ pub struct StructureState {
     pub decks: Vec<DeckView>,
     /// Problem with the sequence file (it is then read-only).
     pub model_error: Option<String>,
+    pub can_undo: bool,
+    pub can_redo: bool,
     pub seq_layer: String,
     pub seq_prefix: String,
 }
@@ -76,9 +78,17 @@ pub struct ClipView {
 pub struct SequenceView {
     pub sequence: Sequence,
     pub pass_eighths: u64,
-    /// Column of its `§` clip on the SEQ layer of this deck, if the deck's clips are known.
-    pub binding: Option<usize>,
+    /// Its `§` clip on the SEQ layer of this deck, if the deck's clips are known.
+    pub binding: Option<Binding>,
     pub resolution: Option<ResolutionView>,
+    /// Changes whenever the mosaic would look different (`/thumbs/seq/{id}.png?v=...`).
+    pub mosaic_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Binding {
+    pub column: usize,
+    pub clip_id: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -211,6 +221,8 @@ pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> 
 pub struct RuntimeState {
     pub clock: ClockView,
     pub ws: bool,
+    /// Every parameter subscription is acknowledged: clip state changes will be seen.
+    pub ws_synced: bool,
     pub rest: bool,
     pub osc: bool,
     pub running: Vec<RunView>,

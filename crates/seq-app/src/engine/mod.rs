@@ -13,6 +13,7 @@ use clock_in::{ClockEvent, ClockMsg, TempoEstimator};
 use resolume_client::composition::CompositionSnapshot;
 use resolume_client::osc::OscSender;
 use resolume_client::ws::{ParamMsg, WsCommand, WsEvent};
+use seq_core::edit::EditOp;
 use seq_core::index::{ClipState, CompositionIndex, LayerLookup};
 use seq_core::resolve::{refresh_ids, resolve_sequence, SequenceResolution};
 use seq_core::scheduler::{
@@ -45,10 +46,14 @@ pub enum EngineCommand {
         seq: Uuid,
         lane: usize,
     },
-    /// Replace the whole model (editing, M8). Validated before it is accepted.
-    ReplaceModel {
-        file: Box<SeqFile>,
+    /// Apply an edit operation to the stored model (SPEC §9.6).
+    Edit {
+        op: EditOp,
     },
+    Undo,
+    Redo,
+    /// A message for the status bar (from workers such as the UI server).
+    Notice(String),
 }
 
 /// Results from worker tasks.
@@ -59,6 +64,11 @@ pub enum Aux {
         result: Result<SeqFile, String>,
     },
     RestHealth(bool),
+    /// Clip indexes of decks seen live in earlier sessions (for this composition).
+    DeckCacheLoaded {
+        composition: String,
+        decks: Vec<CompositionIndex>,
+    },
     Saved,
     SaveFailed(String),
 }
@@ -124,12 +134,16 @@ pub struct Engine {
     states: HashMap<u64, ClipState>,
     deck_cache: HashMap<String, CompositionIndex>,
     params: HashMap<u64, ParamTarget>,
+    /// Subscriptions requested but not yet acknowledged by Resolume.
+    unacked: std::collections::HashSet<u64>,
 
     composition: Option<String>,
     model: Option<SeqFile>,
     model_error: Option<String>,
     /// Snapshots of running sequences (for "edited · applies at next start") and their deck.
     snapshots: HashMap<Uuid, (String, Sequence)>,
+    undo: Vec<SeqFile>,
+    redo: Vec<SeqFile>,
 
     last_layer_trigger: HashMap<u64, Instant>,
     pending: Vec<Pending>,
@@ -138,6 +152,8 @@ pub struct Engine {
     deferred_start: Option<String>,
 
     tempo: TempoEstimator,
+    /// BPM as last shown (tenths), to republish when the display changes.
+    shown_bpm: Option<i64>,
     clock_port: Option<String>,
     clock_connected: bool,
     clock_running: bool,
@@ -158,6 +174,7 @@ pub struct Engine {
 }
 
 const MAX_NOTICES: usize = 8;
+const MAX_UNDO: usize = 200;
 const RUNTIME_PERIOD: Duration = Duration::from_millis(33);
 
 impl Engine {
@@ -183,16 +200,20 @@ impl Engine {
             states: HashMap::new(),
             deck_cache: HashMap::new(),
             params: HashMap::new(),
+            unacked: std::collections::HashSet::new(),
             composition: None,
             model: None,
             model_error: None,
             snapshots: HashMap::new(),
+            undo: Vec::new(),
+            redo: Vec::new(),
             last_layer_trigger: HashMap::new(),
             pending: Vec::new(),
             not_confirmed: NotConfirmed::new(),
             switch: None,
             deferred_start: None,
             tempo: TempoEstimator::new(),
+            shown_bpm: None,
             clock_port: None,
             clock_connected: false,
             clock_running: false,
@@ -267,6 +288,8 @@ impl Engine {
     pub fn on_ws(&mut self, ev: WsEvent) {
         match ev {
             WsEvent::Connected => {
+                // The WS task re-sends every subscription after a reconnect.
+                self.unacked = self.params.keys().copied().collect();
                 self.ws_connected = true;
                 self.runtime_dirty = true;
             }
@@ -346,6 +369,9 @@ impl Engine {
         }
         if let Some(deck) = &new_live {
             self.deck_cache.insert(deck.clone(), index.clone());
+            if structural {
+                self.persist_deck(&index);
+            }
         }
         if structural {
             self.rebuild_params(&index);
@@ -382,7 +408,22 @@ impl Engine {
         self.composition = Some(name.clone());
         self.model = None;
         self.model_error = None;
+        self.undo.clear();
+        self.redo.clear();
         self.deck_cache.clear();
+        let decks_dir = self.decks_dir(&name);
+        let tx = self.aux_tx.clone();
+        let composition = name.clone();
+        tokio::task::spawn_blocking(move || {
+            let decks = std::fs::read_dir(&decks_dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+                .filter_map(|t| serde_json::from_str::<CompositionIndex>(&t).ok())
+                .collect();
+            let _ = tx.send(Aux::DeckCacheLoaded { composition, decks });
+        });
         let storage = self.storage.clone();
         let tx = self.aux_tx.clone();
         tokio::task::spawn_blocking(move || {
@@ -412,10 +453,16 @@ impl Engine {
         }
         self.params.remove(&0);
         let ids: BTreeSet<u64> = self.params.keys().copied().collect();
+        self.unacked.retain(|id| ids.contains(id));
+        self.unacked.extend(ids.iter().copied());
+        self.runtime_dirty = true;
         let _ = self.ws_cmd.send(WsCommand::SetSubscriptions(ids));
     }
 
     fn on_param(&mut self, kind: ParamMsg, id: u64, value: &serde_json::Value, at: Instant) {
+        if kind == ParamMsg::Subscribed && self.unacked.remove(&id) && self.unacked.is_empty() {
+            self.runtime_dirty = true;
+        }
         let Some(target) = self.params.get(&id).copied() else {
             return;
         };
@@ -609,29 +656,52 @@ impl Engine {
                 let acts = self.scheduler.resume_lane(seq, lane);
                 self.execute(acts);
             }
-            EngineCommand::ReplaceModel { file } => self.replace_model(*file),
+            EngineCommand::Edit { op } => self.edit(&op),
+            EngineCommand::Notice(text) => self.notice(text),
+            EngineCommand::Undo => {
+                if let (Some(prev), Some(cur)) = (self.undo.pop(), self.model.clone()) {
+                    self.redo.push(cur);
+                    self.set_model(prev);
+                }
+            }
+            EngineCommand::Redo => {
+                if let (Some(next), Some(cur)) = (self.redo.pop(), self.model.clone()) {
+                    self.undo.push(cur);
+                    self.set_model(next);
+                }
+            }
         }
     }
 
-    fn replace_model(&mut self, file: SeqFile) {
-        if self.model.is_none() {
+    fn edit(&mut self, op: &EditOp) {
+        let Some(model) = &self.model else {
             self.notice("sequence file not loaded; edit ignored");
             return;
-        }
-        if let Err(errors) = seq_core::validate(&file) {
-            let first = errors.first().map(ToString::to_string).unwrap_or_default();
-            self.notice(format!("edit rejected: {first}"));
-            self.structure_dirty = true; // re-send the unchanged model to the UI
-            return;
-        }
-        if self.model.as_ref() != Some(&file) {
-            if let Some(s) = &self.saver {
-                s.changed(file.clone());
+        };
+        match seq_core::edit::apply(model, op) {
+            Ok(new) => {
+                let old = self.model.take().expect("checked");
+                self.undo.push(old);
+                if self.undo.len() > MAX_UNDO {
+                    self.undo.remove(0);
+                }
+                self.redo.clear();
+                self.set_model(new);
             }
-            self.model = Some(file);
-            self.structure_dirty = true;
-            self.runtime_dirty = true;
+            Err(e) => {
+                self.notice(format!("edit rejected: {e}"));
+                self.structure_dirty = true; // re-send the unchanged model
+            }
         }
+    }
+
+    fn set_model(&mut self, file: SeqFile) {
+        if let Some(s) = &self.saver {
+            s.changed(file.clone());
+        }
+        self.model = Some(file);
+        self.structure_dirty = true;
+        self.runtime_dirty = true;
     }
 
     fn try_deferred_start(&mut self) {
@@ -900,6 +970,18 @@ impl Engine {
                 self.structure_dirty = true;
                 self.try_deferred_start();
             }
+            Aux::DeckCacheLoaded { composition, decks } => {
+                if self.composition.as_deref() != Some(composition.as_str()) {
+                    return;
+                }
+                for idx in decks {
+                    if let Some(deck) = idx.live_deck.clone() {
+                        // Never replace what this session has already seen.
+                        self.deck_cache.entry(deck).or_insert(idx);
+                    }
+                }
+                self.structure_dirty = true;
+            }
             Aux::RestHealth(ok) => {
                 if self.rest_ok != ok {
                     self.rest_ok = ok;
@@ -938,6 +1020,15 @@ impl Engine {
                 .entry((seq, lane))
                 .or_default()
                 .push(step);
+            self.runtime_dirty = true;
+        }
+        let bpm = self
+            .clock_running
+            .then(|| self.tempo.bpm())
+            .flatten()
+            .map(|b| (b * 10.0).round() as i64);
+        if bpm != self.shown_bpm {
+            self.shown_bpm = bpm;
             self.runtime_dirty = true;
         }
         // Clock loss (SPEC §3).
@@ -986,6 +1077,35 @@ impl Engine {
         }
     }
 
+    fn decks_dir(&self, composition: &str) -> std::path::PathBuf {
+        self.storage
+            .dir()
+            .join("decks")
+            .join(crate::storage::file_stem_for(composition))
+    }
+
+    /// Writes the live deck's index to disk (off-task) so it can be shown when the deck is not
+    /// live, also after a restart (SPEC §4.2, §8).
+    fn persist_deck(&self, index: &CompositionIndex) {
+        let Some(deck) = index.live_deck.as_deref() else {
+            return;
+        };
+        let dir = self.decks_dir(&index.composition);
+        let path = dir.join(format!("{}.json", crate::storage::file_stem_for(deck)));
+        let Ok(json) = serde_json::to_string(index) else {
+            return;
+        };
+        tokio::task::spawn_blocking(move || {
+            let tmp = path.with_extension("json.tmp");
+            let result = std::fs::create_dir_all(&dir)
+                .and_then(|()| std::fs::write(&tmp, json))
+                .and_then(|()| std::fs::rename(&tmp, &path));
+            if let Err(e) = result {
+                log::warn!("deck cache {}: {e}", path.display());
+            }
+        });
+    }
+
     // ---- views ----
 
     fn structure_view(&self) -> StructureState {
@@ -1017,7 +1137,7 @@ impl Engine {
                 (false, true) => ClipsSource::Cached,
                 _ => ClipsSource::None,
             };
-            let seq_clips: Vec<(String, usize)> =
+            let seq_clips: Vec<(String, usize, u64)> =
                 deck_idx.map(|i| self.seq_clips(i)).unwrap_or_default();
             let sequences: Vec<SequenceView> = self
                 .model
@@ -1029,19 +1149,22 @@ impl Engine {
                         .map(|s| SequenceView {
                             sequence: s.clone(),
                             pass_eighths: s.pass_length(),
-                            binding: seq_clips
-                                .iter()
-                                .find(|(n, _)| *n == s.name)
-                                .map(|(_, c)| *c),
+                            binding: seq_clips.iter().find(|(n, _, _)| *n == s.name).map(
+                                |(_, column, clip_id)| Binding {
+                                    column: *column,
+                                    clip_id: *clip_id,
+                                },
+                            ),
                             resolution: deck_idx.map(|i| self.resolution(s, i)),
+                            mosaic_key: mosaic_key(s, deck_idx),
                         })
                         .collect()
                 })
                 .unwrap_or_default();
             let unmatched_seq_clips = seq_clips
                 .iter()
-                .filter(|(n, _)| !sequences.iter().any(|s| &s.sequence.name == n))
-                .map(|(n, _)| n.clone())
+                .filter(|(n, _, _)| !sequences.iter().any(|s| &s.sequence.name == n))
+                .map(|(n, _, _)| n.clone())
                 .collect();
             decks.push(DeckView {
                 orphaned: deck_index.is_none(),
@@ -1061,13 +1184,15 @@ impl Engine {
             live_deck: index.and_then(|i| i.live_deck.clone()),
             decks,
             model_error: self.model_error.clone(),
+            can_undo: !self.undo.is_empty(),
+            can_redo: !self.redo.is_empty(),
             seq_layer: self.cfg.seq_layer.clone(),
             seq_prefix: self.cfg.seq_prefix.clone(),
         }
     }
 
-    /// `§` clips on the SEQ layer: (sequence name, column).
-    fn seq_clips(&self, index: &CompositionIndex) -> Vec<(String, usize)> {
+    /// `§` clips on the SEQ layer: (sequence name, column, clip id).
+    fn seq_clips(&self, index: &CompositionIndex) -> Vec<(String, usize, u64)> {
         let LayerLookup::Found(layer) = index.layer_by_name(&self.cfg.seq_layer) else {
             return Vec::new();
         };
@@ -1077,7 +1202,7 @@ impl Engine {
             .filter_map(|c| {
                 c.name
                     .strip_prefix(&self.cfg.seq_prefix)
-                    .map(|n| (n.trim().to_owned(), c.column))
+                    .map(|n| (n.trim().to_owned(), c.column, c.id))
             })
             .collect()
     }
@@ -1150,6 +1275,7 @@ impl Engine {
                 bpm: self.clock_running.then(|| self.tempo.bpm()).flatten(),
             },
             ws: self.ws_connected,
+            ws_synced: self.ws_connected && self.index.is_some() && self.unacked.is_empty(),
             rest: self.rest_ok,
             osc: self.osc_ok,
             running,
@@ -1171,12 +1297,33 @@ impl Engine {
     }
 }
 
+/// Hash of everything a sequence mosaic shows: the sequence and its clips' thumbnail versions.
+fn mosaic_key(s: &Sequence, index: Option<&CompositionIndex>) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    serde_json::to_string(s).unwrap_or_default().hash(&mut h);
+    if let Some(index) = index {
+        let res = resolve_sequence(s, index);
+        for lane in &res.lanes {
+            for step in &lane.steps {
+                if let Some(c) = step.clip().and_then(|c| index.clip_by_id(c.clip_id)) {
+                    c.thumbnail.last_update.hash(&mut h);
+                }
+            }
+        }
+    }
+    format!("{:016x}", h.finish())
+}
+
 /// Inputs of the engine task.
 pub struct Inputs {
     pub clock: mpsc::UnboundedReceiver<ClockEvent>,
     pub ws: mpsc::UnboundedReceiver<WsEvent>,
     pub commands: mpsc::UnboundedReceiver<EngineCommand>,
     pub aux: mpsc::UnboundedReceiver<Aux>,
+    /// Stops the engine. Other tasks (the UI server) hold command senders, so the end of the
+    /// command channel cannot be the shutdown signal.
+    pub shutdown: tokio::sync::oneshot::Receiver<()>,
 }
 
 /// Runs the engine until all command senders are gone.
@@ -1193,6 +1340,7 @@ pub async fn run(mut engine: Engine, mut inputs: Inputs) {
                 None => break,
             },
             Some(a) = inputs.aux.recv() => engine.on_aux(a),
+            _ = &mut inputs.shutdown => break,
             _ = timer.tick() => engine.on_timer(Instant::now()),
         }
     }

@@ -97,7 +97,11 @@ async fn run(config: Config) -> anyhow::Result<()> {
             None => app::ClockSource::None,
         },
         debounce: DebounceConfig::default(),
+        ui: Some(std::net::SocketAddr::from(([127, 0, 0, 1], config.ui_port))),
     })?;
+    if let Some(addr) = app.ui_addr {
+        println!("Sequencer UI: http://{addr}");
+    }
     if let Some(name) = &config.start {
         app.commands
             .send(EngineCommand::StartByName { name: name.clone() })?;

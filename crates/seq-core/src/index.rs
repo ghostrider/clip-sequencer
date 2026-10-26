@@ -11,8 +11,10 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 /// A Resolume deck. Only the live deck's layers and clips are visible in an index.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeckInfo {
     pub id: u64,
     /// 1-based position, as used by `/composition/decks/{n}/select`.
@@ -23,7 +25,7 @@ pub struct DeckInfo {
     pub select_param: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerInfo {
     pub id: u64,
     /// 1-based; layer 1 is the bottom layer in Resolume's UI.
@@ -33,14 +35,14 @@ pub struct LayerInfo {
     pub name_param: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnInfo {
     pub id: u64,
     pub index: usize,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thumbnail {
     /// Change marker, a millisecond timestamp as a string; `"0"` when there is no own thumbnail.
     pub last_update: String,
@@ -48,7 +50,7 @@ pub struct Thumbnail {
 }
 
 /// One clip slot. Empty slots are included (they have ids too) but never match a step.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClipInfo {
     /// Identifies the grid cell object: follows drag/swap/move, but survives loading other
     /// media into the slot and clearing it (`docs/resolume-api-notes.md` §2.1).
@@ -114,7 +116,9 @@ pub enum LayerLookup<'a> {
     Ambiguous(usize),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Serialized without the lookup table, which is rebuilt on load (deck cache on disk).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "IndexRepr", into = "IndexRepr")]
 pub struct CompositionIndex {
     pub composition: String,
     pub decks: Vec<DeckInfo>,
@@ -125,6 +129,42 @@ pub struct CompositionIndex {
     /// All slots, layer by layer, column by column.
     clips: Vec<ClipInfo>,
     by_id: HashMap<u64, usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct IndexRepr {
+    composition: String,
+    decks: Vec<DeckInfo>,
+    live_deck: Option<String>,
+    layers: Vec<LayerInfo>,
+    columns: Vec<ColumnInfo>,
+    clips: Vec<ClipInfo>,
+}
+
+impl From<IndexRepr> for CompositionIndex {
+    fn from(r: IndexRepr) -> Self {
+        Self::new(
+            r.composition,
+            r.decks,
+            r.live_deck,
+            r.layers,
+            r.columns,
+            r.clips,
+        )
+    }
+}
+
+impl From<CompositionIndex> for IndexRepr {
+    fn from(i: CompositionIndex) -> Self {
+        Self {
+            composition: i.composition,
+            decks: i.decks,
+            live_deck: i.live_deck,
+            layers: i.layers,
+            columns: i.columns,
+            clips: i.clips,
+        }
+    }
 }
 
 impl CompositionIndex {
@@ -282,6 +322,17 @@ mod tests {
         assert_eq!(idx.layer_by_name("FX"), LayerLookup::Missing);
         assert_eq!(idx.clip_by_id(1).unwrap().file_name(), Some("tunnel.mov"));
         assert_eq!(idx.clip_by_id(2).unwrap().file_name(), None);
+    }
+
+    #[test]
+    fn serde_round_trip_rebuilds_lookup() {
+        let idx = Builder::new(1)
+            .layer("BG", &[Some((7, "A", Some("a.mov")))])
+            .build();
+        let json = serde_json::to_string(&idx).unwrap();
+        let back: CompositionIndex = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, idx);
+        assert_eq!(back.clip_by_id(7).unwrap().name, "A");
     }
 
     #[test]

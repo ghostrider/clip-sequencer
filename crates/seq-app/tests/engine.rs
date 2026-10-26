@@ -84,22 +84,7 @@ async fn harness() -> Harness {
     )
     .unwrap();
 
-    let (clock, clock_rx) = mpsc::unbounded_channel();
-    let app = app::start(AppConfig {
-        resolume: ResolumeAddr {
-            host: "127.0.0.1".into(),
-            rest_port: mock.rest_addr.port(),
-            osc_port: mock.osc_addr.port(),
-        },
-        storage: Storage::new(dir.path()),
-        engine: EngineConfig::default(),
-        clock: ClockSource::Channel(clock_rx),
-        debounce: DebounceConfig {
-            quiet: Duration::from_millis(50),
-            max_wait: Duration::from_millis(200),
-        },
-    })
-    .unwrap();
+    let (app, clock) = start_app(&mock, dir.path());
     let h = Harness {
         mock,
         app,
@@ -108,7 +93,37 @@ async fn harness() -> Harness {
     };
     h.structure(|s| s.decks.iter().any(|d| !d.sequences.is_empty()))
         .await;
+    h.runtime(|r| r.ws_synced).await;
     h
+}
+
+fn start_app(mock: &Mock, dir: &std::path::Path) -> (App, mpsc::UnboundedSender<ClockEvent>) {
+    start_app_ui(mock, dir, None)
+}
+
+fn start_app_ui(
+    mock: &Mock,
+    dir: &std::path::Path,
+    ui: Option<std::net::SocketAddr>,
+) -> (App, mpsc::UnboundedSender<ClockEvent>) {
+    let (clock, clock_rx) = mpsc::unbounded_channel();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig {
+            quiet: Duration::from_millis(50),
+            max_wait: Duration::from_millis(200),
+        },
+        ui,
+    })
+    .unwrap();
+    (app, clock)
 }
 
 impl Harness {
@@ -236,7 +251,11 @@ async fn seq_clip_starts_its_sequence_and_finishing_clears_the_seq_layer() {
         .iter()
         .find(|v| v.sequence.name == "Drop")
         .unwrap();
-    assert_eq!(drop.binding, Some(1), "§ Drop sits in SEQ column 1");
+    assert_eq!(
+        drop.binding.map(|b| b.column),
+        Some(1),
+        "§ Drop sits in SEQ column 1"
+    );
     assert!(drop.resolution.as_ref().unwrap().complete);
 
     h.mock.manual_connect(4, 1); // the user clicks "§ Drop" in Resolume
@@ -313,6 +332,7 @@ async fn starting_a_sequence_of_another_deck_switches_first() {
     let h = harness().await;
     h.cmd(EngineCommand::Start { seq: SEQ_A });
     h.runtime(|r| r.running.len() == 1).await;
+    h.osc(2).await; // the start triggers have reached the mock
     h.mock.clear_osc_log();
 
     h.cmd(EngineCommand::Start { seq: SEQ_C });
@@ -344,6 +364,7 @@ async fn deck_changed_in_resolume_stops_sequences_without_clearing() {
     let h = harness().await;
     h.cmd(EngineCommand::Start { seq: SEQ_B });
     h.runtime(|r| r.running.len() == 1).await;
+    h.osc(1).await; // the start trigger has reached the mock
     h.mock.clear_osc_log();
     resolume_client::rest::RestClient::new(format!("http://{}/api/v1", h.mock.rest_addr))
         .select_deck(1)
@@ -364,6 +385,64 @@ async fn deck_changed_in_resolume_stops_sequences_without_clearing() {
         cached.clips_source,
         seq_app::engine::view::ClipsSource::Cached
     );
+    h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn edits_are_validated_saved_and_undoable() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    let has = |s: &StructureState, name: &str| {
+        s.decks
+            .iter()
+            .any(|d| d.sequences.iter().any(|v| v.sequence.name == name))
+    };
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RenameSequence {
+            seq: SEQ_A,
+            name: "Drop Renamed".into(),
+        },
+    });
+    h.structure(|s| s.can_undo && has(s, "Drop Renamed")).await;
+    // Invalid: duplicate name in the deck.
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RenameSequence {
+            seq: SEQ_B,
+            name: "Drop Renamed".into(),
+        },
+    });
+    h.runtime(|r| r.notices.iter().any(|n| n.contains("edit rejected")))
+        .await;
+    h.cmd(EngineCommand::Undo);
+    h.structure(|s| s.can_redo && has(s, "Drop")).await;
+    h.cmd(EngineCommand::Redo);
+    h.structure(|s| !s.can_redo && has(s, "Drop Renamed")).await;
+    h.runtime(|r| r.saved > 0).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let saved =
+        seq_core::from_json(&std::fs::read_to_string(h.dir.path().join("dev.seq.json")).unwrap())
+            .unwrap();
+    assert_eq!(saved.find_sequence(SEQ_A).unwrap().1.name, "Drop Renamed");
+    h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn editing_a_running_sequence_marks_it_edited() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.running.len() == 1 && !r.running[0].edited)
+        .await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetStepLength {
+            seq: SEQ_B,
+            lane: 0,
+            index: 0,
+            length: 4,
+        },
+    });
+    h.runtime(|r| r.running.first().is_some_and(|s| s.edited))
+        .await;
     h.app.shutdown().await;
 }
 
@@ -391,4 +470,170 @@ async fn unmatched_seq_clip_is_reported() {
     h.runtime(|r| r.notices.iter().any(|n| n.contains("matches no sequence")))
         .await;
     h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn deck_clip_cache_survives_a_restart() {
+    use seq_app::engine::view::ClipsSource;
+    let h = harness().await;
+    // Make deck 1 live once, then go back: both decks are now cached on disk.
+    let rest =
+        resolume_client::rest::RestClient::new(format!("http://{}/api/v1", h.mock.rest_addr));
+    rest.select_deck(1).await.unwrap();
+    h.structure(|s| s.live_deck.as_deref() == Some("1000A Text3D"))
+        .await;
+    rest.select_deck(2).await.unwrap();
+    h.structure(|s| s.live_deck.as_deref() == Some("2132323"))
+        .await;
+    let cache = h.dir.path().join("decks").join("dev");
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !(cache.join("1000A Text3D.json").exists() && cache.join("2132323.json").exists()) {
+        assert!(Instant::now() < deadline, "deck cache files not written");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let Harness { mock, app, dir, .. } = h;
+    app.shutdown().await;
+
+    // A fresh app knows deck 1's clips before it is ever live in this session.
+    let (app2, _clock) = start_app(&mock, dir.path());
+    let mut rx = app2.outputs.structure.clone();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let ok = rx.borrow_and_update().decks.iter().any(|d| {
+                d.name == "1000A Text3D"
+                    && d.clips_source == ClipsSource::Cached
+                    && !d.layers.is_empty()
+            });
+            if ok {
+                break;
+            }
+            rx.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("cached deck not offered after restart");
+    let s = rx.borrow().clone();
+    let deck1 = s.decks.iter().find(|d| d.name == "1000A Text3D").unwrap();
+    let intro = &deck1.sequences[0];
+    assert!(
+        intro.resolution.as_ref().unwrap().complete,
+        "resolved against the cached clips"
+    );
+    app2.shutdown().await;
+}
+
+#[tokio::test]
+async fn ui_server_protocol_thumbnails_and_push() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    let h = harness().await;
+    let Harness { mock, app, dir, .. } = h;
+    app.shutdown().await;
+    let (app, _clock) = start_app_ui(&mock, dir.path(), Some("127.0.0.1:0".parse().unwrap()));
+    let ui = app.ui_addr.unwrap();
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    let mut types = Vec::new();
+    while types.len() < 2 {
+        match tokio::time::timeout(Duration::from_secs(3), ws.next())
+            .await
+            .expect("ws message")
+        {
+            Some(Ok(Message::Text(t))) => {
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                types.push(v["type"].as_str().unwrap().to_owned());
+            }
+            Some(Ok(_)) => continue,
+            other => panic!("ws ended: {other:?}"),
+        }
+    }
+    assert_eq!(types, ["structure", "runtime"], "full snapshots on connect");
+
+    // Wait until the structure knows the § Drop binding, then push its thumbnail.
+    let drop_clip = loop {
+        let s = app.outputs.structure.borrow().clone();
+        if let Some(b) = s
+            .decks
+            .iter()
+            .find(|d| d.live)
+            .and_then(|d| d.sequences.iter().find(|v| v.sequence.id == SEQ_A))
+            .and_then(|v| v.binding)
+        {
+            break b.clip_id;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    ws.send(Message::Text(
+        json!({"cmd":"push_thumbnail","seq": SEQ_A}).to_string(),
+    ))
+    .await
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let png = loop {
+        if let Some(p) = mock
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .custom_thumbnails
+            .get(&drop_clip)
+            .cloned()
+        {
+            break p;
+        }
+        assert!(Instant::now() < deadline, "thumbnail never pushed");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    let img = image::load_from_memory(&png).unwrap();
+    assert_eq!((img.width(), img.height()), (320, 240));
+
+    // Commands over the socket reach the engine.
+    ws.send(Message::Text(
+        json!({"cmd":"start","seq": SEQ_B}).to_string(),
+    ))
+    .await
+    .unwrap();
+    let mut rt = app.outputs.runtime.clone();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !rt
+            .borrow_and_update()
+            .running
+            .iter()
+            .any(|r| r.seq == SEQ_B)
+        {
+            rt.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+
+    // HTTP: clip thumbnail, sequence mosaic, static page.
+    let http = reqwest::Client::new();
+    let r = http
+        .get(format!("http://{ui}/thumbs/clip/1792956592496.png"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert!(r
+        .bytes()
+        .await
+        .unwrap()
+        .starts_with(&[0x89, 0x50, 0x4E, 0x47]));
+    let r = http
+        .get(format!("http://{ui}/thumbs/seq/{SEQ_A}.png"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.headers()["content-type"], "image/png");
+    let r = http.get(format!("http://{ui}/")).send().await.unwrap();
+    assert!(r
+        .text()
+        .await
+        .unwrap()
+        .to_lowercase()
+        .starts_with("<!doctype html"));
+    app.shutdown().await;
 }

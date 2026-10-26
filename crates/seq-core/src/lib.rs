@@ -7,6 +7,7 @@
 //! - [`index`]: the live deck's layers and clips as a plain value (built by `resolume-client`).
 //! - [`resolve`]: step clip and lane layer resolution against an index (SPEC §4.3, §4.4).
 
+pub mod edit;
 pub mod file;
 pub mod index;
 pub mod model;

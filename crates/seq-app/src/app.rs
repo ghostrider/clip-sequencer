@@ -28,6 +28,8 @@ pub struct AppConfig {
     pub engine: EngineConfig,
     pub clock: ClockSource,
     pub debounce: DebounceConfig,
+    /// Where the browser UI listens; `None` = no UI server.
+    pub ui: Option<std::net::SocketAddr>,
 }
 
 pub struct App {
@@ -35,12 +37,16 @@ pub struct App {
     pub outputs: Outputs,
     pub engine_task: JoinHandle<()>,
     pub saver_task: JoinHandle<()>,
+    /// Bound address of the UI server.
+    pub ui_addr: Option<std::net::SocketAddr>,
+    shutdown: tokio::sync::oneshot::Sender<()>,
     _clock: Option<ClockIn>,
 }
 
 impl App {
     /// Stops the engine (no clears) and waits for pending saves.
     pub async fn shutdown(self) {
+        let _ = self.shutdown.send(());
         drop(self.commands);
         let _ = self.engine_task.await;
         let _ = tokio::time::timeout(Duration::from_secs(5), self.saver_task).await;
@@ -94,6 +100,8 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     }
 
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    let thumbs_dir = cfg.storage.dir().join("thumbs");
     let (mut engine, outputs) = Engine::new(
         cfg.engine,
         osc,
@@ -112,6 +120,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 ws: ws_events,
                 commands: cmd_rx,
                 aux: aux_rx,
+                shutdown: shutdown_rx,
             },
         )
         .await;
@@ -119,11 +128,40 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         ws.task.abort();
     });
 
+    let ui_addr = match cfg.ui {
+        Some(addr) => {
+            let std_listener = std::net::TcpListener::bind(addr)?;
+            std_listener.set_nonblocking(true)?;
+            let bound = std_listener.local_addr()?;
+            let listener = tokio::net::TcpListener::from_std(std_listener)?;
+            let rest = RestClient::new(cfg.resolume.rest_base());
+            let ctx = crate::server::ServerCtx {
+                commands: cmd_tx.clone(),
+                structure: outputs.structure.clone(),
+                runtime: outputs.runtime.clone(),
+                thumbs: std::sync::Arc::new(crate::thumbs::ThumbCache::new(
+                    thumbs_dir,
+                    rest.clone(),
+                )),
+                rest,
+            };
+            tokio::spawn(async move {
+                if let Err(e) = crate::server::serve(listener, ctx).await {
+                    log::error!("UI server: {e}");
+                }
+            });
+            Some(bound)
+        }
+        None => None,
+    };
+
     Ok(App {
+        ui_addr,
         commands: cmd_tx,
         outputs,
         engine_task,
         saver_task,
+        shutdown: shutdown_tx,
         _clock: clock_in,
     })
 }

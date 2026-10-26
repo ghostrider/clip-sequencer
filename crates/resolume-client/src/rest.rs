@@ -38,6 +38,7 @@ impl RestClient {
     pub fn new(base: impl Into<String>) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
+            .connect_timeout(Duration::from_millis(500))
             .build()
             .expect("HTTP client");
         Self {
