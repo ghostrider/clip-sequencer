@@ -1,22 +1,25 @@
 #pragma once
-#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <string>
 
 #include <FFGLSDK.h>
 
+#include "SeqViewClient.h"
 #include "SeqViewParams.h"
+#include "SeqViewRender.h"
 
 // SeqView ("1000A Sequence"): FFGL source that shows a sequence of the Resolume Clip Sequencer
-// (vj_stuff/resolume-sequencer, SPEC §12) on the `§` placeholder clips.
+// (vj_stuff/resolume-sequencer, SPEC §12) on the `§` placeholder clips: name, lanes with clip thumbnails, the
+// playhead, bar.beat and pass while it runs. The sequencer sets the `Sequence` parameter by itself.
 //
-// Stage M11a (probe): renders a solid colour derived from the `Sequence` parameter and logs, per instance, every
-// lifecycle call and how many frames it rendered per second. That answers what the sequencer design depends on:
-// whether Resolume renders the source when its clip is only previewed, or connected on a layer with opacity 0.
-//
-// Threading: the host may call SetTextParameter from another thread than the one that renders; the sequence name is
-// guarded by a mutex. All GL calls happen in ProcessOpenGL (render thread, context current).
+// Threading model:
+//   - host threads call the constructor, Set/GetTextParameter, Connect/Disconnect;
+//   - the render thread (GL context current) calls InitGL, ProcessOpenGL, Resize, DeInitGL;
+//   - seqview::Client runs its own worker thread (HTTP + PNG decode) and hands results over by Take().
+// GL objects live in seqview::Renderer and are only touched from InitGL/ProcessOpenGL/DeInitGL.
+// Resolume creates short-lived instances (no InitGL) every few seconds; the worker only starts in InitGL and only
+// polls between Connect and Disconnect, i.e. while the host actually renders this instance.
 class SeqView : public CFFGLPlugin
 {
 public:
@@ -27,22 +30,30 @@ public:
 	FFResult InitGL( const FFGLViewportStruct* vp ) override;
 	FFResult ProcessOpenGL( ProcessOpenGLStruct* pGL ) override;
 	FFResult DeInitGL() override;
-	unsigned int Resize( const FFGLViewportStruct* vp ) override;
 	unsigned int Connect() override;
 	unsigned int Disconnect() override;
 
 	FFResult SetTextParameter( unsigned int dwIndex, const char* value ) override;
 	char* GetTextParameter( unsigned int index ) override;
 
-	std::string Sequence() const;
+	// For tests.
+	const seqview::View& CurrentView() const { return view; }
+	size_t TextureCount() const { return renderer.TextureCount(); }
+	bool FontReady() const { return renderer.FontReady(); }
+	void InjectForTest( const seqview::View& v, std::vector< seqview::Thumbnail > thumbs ) { client.Inject( v, std::move( thumbs ) ); }
 
 private:
-	const int instance; // for telling instances apart in the host log
-	mutable std::mutex sequenceMutex;
-	std::string sequence;
-	std::string textBuffer; // backing storage for GetTextParameter (render/host thread only)
+	std::string Text( unsigned int index ) const;
 
-	// Frame statistics for the once-per-second log line.
-	std::chrono::steady_clock::time_point statsStart{};
-	unsigned int framesSinceLog = 0;
+	const int instance; // for telling instances apart in the host log
+	mutable std::mutex textMutex;
+	std::string sequence;
+	std::string server = kDefaultServer;
+	std::string textBuffer; // backing storage for GetTextParameter
+
+	seqview::Client client;
+	seqview::Renderer renderer;
+	seqview::View view; // render thread only
+	std::chrono::steady_clock::time_point receivedAt{};
+	seqview::Status loggedStatus = seqview::Status::NoName;
 };

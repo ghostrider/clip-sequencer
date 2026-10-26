@@ -1,8 +1,8 @@
 #include "SeqView.h"
 #include "BuildInfo.h" //generated at build time into the intermediate directory
 
+#include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -11,7 +11,7 @@
 #define SQV_STR( x ) SQV_STR2( x )
 static const char kBuildInfo[] = "Build " SQV_STR( SEQVIEW_BUILD_NUMBER ) " - " SEQVIEW_BUILD_DATE;
 
-static_assert( PT_COUNT == 2, "update the constructor when adding parameters" );
+static_assert( PT_COUNT == 3, "update the constructor when adding parameters" );
 
 static CFFGLPluginInfo PluginInfo(
 	PluginFactory< SeqView >,                                                // Create method
@@ -33,33 +33,17 @@ static void Log( int instance, const std::string& text )
 	FFGLLog::LogToHost( ( "SeqView#" + std::to_string( instance ) + " " + text ).c_str() );
 }
 
-//! A stable, clearly visible colour per sequence name (FNV-1a hash -> hue), so a parameter change shows on screen.
-static void ColourFor( const std::string& name, float rgb[ 3 ] )
+static const char* StatusName( seqview::Status s )
 {
-	uint32_t h = 2166136261u;
-	for( unsigned char c : name )
-		h = ( h ^ c ) * 16777619u;
-	const float hue = name.empty() ? 0.0f : ( h % 360u ) / 60.0f;
-	const float x   = 1.0f - std::abs( std::fmod( hue, 2.0f ) - 1.0f );
-	const float c   = name.empty() ? 0.25f : 0.8f; // empty name: dark grey
-	float r = 0, g = 0, b = 0;
-	if( name.empty() )
-		r = g = b = 1.0f;
-	else if( hue < 1 )
-		r = 1, g = x;
-	else if( hue < 2 )
-		r = x, g = 1;
-	else if( hue < 3 )
-		g = 1, b = x;
-	else if( hue < 4 )
-		g = x, b = 1;
-	else if( hue < 5 )
-		r = x, b = 1;
-	else
-		r = 1, b = x;
-	rgb[ 0 ] = r * c;
-	rgb[ 1 ] = g * c;
-	rgb[ 2 ] = b * c;
+	switch( s )
+	{
+	case seqview::Status::NoName: return "no sequence assigned";
+	case seqview::Status::NoServer: return "sequencer not reachable";
+	case seqview::Status::NotFound: return "sequence not found";
+	case seqview::Status::BadResponse: return "unexpected response";
+	case seqview::Status::Ok: return "ok";
+	}
+	return "?";
 }
 
 SeqView::SeqView() : instance( ++g_instances )
@@ -67,84 +51,94 @@ SeqView::SeqView() : instance( ++g_instances )
 	SetMinInputs( 0 );
 	SetMaxInputs( 0 );
 	SetParamInfo( PT_SEQUENCE, "Sequence", FF_TYPE_TEXT, "" );
+	SetParamInfo( PT_SERVER, "Server", FF_TYPE_TEXT, kDefaultServer );
 	SetParamInfo( PT_BUILD, "Build", FF_TYPE_TEXT, kBuildInfo );
-	Log( instance, std::string( "created (" ) + kBuildInfo + ")" );
 }
 
 SeqView::~SeqView()
 {
-	Log( instance, "destroyed" );
+	client.Stop(); // joins the worker; no GL here
 }
 
 FFResult SeqView::InitGL( const FFGLViewportStruct* vp )
 {
-	Log( instance, "InitGL " + std::to_string( vp->width ) + "x" + std::to_string( vp->height ) );
-	statsStart     = std::chrono::steady_clock::now();
-	framesSinceLog = 0;
+	Log( instance, std::string( "InitGL (" ) + kBuildInfo + ")" );
+	if( !renderer.Init() )
+		Log( instance, "renderer init failed (shader or quad) - nothing will be drawn" );
+	if( !renderer.FontReady() )
+		Log( instance, "no font (segoeui.ttf / arial.ttf) - text will be missing" );
+	client.SetTarget( Text( PT_SERVER ), Text( PT_SEQUENCE ) );
+	client.Start();
 	return CFFGLPlugin::InitGL( vp );
 }
 
 FFResult SeqView::DeInitGL()
 {
-	Log( instance, "DeInitGL" );
+	client.Stop();
+	renderer.Release();
 	return FF_SUCCESS;
-}
-
-unsigned int SeqView::Resize( const FFGLViewportStruct* vp )
-{
-	Log( instance, "Resize " + std::to_string( vp->width ) + "x" + std::to_string( vp->height ) );
-	return CFFGLPlugin::Resize( vp );
 }
 
 unsigned int SeqView::Connect()
 {
-	Log( instance, "Connect" );
+	client.SetActive( true );
 	return FF_SUCCESS;
 }
 
 unsigned int SeqView::Disconnect()
 {
-	Log( instance, "Disconnect" );
+	client.SetActive( false );
 	return FF_SUCCESS;
 }
 
 FFResult SeqView::ProcessOpenGL( ProcessOpenGLStruct* )
 {
+	seqview::Update update = client.Take();
+	if( update.viewChanged )
+	{
+		view       = std::move( update.view );
+		receivedAt = update.receivedAt;
+		if( view.status != loggedStatus )
+		{
+			Log( instance, std::string( "'" ) + Text( PT_SEQUENCE ) + "': " + StatusName( view.status ) );
+			loggedStatus = view.status;
+		}
+	}
+	renderer.Upload( update.thumbnails );
+
+	// Playhead between two polls: advance at the reported tempo (at most a quarter second ahead).
+	const seqview::Runtime& r = view.runtime;
+	double pos = static_cast< double >( r.pos );
+	if( r.running && r.clockRunning && r.bpm > 0 )
+	{
+		const double elapsed = std::min( std::chrono::duration< double >( std::chrono::steady_clock::now() - receivedAt ).count(), 0.25 );
+		pos += elapsed * r.bpm * 24.0 / 60.0;
+	}
+	if( r.passTicks > 0 )
+		pos = std::fmod( pos, static_cast< double >( r.passTicks ) );
+
 	// Viewport read fresh every frame (CFFGLPlugin only updates currentViewport in InitGL/Resize).
 	const FFGLViewportStruct vp = currentViewport;
-	float rgb[ 3 ];
-	ColourFor( Sequence(), rgb );
 	glViewport( vp.x, vp.y, vp.width, vp.height );
-	glClearColor( rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], 1.0f );
-	glClear( GL_COLOR_BUFFER_BIT );
-
-	++framesSinceLog;
-	const auto now = std::chrono::steady_clock::now();
-	if( now - statsStart >= std::chrono::seconds( 1 ) )
-	{
-		const double secs = std::chrono::duration< double >( now - statsStart ).count();
-		char line[ 256 ];
-		snprintf( line, sizeof( line ), "rendering: %u frames in %.1f s at %ux%u, sequence '%s'", framesSinceLog, secs,
-		          vp.width, vp.height, Sequence().c_str() );
-		Log( instance, line );
-		statsStart     = now;
-		framesSinceLog = 0;
-	}
+	renderer.Draw( view, pos, static_cast< int >( vp.width ), static_cast< int >( vp.height ), Text( PT_SEQUENCE ), Text( PT_SERVER ) );
 	return FF_SUCCESS;
 }
 
 FFResult SeqView::SetTextParameter( unsigned int dwIndex, const char* value )
 {
-	if( dwIndex == PT_SEQUENCE )
+	if( dwIndex == PT_SEQUENCE || dwIndex == PT_SERVER )
 	{
-		const std::string v = value ? value : "";
+		std::string v = value ? value : "";
+		if( dwIndex == PT_SERVER && v.empty() )
+			v = kDefaultServer;
+		std::string seq, srv;
 		{
-			std::lock_guard< std::mutex > lock( sequenceMutex );
-			if( v == sequence )
-				return FF_SUCCESS;
-			sequence = v;
+			std::lock_guard< std::mutex > lock( textMutex );
+			( dwIndex == PT_SEQUENCE ? sequence : server ) = v;
+			seq = sequence;
+			srv = server;
 		}
-		Log( instance, "Sequence = '" + v + "'" );
+		client.SetTarget( srv, seq );
 		return FF_SUCCESS;
 	}
 	//The build info is display-only: edits from the host are accepted but ignored (repo convention).
@@ -153,9 +147,9 @@ FFResult SeqView::SetTextParameter( unsigned int dwIndex, const char* value )
 
 char* SeqView::GetTextParameter( unsigned int index )
 {
-	if( index == PT_SEQUENCE )
+	if( index == PT_SEQUENCE || index == PT_SERVER )
 	{
-		textBuffer = Sequence();
+		textBuffer = Text( index );
 		return const_cast< char* >( textBuffer.c_str() );
 	}
 	if( index == PT_BUILD )
@@ -163,8 +157,8 @@ char* SeqView::GetTextParameter( unsigned int index )
 	return (char*)FF_FAIL;
 }
 
-std::string SeqView::Sequence() const
+std::string SeqView::Text( unsigned int index ) const
 {
-	std::lock_guard< std::mutex > lock( sequenceMutex );
-	return sequence;
+	std::lock_guard< std::mutex > lock( textMutex );
+	return index == PT_SEQUENCE ? sequence : server;
 }

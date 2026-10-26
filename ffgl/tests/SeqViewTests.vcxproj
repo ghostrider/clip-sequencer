@@ -30,6 +30,7 @@
     <RootNamespace>SeqViewTests</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <FFGLRoot>$(MSBuildThisFileDirectory)..\..\..\external\ffgl\</FFGLRoot>
+    <StbRoot>$(MSBuildThisFileDirectory)..\..\..\third_party\stb\</StbRoot>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
@@ -59,14 +60,14 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <!-- tests\ first: its BuildInfo.h stands in for the one the plugin project generates -->
-      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(FFGLRoot)source\lib\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(FFGLRoot)source\lib\;$(StbRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>OpenGL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenGL32.lib;winhttp.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
@@ -88,6 +89,10 @@
     <ClCompile Include="$(FFGLRoot)source\lib\ffglex\*.cpp" />
     <ClCompile Include="$(FFGLRoot)source\lib\ffglquickstart\*.cpp" />
     <ClCompile Include="..\SeqView.cpp" />
+    <ClCompile Include="..\SeqViewClient.cpp" />
+    <ClCompile Include="..\SeqViewModel.cpp" />
+    <ClCompile Include="..\SeqViewRender.cpp" />
+    <ClCompile Include="MiniHttp.cpp" />
     <ClCompile Include="GlContext.cpp" />
     <ClCompile Include="SeqViewTests.cpp" />
   </ItemGroup>
@@ -96,6 +101,10 @@
     <ClInclude Include="..\SeqViewParams.h" />
     <ClInclude Include="BuildInfo.h" />
     <ClInclude Include="GlContext.h" />
+    <ClInclude Include="MiniHttp.h" />
+    <ClInclude Include="..\SeqViewClient.h" />
+    <ClInclude Include="..\SeqViewModel.h" />
+    <ClInclude Include="..\SeqViewRender.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
