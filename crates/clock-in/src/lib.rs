@@ -117,14 +117,38 @@ impl Drop for ClockIn {
 }
 
 fn supervise(pattern: &str, tx: &UnboundedSender<ClockEvent>, stop: &AtomicBool) {
-    let mut conn: Option<(String, MidiInputConnection<()>)> = None;
+    supervise_with(
+        pattern,
+        tx,
+        stop,
+        POLL,
+        || list_ports().unwrap_or_default(),
+        connect,
+        |c: MidiInputConnection<()>| {
+            c.close();
+        },
+    );
+}
+
+/// The supervisor loop with the MIDI system injected (so port loss can be tested): connects
+/// when a matching port exists, notices when it disappears, reconnects when it is back.
+fn supervise_with<C>(
+    pattern: &str,
+    tx: &UnboundedSender<ClockEvent>,
+    stop: &AtomicBool,
+    poll: Duration,
+    list: impl Fn() -> Vec<String>,
+    mut connect: impl FnMut(&[String], &str, UnboundedSender<ClockEvent>) -> Result<(String, C), String>,
+    close: impl Fn(C),
+) {
+    let mut conn: Option<(String, C)> = None;
     let mut last_error = String::new();
     while !stop.load(Ordering::Relaxed) && !tx.is_closed() {
-        let names = list_ports().unwrap_or_default();
+        let names = list();
         match &conn {
             Some((name, _)) if !names.contains(name) => {
                 let (name, c) = conn.take().expect("checked");
-                c.close();
+                close(c);
                 log::warn!("MIDI port {name:?} disappeared");
                 let _ = tx.send(ClockEvent::Disconnected {
                     reason: format!("port {name:?} disappeared"),
@@ -147,10 +171,10 @@ fn supervise(pattern: &str, tx: &UnboundedSender<ClockEvent>, stop: &AtomicBool)
                 }
             },
         }
-        std::thread::sleep(POLL);
+        std::thread::sleep(poll);
     }
     if let Some((_, c)) = conn {
-        c.close();
+        close(c);
     }
 }
 
@@ -198,6 +222,69 @@ mod tests {
         assert_eq!(parse(&[0xFC]), Some(ClockMsg::Stop));
         assert_eq!(parse(&[0x90, 60, 100]), None);
         assert_eq!(parse(&[]), None);
+    }
+
+    #[test]
+    fn port_loss_is_reported_and_the_port_reconnects_when_it_returns() {
+        use std::sync::Mutex;
+        use std::time::Duration;
+        let ports = Arc::new(Mutex::new(Vec::<String>::new()));
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let (ports, stop) = (ports.clone(), stop.clone());
+            std::thread::spawn(move || {
+                supervise_with(
+                    "Clock Shifter Out",
+                    &tx,
+                    &stop,
+                    Duration::from_millis(5),
+                    || ports.lock().unwrap().clone(),
+                    |names: &[String], pattern: &str, _tx| {
+                        match_port(names, pattern)
+                            .map(|n| (n.to_owned(), ()))
+                            .ok_or_else(|| "no port".to_owned())
+                    },
+                    |()| {},
+                )
+            })
+        };
+        let mut next = || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            loop {
+                if let Ok(ev) = rx.try_recv() {
+                    return ev;
+                }
+                assert!(std::time::Instant::now() < deadline, "no event");
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        };
+        assert!(
+            matches!(next(), ClockEvent::Disconnected { .. }),
+            "no port at start"
+        );
+        ports.lock().unwrap().push("Clock Shifter Out".into());
+        assert_eq!(
+            next(),
+            ClockEvent::Connected {
+                port: "Clock Shifter Out".into()
+            }
+        );
+        ports.lock().unwrap().clear();
+        assert!(
+            matches!(next(), ClockEvent::Disconnected { reason } if reason.contains("disappeared"))
+        );
+        // The repeated "no port" error is reported once, then the port comes back.
+        assert!(matches!(next(), ClockEvent::Disconnected { .. }));
+        ports.lock().unwrap().push("Clock Shifter Out".into());
+        assert_eq!(
+            next(),
+            ClockEvent::Connected {
+                port: "Clock Shifter Out".into()
+            }
+        );
+        stop.store(true, Ordering::Relaxed);
+        thread.join().unwrap();
     }
 
     #[test]

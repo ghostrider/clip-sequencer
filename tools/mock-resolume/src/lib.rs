@@ -45,6 +45,8 @@ pub enum MockEvent {
     ParamChanged(u64),
     Composition,
     Thumbnail(Value),
+    /// The mock is shutting down: close every WebSocket session.
+    Shutdown,
 }
 
 pub struct MockConfig {
@@ -115,9 +117,22 @@ pub struct Mock {
     pub rest_addr: SocketAddr,
     pub osc_addr: SocketAddr,
     pub shared: Shared,
+    stop: tokio::sync::watch::Sender<bool>,
+    server: tokio::task::JoinHandle<()>,
+    osc: tokio::task::JoinHandle<()>,
 }
 
 impl Mock {
+    /// Stops the mock like a quitting Resolume: WebSocket sessions close, REST and OSC stop
+    /// listening and the ports are free again.
+    pub async fn shutdown(self) {
+        let _ = self.shared.events.send(MockEvent::Shutdown);
+        let _ = self.stop.send(true);
+        self.osc.abort();
+        let _ = self.osc.await;
+        let _ = tokio::time::timeout(Duration::from_secs(5), self.server).await;
+    }
+
     pub fn osc_log(&self) -> Vec<OscRecord> {
         self.shared.state.lock().unwrap().osc_log.clone()
     }
@@ -171,7 +186,7 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
 
     let udp = UdpSocket::bind(cfg.osc_addr).await?;
     let osc_addr = udp.local_addr()?;
-    tokio::spawn(osc_loop(udp, shared.clone()));
+    let osc = tokio::spawn(osc_loop(udp, shared.clone()));
 
     let listener = TcpListener::bind(cfg.rest_addr).await?;
     let rest_addr = listener.local_addr()?;
@@ -195,8 +210,15 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
             get(mock_osc_log).delete(mock_osc_log_clear),
         )
         .with_state(shared.clone());
-    tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+    let (stop, mut stop_rx) = tokio::sync::watch::channel(false);
+    let server = tokio::spawn(async move {
+        let shutdown = async move {
+            let _ = stop_rx.wait_for(|s| *s).await;
+        };
+        if let Err(e) = axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown)
+            .await
+        {
             log::error!("mock REST server: {e}");
         }
     });
@@ -205,6 +227,9 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
         rest_addr,
         osc_addr,
         shared,
+        stop,
+        server,
+        osc,
     })
 }
 
@@ -400,6 +425,10 @@ async fn ws_session(mut socket: WebSocket, sh: Shared) {
                     Ok(MockEvent::ParamChanged(_)) => continue,
                     Ok(MockEvent::Composition) => sh.state.lock().unwrap().comp.to_string(),
                     Ok(MockEvent::Thumbnail(v)) => json!({"type":"thumbnail_update","value":v}).to_string(),
+                    Ok(MockEvent::Shutdown) => {
+                        let _ = socket.send(Message::Close(None)).await;
+                        return;
+                    }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(_) => return,
                 };

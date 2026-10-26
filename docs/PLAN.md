@@ -76,5 +76,6 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 
 ## M10 — Hardening  ⟵ next
 - [ ] Long-run test (2 h with mock, simulated 128 BPM): no drift between tick count and triggers.
-- [ ] Resolume restart, WS drop, MIDI port loss, composition reload — all recover without restart.
-- [ ] Release build, Windows run instructions in `README.md`.
+- [x] Resolume restart, WS drop, MIDI port loss, composition reload — all recover without restart.
+      (tests/recovery.rs with the mock; port loss via the injectable clock supervisor.)
+- [x] Release build, Windows run instructions in `README.md` (`scripts/release.ps1`).

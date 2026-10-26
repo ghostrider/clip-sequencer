@@ -12,6 +12,9 @@ const WINDOW: usize = 48;
 const MAX_INTERVAL: Duration = Duration::from_millis(500);
 /// Loss timeout before any tempo is known.
 const LOSS_WITHOUT_TEMPO: Duration = Duration::from_secs(1);
+/// Lower bound of the loss timeout: a burst of ticks delivered back to back (driver batching)
+/// must not make "2 beats" collapse to nothing. 2 beats at 600 BPM is 200 ms.
+const MIN_LOSS_TIMEOUT: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Default)]
 pub struct TempoEstimator {
@@ -57,9 +60,9 @@ impl TempoEstimator {
     /// Also true before the first tick.
     pub fn is_lost(&self, now: Instant) -> bool {
         let Some(last) = self.last else { return true };
-        let timeout = self
-            .tick_interval()
-            .map_or(LOSS_WITHOUT_TEMPO, |d| d * (2 * PPQN));
+        let timeout = self.tick_interval().map_or(LOSS_WITHOUT_TEMPO, |d| {
+            (d * (2 * PPQN)).max(MIN_LOSS_TIMEOUT)
+        });
         now.saturating_duration_since(last) > timeout
     }
 
@@ -126,6 +129,17 @@ mod tests {
         // A tick resumes it.
         e.on_tick(last + Duration::from_millis(1500));
         assert!(!e.is_lost(last + Duration::from_millis(1600)));
+    }
+
+    #[test]
+    fn a_burst_of_ticks_does_not_count_as_loss() {
+        let mut e = TempoEstimator::new();
+        let t = Instant::now();
+        for i in 0..6 {
+            e.on_tick(t + Duration::from_micros(i * 10));
+        }
+        assert!(!e.is_lost(t + Duration::from_millis(150)));
+        assert!(e.is_lost(t + Duration::from_millis(250)));
     }
 
     #[test]
