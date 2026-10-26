@@ -58,23 +58,23 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
       (Automated live run done 2026-10-25: real Arena 7.28.1 + 128 BPM loopback clock, bar
       boundaries 1.875 s ± 0.2 ms, all triggers confirmed. Visual check by Uli pending.)
 
-## M7 — UI server + UI skeleton  ⟵ next
-- [ ] axum: static files (rust-embed), `/ws` protocol (SPEC §9.6), `/thumbs/...`.
-- [ ] Svelte app with tokens from `docs/ui/editor-mockup.html`; layout of all four regions.
-- [ ] Live state: deck tabs + LIVE badge, connection chips, sequence list, read-only lane grid
+## M7 — UI server + UI skeleton  ✓ done 2026-10-26
+- [x] axum: static files (rust-embed), `/ws` protocol (SPEC §9.6), `/thumbs/...`.
+- [x] Svelte app with tokens from `docs/ui/editor-mockup.html`; layout of all four regions.
+- [x] Live state: deck tabs + LIVE badge, connection chips, sequence list, read-only lane grid
       with playhead, status bar.
 
-## M8 — Editing
-- [ ] Create/rename/duplicate/delete sequences; add/remove lanes; layer and end-behaviour pickers.
-- [ ] Clip browser with thumbnails and search; drag to lane; resize, reorder, Alt-duplicate, rests.
-- [ ] Step inspector with resolution status and relink; repeat control; keyboard shortcuts; undo/redo.
-- [ ] "edited · applies at next start" badge; orphaned-deck handling.
+## M8 — Editing  ✓ done 2026-10-26
+- [x] Create/rename/duplicate/delete sequences; add/remove lanes; layer and end-behaviour pickers.
+- [x] Clip browser with thumbnails and search; drag to lane; resize, reorder, Alt-duplicate, rests.
+- [x] Step inspector with resolution status and relink; repeat control; keyboard shortcuts; undo/redo.
+- [x] "edited · applies at next start" badge; orphaned-deck handling.
 
-## M9 — Thumbnails
-- [ ] Disk cache with change detection; cached thumbnails for inactive decks.
-- [ ] Sequence mosaic rendering (`image` crate) and "Push thumbnail to Resolume".
+## M9 — Thumbnails  ✓ done 2026-10-26
+- [x] Disk cache with change detection; cached thumbnails for inactive decks.
+- [x] Sequence mosaic rendering (`image` crate) and "Push thumbnail to Resolume".
 
-## M10 — Hardening
+## M10 — Hardening  ⟵ next
 - [ ] Long-run test (2 h with mock, simulated 128 BPM): no drift between tick count and triggers.
 - [ ] Resolume restart, WS drop, MIDI port loss, composition reload — all recover without restart.
 - [ ] Release build, Windows run instructions in `README.md`.

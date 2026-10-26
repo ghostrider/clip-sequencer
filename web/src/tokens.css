@@ -1,0 +1,44 @@
+/* Design tokens, copied verbatim from docs/ui/editor-mockup.html (:root). Use only these for colour. */
+:root {
+  /* surfaces */
+  --bg: #0E0F11;
+  --panel: #131417;
+  --surface: #16181B;
+  --track: #121316;
+  --control: #1C1E22;
+  --line: #26292E;
+  --line-soft: #1F2125;
+  --line-strong: #33373D;
+  /* text */
+  --text: #E6E6E3;
+  --text-2: #C9CCD1;
+  --muted: #9A9EA6;
+  --faint: #7E838B;
+  /* accent = running / selected / playhead */
+  --accent: #F2A33A;
+  --accent-ink: #1A1206;
+  --accent-bg: #2A1E0E;
+  --accent-line: #5A4220;
+  --accent-text: #FFD39A;
+  /* info = confirmed by Resolume / bindings */
+  --info-text: #9DCBF0;
+  --info-bg: #121C26;
+  --info-line: #2A4A66;
+  /* ok = connections */
+  --ok: #4CC26E;
+  --ok-bg: #13221A;
+  --ok-line: #2F5B3A;
+  --ok-text: #B6E3C2;
+  /* error = unresolved, yielded, disconnected */
+  --err: #E5484D;
+  --err-bg: #1E1214;
+  --err-line: #7A2A2F;
+  --err-text: #FFB4B7;
+
+  --font: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius: 6px;
+  --lane-h: 88px;
+  --ruler-h: 40px;
+  --lane-head-w: 168px;
+}

@@ -1,0 +1,158 @@
+// App state: what the engine sends over /ws, plus local view state (selected deck tab,
+// sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
+
+import type {
+  ClipRef, ClipView, Command, DeckView, EditOp, RunView, RuntimeState, SequenceView,
+  StructureState, Uuid,
+} from './types';
+
+export const EIGHTHS_PER_BAR = 8;
+export const TICKS_PER_EIGHTH = 12;
+
+class AppState {
+  structure = $state<StructureState | null>(null);
+  runtime = $state<RuntimeState | null>(null);
+  connected = $state(false);
+
+  /** Deck tab being shown; `null` = follow the live deck. */
+  viewDeckName = $state<string | null>(null);
+  selectedSeq = $state<Uuid | null>(null);
+  selectedStep = $state<{ lane: number; index: number } | null>(null);
+  /** Pixels per eighth in the lane grid. */
+  zoom = $state(14);
+  search = $state('');
+  /** Waiting for a clip click in the browser to relink the selected step. */
+  relinking = $state(false);
+  /** Pending deck-switch confirmation (SPEC §7.2 step 1). */
+  confirmSwitch = $state<{ seq: Uuid; name: string; deck: string; running: string[] } | null>(null);
+
+  private ws: WebSocket | null = null;
+
+  connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    this.ws = ws;
+    ws.onopen = () => (this.connected = true);
+    ws.onclose = () => {
+      this.connected = false;
+      setTimeout(() => this.connect(), 1000);
+    };
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'structure') this.structure = msg.data;
+      else if (msg.type === 'runtime') this.runtime = msg.data;
+    };
+  }
+
+  send(cmd: Command) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(cmd));
+  }
+
+  edit(op: EditOp) {
+    this.send({ cmd: 'edit', op });
+  }
+
+  // ---- derived ----
+
+  get decks(): DeckView[] {
+    return this.structure?.decks ?? [];
+  }
+
+  get viewDeck(): DeckView | null {
+    const name = this.viewDeckName ?? this.structure?.live_deck ?? null;
+    return this.decks.find((d) => d.name === name) ?? this.decks[0] ?? null;
+  }
+
+  get selected(): SequenceView | null {
+    const deck = this.viewDeck;
+    if (!deck) return null;
+    return deck.sequences.find((s) => s.sequence.id === this.selectedSeq) ?? null;
+  }
+
+  run(seq: Uuid | null | undefined): RunView | null {
+    if (!seq) return null;
+    return this.runtime?.running.find((r) => r.seq === seq) ?? null;
+  }
+
+  /** Clip of the deck being viewed, by id. */
+  clip(id: number | null | undefined): ClipView | null {
+    if (id == null) return null;
+    for (const l of this.viewDeck?.layers ?? []) {
+      const c = l.clips.find((c) => c.id === id);
+      if (c) return c;
+    }
+    return null;
+  }
+
+  thumbUrl(c: ClipView | null): string | null {
+    return c?.thumb ? `/thumbs/clip/${c.id}.png?v=${encodeURIComponent(c.thumb)}` : null;
+  }
+
+  /** Layers a lane may target in the viewed deck (not the SEQ layer, unique names). */
+  get laneLayers() {
+    return (this.viewDeck?.layers ?? []).filter((l) => !l.is_seq_layer);
+  }
+
+  // ---- actions ----
+
+  /** ▶ on a card or Space: start, or stop when running. Switching decks asks first. */
+  toggle(view: SequenceView, deck: DeckView) {
+    const id = view.sequence.id;
+    if (this.run(id)) {
+      this.send({ cmd: 'stop', seq: id });
+      return;
+    }
+    const running = this.runtime?.running ?? [];
+    if (!deck.live && running.length > 0) {
+      this.confirmSwitch = { seq: id, name: view.sequence.name, deck: deck.name, running: running.map((r) => r.name) };
+      return;
+    }
+    this.send({ cmd: 'start', seq: id });
+  }
+
+  uniqueName(deck: DeckView, base: string): string {
+    const taken = new Set(deck.sequences.map((s) => s.sequence.name));
+    if (!taken.has(base)) return base;
+    for (let i = 2; ; i++) if (!taken.has(`${base} ${i}`)) return `${base} ${i}`;
+  }
+
+  /** First eligible layer not used by the given lanes. */
+  freeLayer(used: string[]): string | null {
+    const names = this.laneLayers.filter((l) => !l.ambiguous).map((l) => l.name);
+    return names.find((n) => !used.includes(n)) ?? null;
+  }
+
+  newSequence() {
+    const deck = this.viewDeck;
+    if (!deck) return;
+    const id = crypto.randomUUID();
+    this.edit({
+      op: 'create_sequence',
+      deck: deck.name,
+      id,
+      name: this.uniqueName(deck, 'New sequence'),
+      layer: this.freeLayer([]) ?? 'Layer',
+    });
+    this.selectedSeq = id;
+    this.selectedStep = null;
+  }
+
+  clipRef(c: ClipView): ClipRef {
+    const r: ClipRef = { id: c.id };
+    if (c.name) r.name = c.name;
+    if (c.file) r.file = c.file;
+    return r;
+  }
+}
+
+export const app = new AppState();
+
+export function formatLength(eighths: number): string {
+  const bars = eighths / EIGHTHS_PER_BAR;
+  if (eighths % EIGHTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
+  return `${eighths}/8`;
+}
+
+export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
+  return r.mode === 'once' ? 'once' : r.mode === 'infinite' ? '∞' : `×${r.count}`;
+}
