@@ -134,6 +134,7 @@ export interface RuntimeState {
   switching: { seq: Uuid; deck: string } | null;
   last_osc: { addr: string; send_us: number } | null;
   last_confirm: string | null;
+  confirmations: number;
   notices: string[];
   saved: number;
   save_error: string | null;

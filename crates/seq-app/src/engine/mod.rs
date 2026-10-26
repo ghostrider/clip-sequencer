@@ -167,6 +167,7 @@ pub struct Engine {
     osc_ok: bool,
     last_osc: Option<OscView>,
     last_confirm: Option<String>,
+    confirmations: u64,
     notices: VecDeque<String>,
     saved: u64,
     save_error: Option<String>,
@@ -229,6 +230,7 @@ impl Engine {
             osc_ok: true,
             last_osc: None,
             last_confirm: None,
+            confirmations: 0,
             notices: VecDeque::new(),
             saved: 0,
             save_error: None,
@@ -585,6 +587,7 @@ impl Engine {
             if let Some(v) = self.not_confirmed.get_mut(&(*seq, *lane)) {
                 v.retain(|s| s != step);
             }
+            self.confirmations += 1;
             self.last_confirm = Some(format!(
                 "confirmed connected after {:.1} ms",
                 latency.as_secs_f64() * 1000.0
@@ -1354,6 +1357,7 @@ impl Engine {
             }),
             last_osc: self.last_osc.clone(),
             last_confirm: self.last_confirm.clone(),
+            confirmations: self.confirmations,
             notices: self.notices.iter().cloned().collect(),
             saved: self.saved,
             save_error: self.save_error.clone(),

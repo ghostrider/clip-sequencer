@@ -230,6 +230,8 @@ pub struct RuntimeState {
     pub switching: Option<SwitchView>,
     pub last_osc: Option<OscView>,
     pub last_confirm: Option<String>,
+    /// Triggers confirmed by Resolume since the app started.
+    pub confirmations: u64,
     /// Recent notices for the status bar (newest last).
     pub notices: Vec<String>,
     /// Bumped on every save.

@@ -213,7 +213,7 @@ async fn resolume_restart_reconnects_and_running_sequences_keep_going() {
     let r = h
         .runtime("ws back and synced", |r| r.ws && r.ws_synced)
         .await;
-    let before = r.last_confirm.clone();
+    let before = r.confirmations;
     h.ticks(12);
     assert_eq!(
         osc_count(&mock, 1).await,
@@ -221,7 +221,7 @@ async fn resolume_restart_reconnects_and_running_sequences_keep_going() {
         "trigger reaches the new Resolume"
     );
     h.runtime("confirmed after restart", |r| {
-        r.last_confirm != before && r.running.len() == 1
+        r.confirmations > before && r.running.len() == 1
     })
     .await;
     assert_eq!(mock.clip_state(2, 1).as_deref(), Some("Connected"));
