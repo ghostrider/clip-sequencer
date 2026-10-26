@@ -33,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
         composition,
         other_decks: None,
         push_delay: Duration::from_millis(55),
+        ws_silent: false,
     })
     .await?;
     println!(

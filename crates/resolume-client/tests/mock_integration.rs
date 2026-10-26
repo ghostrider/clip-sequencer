@@ -2,7 +2,7 @@
 //! as `connected` over the WebSocket, deck switches, thumbnails, reconnect + resubscribe.
 
 use std::collections::BTreeSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use mock_resolume::{start, Mock, MockConfig};
 use resolume_client::osc::OscSender;
@@ -19,8 +19,16 @@ async fn mock() -> Mock {
 }
 
 /// Waits for the first event matching `pred`.
-async fn wait_for(h: &mut WsHandle, mut pred: impl FnMut(&WsEvent) -> bool) -> WsEvent {
-    tokio::time::timeout(Duration::from_secs(3), async {
+async fn wait_for(h: &mut WsHandle, pred: impl FnMut(&WsEvent) -> bool) -> WsEvent {
+    wait_for_within(h, Duration::from_secs(3), pred).await
+}
+
+async fn wait_for_within(
+    h: &mut WsHandle,
+    limit: Duration,
+    mut pred: impl FnMut(&WsEvent) -> bool,
+) -> WsEvent {
+    tokio::time::timeout(limit, async {
         loop {
             let ev = h.events.recv().await.expect("ws task ended");
             if pred(&ev) {
@@ -204,4 +212,61 @@ async fn client_started_before_resolume_connects_and_subscribes_when_it_appears(
         )
     })
     .await;
+}
+
+#[tokio::test]
+async fn after_resolume_closes_the_connection_the_client_waits_before_reconnecting() {
+    // Resolume quits: it closes WebSocket connections but still accepts new ones until it is
+    // gone, and waits for every client. Reconnecting at once would block its shutdown.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let at = |p: u16| MockConfig {
+        rest_addr: format!("127.0.0.1:{p}").parse().unwrap(),
+        ..MockConfig::default()
+    };
+    let m = start(at(port)).await.unwrap();
+    let mut h = ws::spawn(format!("ws://127.0.0.1:{port}/api/v1"));
+    wait_for(&mut h, |e| matches!(e, WsEvent::Composition { .. })).await;
+    m.shutdown().await;
+    let closed = Instant::now();
+    wait_for(&mut h, |e| matches!(e, WsEvent::Disconnected { .. })).await;
+    let _m2 = start(at(port)).await.unwrap(); // "Resolume" is back (or still accepting) at once
+    wait_for_within(&mut h, Duration::from_secs(8), |e| {
+        matches!(e, WsEvent::Connected)
+    })
+    .await;
+    assert!(
+        closed.elapsed() >= Duration::from_millis(4500),
+        "reconnected after {:?}",
+        closed.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn a_connection_without_initial_composition_is_dropped() {
+    let m = start(MockConfig {
+        ws_silent: true,
+        ..MockConfig::default()
+    })
+    .await
+    .unwrap();
+    let mut h = ws::spawn(format!("ws://{}/api/v1", m.rest_addr));
+    wait_for(&mut h, |e| matches!(e, WsEvent::Connected)).await;
+    let connected = Instant::now();
+    let ev = wait_for_within(&mut h, Duration::from_secs(6), |e| {
+        matches!(e, WsEvent::Disconnected { .. })
+    })
+    .await;
+    assert!(
+        matches!(&ev, WsEvent::Disconnected { reason } if reason.contains("no composition")),
+        "{ev:?}"
+    );
+    let after = connected.elapsed();
+    assert!(
+        after >= Duration::from_millis(2900) && after < Duration::from_millis(4500),
+        "dropped after {after:?}"
+    );
 }

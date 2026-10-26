@@ -105,7 +105,8 @@ fn start_app(rest: u16, osc: u16) -> H {
 impl H {
     async fn runtime(&self, what: &str, pred: impl Fn(&RuntimeState) -> bool) -> RuntimeState {
         let mut rx = self.app.outputs.runtime.clone();
-        tokio::time::timeout(Duration::from_secs(5), async {
+        // 10 s: after Resolume closes the connection the client waits 5 s before reconnecting.
+        tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 {
                     let s = rx.borrow_and_update();

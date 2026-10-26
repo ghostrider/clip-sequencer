@@ -211,3 +211,13 @@ Composition: `dev`, two `§` clips on the SEQ layer holding the plugin. Capture:
 | Instances | One per clip; Resolume also creates and destroys a short-lived instance about every 5 s while the plugin's source browser entry exists (no InitGL, no render). | ✅ |
 | Grid thumbnail | Resolume generates it from the plugin output when the source is loaded (`is_default: false`). A custom thumbnail (multipart POST, §3) overrides it and is kept while the plugin renders; `DELETE` reverts to Resolume's own. | ✅ |
 
+## 12. Quitting Resolume with WebSocket clients connected (2026-10-26)
+
+| Observation | Status |
+|---|---|
+| On quit, Resolume **waits until every WebSocket client has disconnected** before it exits. Log: `Stop Composition Server` ... `Clean up Compositon`, then nothing until the last client is gone; `Deleting myself` follows within seconds after that. | ✅ (hung twice for minutes with the sequencer connected; finished 3 s after the sequencer closed) |
+| A connected client gets a WebSocket **Close** frame (`code: Normal`) when the user quits; pings are answered and REST `/product` answers until then. | ✅ `docs/samples/ws-09-resolume-quit.log` (`shutdown_probe` example) |
+| While quitting, Resolume still **accepts new WebSocket connections**; a client that reconnects at once holds such a connection and the shutdown waits forever. | ✅ (the hung process kept one established connection from the sequencer's new client port) |
+
+Client rules (implemented in `resolume-client::ws`): answer/close properly, wait **5 s** after any established session ends before reconnecting, drop a connection that delivers no composition within 3 s, ping every second and drop the connection after 3 s of silence.
+

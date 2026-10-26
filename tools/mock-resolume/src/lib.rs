@@ -59,6 +59,8 @@ pub struct MockConfig {
     pub other_decks: Option<Vec<Value>>,
     /// Delay of the composition push after a change (Resolume: ~55 ms).
     pub push_delay: Duration,
+    /// WebSocket sessions accept but never send anything (a Resolume in the middle of quitting).
+    pub ws_silent: bool,
 }
 
 impl Default for MockConfig {
@@ -69,6 +71,7 @@ impl Default for MockConfig {
             composition: None,
             other_decks: None,
             push_delay: Duration::from_millis(55),
+            ws_silent: false,
         }
     }
 }
@@ -79,6 +82,7 @@ pub struct Shared {
     pub events: broadcast::Sender<MockEvent>,
     push_delay: Duration,
     push_pending: Arc<Mutex<bool>>,
+    ws_silent: bool,
 }
 
 impl Shared {
@@ -182,6 +186,7 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
         events,
         push_delay: cfg.push_delay,
         push_pending: Arc::new(Mutex::new(false)),
+        ws_silent: cfg.ws_silent,
     };
 
     let udp = UdpSocket::bind(cfg.osc_addr).await?;
@@ -389,6 +394,11 @@ async fn ws_upgrade(ws: WebSocketUpgrade, AxState(sh): AxState<Shared>) -> Respo
 }
 
 async fn ws_session(mut socket: WebSocket, sh: Shared) {
+    if sh.ws_silent {
+        // Keep the connection open and read (pings are answered by the library), send nothing.
+        while let Some(Ok(_)) = socket.recv().await {}
+        return;
+    }
     let mut events = sh.events.subscribe();
     let initial = sh.state.lock().unwrap().comp.to_string();
     for text in [

@@ -83,6 +83,15 @@ pub fn spawn(url: String) -> WsHandle {
 
 const BACKOFF_MIN: Duration = Duration::from_millis(250);
 const BACKOFF_MAX: Duration = Duration::from_secs(5);
+/// Resolume waits on quit until every WebSocket client is gone. It closes existing connections
+/// itself, but still accepts new ones while quitting - a client that reconnects at once then
+/// blocks the shutdown forever. So after an established session ends (closed, reset, silent),
+/// wait this long before connecting again. Failed connection attempts use the short backoff.
+const AFTER_SESSION: Duration = Duration::from_secs(5);
+/// A live Resolume sends the composition right after connecting and answers pings.
+const FIRST_MESSAGE_LIMIT: Duration = Duration::from_secs(3);
+const HEARTBEAT: Duration = Duration::from_secs(1);
+const SILENCE_LIMIT: Duration = Duration::from_secs(3);
 
 async fn run(
     url: String,
@@ -133,23 +142,42 @@ async fn run(
                 break;
             }
         }
+        let connected_at = Instant::now();
+        let mut last_heard = Instant::now();
+        let mut got_message = false;
+        let mut beat = tokio::time::interval(HEARTBEAT);
+        beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let reason = loop {
             if !ok {
                 break "send failed".to_owned();
             }
             tokio::select! {
-                msg = rx.next() => match msg {
-                    Some(Ok(Message::Text(text))) => {
-                        if let Some(ev) = classify(&text) {
-                            if events.send(ev).is_err() {
-                                return;
+                msg = rx.next() => {
+                    last_heard = Instant::now();
+                    match msg {
+                        Some(Ok(Message::Text(text))) => {
+                            got_message = true;
+                            if let Some(ev) = classify(&text) {
+                                if events.send(ev).is_err() {
+                                    let _ = tx.close().await;
+                                    return;
+                                }
                             }
                         }
+                        Some(Ok(Message::Close(c))) => break format!("Resolume closed the connection ({c:?})"),
+                        Some(Ok(_)) => {}
+                        Some(Err(e)) => break e.to_string(),
+                        None => break "stream ended".to_owned(),
                     }
-                    Some(Ok(Message::Close(c))) => break format!("closed: {c:?}"),
-                    Some(Ok(_)) => {}
-                    Some(Err(e)) => break e.to_string(),
-                    None => break "stream ended".to_owned(),
+                },
+                _ = beat.tick() => {
+                    if !got_message && connected_at.elapsed() > FIRST_MESSAGE_LIMIT {
+                        break "no composition after connecting (Resolume quitting?)".to_owned();
+                    }
+                    if last_heard.elapsed() > SILENCE_LIMIT {
+                        break format!("no answer for {} s", SILENCE_LIMIT.as_secs());
+                    }
+                    ok &= tx.send(Message::Ping(Vec::new())).await.is_ok();
                 },
                 cmd = cmds.recv() => match cmd {
                     Some(WsCommand::SetSubscriptions(new)) => {
@@ -171,11 +199,14 @@ async fn run(
                 }
             }
         };
+        // Answer a Close / close our side properly, so Resolume can finish quitting.
+        let _ = tx.close().await;
+        drop(rx);
         log::warn!("WebSocket disconnected: {reason}");
         if events.send(WsEvent::Disconnected { reason }).is_err() {
             return;
         }
-        tokio::time::sleep(BACKOFF_MIN).await;
+        tokio::time::sleep(AFTER_SESSION).await;
     }
 }
 
