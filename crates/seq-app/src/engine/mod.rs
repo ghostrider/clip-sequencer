@@ -148,6 +148,9 @@ pub struct Engine {
     last_layer_trigger: HashMap<u64, Instant>,
     /// Clip each running lane triggered last (it may live on another layer than the lane).
     lane_last_clip: HashMap<(Uuid, usize), u64>,
+    /// Last value sent per "1000A Sequence" plugin parameter (avoids resending until Resolume's
+    /// next composition push shows it).
+    plugin_sent: HashMap<u64, String>,
     pending: Vec<Pending>,
     not_confirmed: NotConfirmed,
     switch: Option<Switch>,
@@ -211,6 +214,7 @@ impl Engine {
             redo: Vec::new(),
             last_layer_trigger: HashMap::new(),
             lane_last_clip: HashMap::new(),
+            plugin_sent: HashMap::new(),
             pending: Vec::new(),
             not_confirmed: NotConfirmed::new(),
             switch: None,
@@ -401,7 +405,41 @@ impl Engine {
                 self.execute(acts);
             }
         }
+        self.sync_plugin_params();
         self.try_deferred_start();
+    }
+
+    /// Sets the `Sequence` parameter of every "1000A Sequence" plugin on the SEQ layer to its clip's
+    /// sequence name (SPEC §12). A clip that is not a `§` clip gets an empty name.
+    fn sync_plugin_params(&mut self) {
+        let Some(index) = &self.index else { return };
+        let LayerLookup::Found(seq_layer) = index.layer_by_name(&self.cfg.seq_layer) else {
+            return;
+        };
+        let sends: Vec<(u64, String)> = index
+            .filled_clips()
+            .filter(|c| c.layer == seq_layer.index)
+            .filter_map(|c| {
+                let p = c.sequence_param.as_ref()?;
+                let want = c
+                    .name
+                    .strip_prefix(&self.cfg.seq_prefix)
+                    .map(|n| n.trim().to_owned())
+                    .unwrap_or_default();
+                (p.value != want && self.plugin_sent.get(&p.id) != Some(&want))
+                    .then_some((p.id, want))
+            })
+            .collect();
+        for (id, value) in sends {
+            log::info!("plugin parameter {id}: Sequence = {value:?}");
+            let msg = serde_json::json!({
+                "action": "set",
+                "parameter": format!("/parameter/by-id/{id}"),
+                "value": value,
+            });
+            let _ = self.ws_cmd.send(WsCommand::Raw(msg.to_string()));
+            self.plugin_sent.insert(id, value);
+        }
     }
 
     fn change_composition(&mut self, name: String) {
@@ -413,6 +451,7 @@ impl Engine {
         self.model_error = None;
         self.undo.clear();
         self.redo.clear();
+        self.plugin_sent.clear();
         self.deck_cache.clear();
         let decks_dir = self.decks_dir(&name);
         let tx = self.aux_tx.clone();
@@ -497,6 +536,7 @@ impl Engine {
                 if clip.name != name {
                     clip.name = name.to_owned();
                     self.replace_clip(clip);
+                    self.sync_plugin_params();
                 }
             }
             ParamTarget::LayerName(layer_id) => {

@@ -628,6 +628,69 @@ async fn ui_server_protocol_thumbnails_and_push() {
         .await
         .unwrap();
     assert_eq!(r.headers()["content-type"], "image/png");
+    // The plugin endpoint: layout with a revision, runtime while running.
+    let view = |q: String| {
+        let http = http.clone();
+        async move {
+            http.get(format!("http://{ui}/plugin/v1/view.txt?{q}"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    };
+    let t = view("name=Loop".into()).await;
+    assert!(
+        t.starts_with(
+            "SEQVIEW 1
+status ok
+rev "
+        ),
+        "{t}"
+    );
+    assert!(
+        t.contains(
+            "
+layout
+name Loop
+deck 2132323
+pass 2
+lane ok loop_to_end L2
+step clip 1 1792956592496 "
+        ),
+        "{t}"
+    );
+    assert!(
+        t.contains(
+            "
+run 1 "
+        ),
+        "Loop is running: {t}"
+    );
+    assert!(
+        t.contains(
+            "
+lanestate 0 playing "
+        ),
+        "{t}"
+    );
+    let rev = t
+        .lines()
+        .find_map(|l| l.strip_prefix("rev "))
+        .unwrap()
+        .to_owned();
+    let t2 = view(format!("name=Loop&rev={rev}")).await;
+    assert!(
+        !t2.contains(
+            "
+layout
+"
+        ),
+        "unchanged layout is not resent: {t2}"
+    );
+    assert!(view("name=Nope".into()).await.contains("status not_found"));
     let r = http.get(format!("http://{ui}/")).send().await.unwrap();
     assert!(r
         .text()
@@ -700,5 +763,51 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
         "lane layer, then the layer the clip plays on"
     );
     assert_eq!(h.mock.clip_state(2, 1).as_deref(), Some("Disconnected"));
+    h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn seq_plugin_parameter_follows_the_clip_name() {
+    let h = harness().await;
+    let plugin_clip = |name: &str| {
+        let name = name.to_owned();
+        move |v: &mut serde_json::Value| {
+            let c = &mut v["layers"][3]["clips"][1];
+            c["name"]["value"] = name.clone().into();
+            c["connected"]["value"] = "Disconnected".into();
+            c["video"] = json!({"fileinfo": null, "description": "1000A Sequence", "sourceparams": {
+                "Sequence": {"valuetype": "ParamString", "id": 777_000_001u64, "value": ""}}});
+        }
+    };
+    let value = |m: &Mock| {
+        m.shared.state.lock().unwrap().comp["layers"][3]["clips"][1]["video"]["sourceparams"]
+            ["Sequence"]["value"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let wait_value = |want: &'static str| {
+        let m = &h.mock;
+        async move {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while value(m) != want {
+                assert!(
+                    Instant::now() < deadline,
+                    "plugin parameter is {:?}, expected {want:?}",
+                    value(m)
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+    };
+    h.mock.edit(plugin_clip("§ Loop"));
+    wait_value("Loop").await;
+    // Renaming the clip re-binds the plugin; a clip without the prefix shows nothing.
+    h.mock
+        .edit(|v| v["layers"][3]["clips"][1]["name"]["value"] = "§ Drop".into());
+    wait_value("Drop").await;
+    h.mock
+        .edit(|v| v["layers"][3]["clips"][1]["name"]["value"] = "notes".into());
+    wait_value("").await;
     h.app.shutdown().await;
 }

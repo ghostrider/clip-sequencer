@@ -86,9 +86,10 @@ Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, c
       installed in Resolume (Uli restarts Resolume). Record in `resolume-api-notes.md`: render when
       previewed / connected at layer opacity 0, `video.sourceparams` shape, setting the text
       parameter over WS, effect on the custom thumbnail. (Done: notes §11 - all yes.)
-- [ ] M11b sequencer: `/plugin/v1/sequence?name=` (layout + thumbnail URLs + revision) and
+- [x] M11b sequencer: `/plugin/v1/sequence?name=` (layout + thumbnail URLs + revision) and
       `/plugin/v1/runtime?name=` (running, pos, pass, bar.beat); auto-set the plugin's `Sequence`
-      parameter on `§` clips; tests against the mock.
+      parameter on `§` clips; tests against the mock. (Done as one line-based endpoint,
+      `/plugin/v1/view.txt`, format in crates/seq-app/src/plugin_view.rs.)
 - [ ] M11c plugin `ffgl-plugins/seq_view/`: FFGL 2.1 source, unique 4-char ID, worker thread
       (WinHTTP) polling the sequencer, thumbnails decoded off the render thread (stb_image),
       timeline rendering with playhead; test harness per repo convention (hidden WGL context, real

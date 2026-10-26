@@ -10,8 +10,11 @@
 use std::collections::HashMap;
 
 use seq_core::index::{
-    ClipInfo, ClipState, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo, Thumbnail,
+    ClipInfo, ClipState, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo, TextParam, Thumbnail,
 };
+
+/// Display name of the text parameter of the "1000A Sequence" FFGL source (SPEC §12).
+pub const SEQUENCE_PARAM: &str = "Sequence";
 use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -86,11 +89,19 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
             if let Some(s) = state {
                 states.insert(clip.id, s);
             }
-            let file_path = clip
-                .video
-                .and_then(|v| v.fileinfo)
-                .and_then(|f| f.path)
-                .filter(|p| !p.is_empty());
+            let (file_path, sequence_param) = match clip.video {
+                Some(v) => (
+                    v.fileinfo.and_then(|f| f.path).filter(|p| !p.is_empty()),
+                    v.sourceparams
+                        .and_then(|mut ps| ps.remove(SEQUENCE_PARAM))
+                        .filter(|p| p.valuetype == "ParamString" && p.id != 0)
+                        .map(|p| TextParam {
+                            id: p.id,
+                            value: p.value.as_str().unwrap_or_default().to_owned(),
+                        }),
+                ),
+                None => (None, None),
+            };
             let thumbnail = clip.thumbnail.unwrap_or_default();
             clips.push(ClipInfo {
                 id: clip.id,
@@ -105,6 +116,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
                 },
                 connected_param: clip.connected.id,
                 name_param: clip.name.id,
+                sequence_param,
             });
         }
     }
@@ -175,6 +187,19 @@ struct RawVideo {
     /// `null` for sources (generators).
     #[serde(default)]
     fileinfo: Option<RawFileInfo>,
+    /// Parameters of a source plugin, keyed by display name (notes §11).
+    #[serde(default)]
+    sourceparams: Option<std::collections::HashMap<String, RawSourceParam>>,
+}
+
+#[derive(Deserialize)]
+struct RawSourceParam {
+    #[serde(default)]
+    id: u64,
+    #[serde(default)]
+    valuetype: String,
+    #[serde(default)]
+    value: serde_json::Value,
 }
 
 #[derive(Deserialize)]

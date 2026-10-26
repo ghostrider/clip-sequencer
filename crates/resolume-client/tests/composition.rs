@@ -355,3 +355,34 @@ fn scenario_clip_renamed_and_moved_without_id_resolves_by_file() {
     move_column(&mut v, 6, 1);
     assert_eq!(positions(&seq, &v), vec![vec![Some((1, 1, File))]]);
 }
+
+#[test]
+fn seq_plugin_parameters_are_read_from_sourceparams() {
+    // Recorded with the "1000A Sequence" FFGL source on two § clips (notes §11).
+    let idx = parse_composition(include_str!(
+        "../../../docs/samples/composition-seq-plugin.json"
+    ))
+    .unwrap()
+    .index;
+    let seq = match idx.layer_by_name("SEQ") {
+        LayerLookup::Found(l) => l.index,
+        other => panic!("{other:?}"),
+    };
+    let params: Vec<_> = idx
+        .filled_clips()
+        .filter(|c| c.layer == seq)
+        .map(|c| (c.column, c.sequence_param.clone().map(|p| (p.id, p.value))))
+        .collect();
+    assert_eq!(
+        params,
+        vec![
+            (1, Some((1793025852850, String::new()))),
+            (2, Some((1793025852910, String::new())))
+        ]
+    );
+    // Ordinary video clips have none.
+    assert!(idx
+        .filled_clips()
+        .filter(|c| c.layer != seq)
+        .all(|c| c.sequence_param.is_none()));
+}

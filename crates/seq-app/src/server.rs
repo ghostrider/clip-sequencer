@@ -41,6 +41,7 @@ pub fn router(ctx: ServerCtx) -> Router {
         .route("/ws", get(ws_upgrade))
         .route("/thumbs/clip/{file}", get(clip_thumb))
         .route("/thumbs/seq/{file}", get(seq_thumb))
+        .route("/plugin/v1/view.txt", get(plugin_view))
         .fallback(get(static_file))
         .with_state(ctx)
 }
@@ -255,6 +256,30 @@ async fn seq_thumb(State(ctx): State<ServerCtx>, Path(file): Path<String>) -> Re
     };
     let png = mosaic_png(&ctx, view, &versions(&s)).await;
     png_response(png, false)
+}
+
+// ---- "1000A Sequence" plugin (SPEC §12) ----
+
+#[derive(Deserialize)]
+struct PluginViewQuery {
+    name: Option<String>,
+    rev: Option<String>,
+}
+
+async fn plugin_view(State(ctx): State<ServerCtx>, Query(q): Query<PluginViewQuery>) -> Response {
+    let text = {
+        let s = ctx.structure.borrow();
+        let r = ctx.runtime.borrow();
+        crate::plugin_view::view_text(&s, &r, q.name.as_deref().unwrap_or(""), q.rev.as_deref())
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        text,
+    )
+        .into_response()
 }
 
 // ---- static UI ----

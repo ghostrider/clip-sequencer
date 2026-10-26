@@ -400,6 +400,7 @@ impl State {
     /// (param id, JSON pointer, API path) for every parameter of decks, layers and clips.
     fn param_locations(&self) -> Vec<(u64, String, String)> {
         let mut out = Vec::new();
+        let mut plugin_params = Vec::new();
         let mut scan = |obj: &Value, ptr: String, path: String, deck: bool| {
             if let Some(map) = obj.as_object() {
                 for (k, v) in map {
@@ -452,8 +453,32 @@ impl State {
                     format!("{lp}/clips/{}", ci + 1),
                     false,
                 );
+                // FFGL source parameters (notes §11): .../video/source/<plugin, lower-case, no spaces>/<name>.
+                if let Some(params) = c["video"]["sourceparams"].as_object() {
+                    let plugin: String = c["video"]["description"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .chars()
+                        .filter(|ch| !ch.is_whitespace())
+                        .collect::<String>()
+                        .to_lowercase();
+                    for (k, v) in params {
+                        if is_param(v) {
+                            plugin_params.push((
+                                v["id"].as_u64().unwrap(),
+                                format!("/layers/{li}/clips/{ci}/video/sourceparams/{k}"),
+                                format!(
+                                    "{lp}/clips/{}/video/source/{plugin}/{}",
+                                    ci + 1,
+                                    k.to_lowercase()
+                                ),
+                            ));
+                        }
+                    }
+                }
             }
         }
+        out.extend(plugin_params);
         out
     }
 

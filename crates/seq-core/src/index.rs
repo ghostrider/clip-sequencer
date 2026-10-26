@@ -64,6 +64,17 @@ pub struct ClipInfo {
     pub thumbnail: Thumbnail,
     pub connected_param: u64,
     pub name_param: u64,
+    /// The `Sequence` text parameter of the "1000A Sequence" FFGL source, when the clip holds that
+    /// plugin (SPEC §12). The sequencer keeps it set to the clip's sequence name.
+    #[serde(default)]
+    pub sequence_param: Option<TextParam>,
+}
+
+/// A text parameter of a clip's source plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextParam {
+    pub id: u64,
+    pub value: String,
 }
 
 impl ClipInfo {
@@ -277,6 +288,7 @@ pub(crate) mod test_support {
                     },
                     connected_param: 0,
                     name_param: 0,
+                    sequence_param: None,
                 });
             }
             self
