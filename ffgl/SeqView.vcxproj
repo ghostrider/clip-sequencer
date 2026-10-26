@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SeqView FFGL source plugin. Same layout as every other plugin here: lives outside the external/ffgl submodule
+  and pulls the SDK sources in by relative path (same sources, glew.props, FFGLPlugins.def as the SDK's own
+  build/windows/*.vcxproj files).
+  Build: msbuild SeqView.vcxproj /p:Configuration=Release /p:Platform=x64
+  Build + install in one step: build_seqview.ps1
+-->
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{24B764AB-ED04-43AB-B204-BAD279FC9B89}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>SeqView</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <FFGLRoot>$(MSBuildThisFileDirectory)..\..\external\ffgl\</FFGLRoot>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(FFGLRoot)deps\glew.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(MSBuildThisFileDirectory)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)obj\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>SeqView</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>$(FFGLRoot)source\lib\;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;SEQVIEW_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <ModuleDefinitionFile>$(FFGLRoot)build\windows\FFGLPlugins.def</ModuleDefinitionFile>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <ImportLibrary>$(OutDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>OpenGL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- SDK sources. Deliberately not source\lib\FFGLSDK.cpp: that is a unity file that #includes all of these. -->
+  <ItemGroup>
+    <ClCompile Include="$(FFGLRoot)source\lib\ffgl\*.cpp" />
+    <ClCompile Include="$(FFGLRoot)source\lib\ffglex\*.cpp" />
+    <ClCompile Include="$(FFGLRoot)source\lib\ffglquickstart\*.cpp" />
+    <ClCompile Include="SeqView.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SeqView.h" />
+    <ClInclude Include="SeqViewParams.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+    <None Include="build_seqview.ps1" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!--
+    Build number + date. Runs before every compile: increments the counter in build_number.txt (per machine, not
+    tracked in git) and writes BuildInfo.h into the intermediate directory. SeqView.cpp includes it, so the
+    values end up in the DLL and are shown in Resolume as the "Build" parameter and in the About text.
+  -->
+  <Target Name="GenerateBuildInfo" BeforeTargets="ClCompile">
+    <PropertyGroup>
+      <BuildNumberFile>$(MSBuildThisFileDirectory)build_number.txt</BuildNumberFile>
+      <BuildInfoHeader>$(IntDir)BuildInfo.h</BuildInfoHeader>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
+      <Output TaskParameter="Lines" PropertyName="PreviousBuildNumber" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <PreviousBuildNumber Condition="'$(PreviousBuildNumber)' == ''">0</PreviousBuildNumber>
+      <NewBuildNumber>$([MSBuild]::Add($(PreviousBuildNumber), 1))</NewBuildNumber>
+      <BuildDateString>$([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm'))</BuildDateString>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntDir)" />
+    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(NewBuildNumber)" Overwrite="true" />
+    <WriteLinesToFile File="$(BuildInfoHeader)" Overwrite="true"
+                      Lines="#pragma once;#define SEQVIEW_BUILD_NUMBER $(NewBuildNumber);#define SEQVIEW_BUILD_DATE &quot;$(BuildDateString)&quot;" />
+  </Target>
+</Project>

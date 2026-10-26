@@ -340,8 +340,27 @@ CLI flags (clap) with optional `seq.toml`:
 `--midi-port`, `--resolume-host`, `--rest-port 8080`, `--osc-port 7000`, `--ui-port 8090`,
 `--seq-layer SEQ`, `--seq-prefix "§ "`, `--data-dir`. Logging via `RUST_LOG`.
 
-## 12. Out of scope (for now)
+## 12. "Sequence" FFGL source plugin (M11, decided 2026-10-26)
+
+Replaces the *Blank* placeholder on `§` clips. Starting/stopping is unchanged (the `§` clip's
+`connected` state, §7.1); the plugin only **shows** the sequence.
+
+- **Content:** a live timeline: sequence name, one row per lane (layer name + steps as blocks
+  with clip thumbnails, rests and unresolved steps marked like in the browser UI), and while the
+  sequence runs a moving playhead, `bar.beat` and the pass counter. Static layout when idle.
+- **Binding:** automatic. The sequencer finds the plugin on each `§` clip and sets its
+  `Sequence` text parameter to the clip's sequence name (`§ ` stripped). The clip name stays the
+  key; the parameter can also be typed by hand (fallback).
+- **Visibility:** may appear in the preview monitor and on the output; the user controls it with
+  the SEQ layer (opacity etc.).
+- **Data:** the plugin polls the sequencer over localhost HTTP (`/plugin/v1/...`, UI port) from a
+  worker thread; it never blocks the render thread. Without a sequencer it shows "no sequencer".
+- **Verify first (M11a probe):** whether Resolume renders a source plugin when its clip is only
+  previewed / connected on a layer with opacity 0, whether plugin parameters appear in the
+  composition JSON (`video.sourceparams`) and can be set over the WebSocket, and what happens to
+  the custom grid thumbnail.
+
+## 13. Out of scope (for now)
 
 Start quantization, time signatures other than 4/4, per-step parameter automation,
-cross-deck sequences, multi-user editing, FFGL "Sequence" source plugin (possible later
-replacement for SEQ placeholder clips).
+cross-deck sequences, multi-user editing.

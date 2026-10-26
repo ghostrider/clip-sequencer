@@ -194,3 +194,20 @@ the source: the placeholder keeps its transparent `Blank` source and only its gr
 - Whether custom thumbnails survive saving and reopening the `.avc`.
 - Layer groups (`dev` has none). Layers inside a group are listed under `layergroups[].layers`,
   per OpenAPI, which may change layer indexing. Check before relying on groups.
+
+## 11. FFGL source plugins on clips (probed for M11, 2026-10-26)
+
+Probe: `ffgl-plugins/seq_view` stage M11a ("1000A Sequence", ID `VJSQ`), which logs its lifecycle and frames per
+second to Resolume's log (`%LOCALAPPDATA%\Resolume Arena\Resolume Arena log.txt`, lines `FFGL: SeqView#n ...`).
+Composition: `dev`, two `§` clips on the SEQ layer holding the plugin. Capture: `docs/samples/ws-08-plugin-param-set.jsonl`.
+
+| Question | Answer | Status |
+|---|---|---|
+| Plugin parameters in the composition JSON | Yes: `clip.video.sourceparams` maps the parameter **display name** to a parameter object, e.g. `"Sequence": {"valuetype": "ParamString", "id": 1793025852850, "value": ""}`. `clip.video.description` is the plugin name (`"1000A Sequence"`); `fileinfo` is absent. | ✅ |
+| Set a text parameter over the WebSocket | Yes: `{"action":"set","parameter":"/parameter/by-id/<id>","value":"a1"}` → `parameter_set` (old value), `parameter_update` (new value) for subscribers; the plugin's `SetTextParameter` receives it immediately. Logical path: `/composition/layers/{L}/clips/{C}/video/source/1000asequence/sequence` (plugin name lower-cased without spaces). | ✅ |
+| Rendered while connected on a layer with opacity 0 | **Yes**, continuously (~105-118 fps at 1920x1080). | ✅ |
+| Rendered while only shown in the preview monitor | **Yes**: an unconnected clip's instance renders while the clip is selected (REST `POST .../clips/by-id/{id}/select` is enough) and pauses when it is not. | ✅ |
+| `Connect` / `Disconnect` callbacks | Mark when the host starts/stops rendering the instance (selection/preview, connection) - not the clip's `connected` state. | ✅ |
+| Instances | One per clip; Resolume also creates and destroys a short-lived instance about every 5 s while the plugin's source browser entry exists (no InitGL, no render). | ✅ |
+| Grid thumbnail | Resolume generates it from the plugin output when the source is loaded (`is_default: false`). A custom thumbnail (multipart POST, §3) overrides it and is kept while the plugin renders; `DELETE` reverts to Resolume's own. | ✅ |
+

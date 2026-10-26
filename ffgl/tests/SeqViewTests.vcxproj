@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tests for SeqView (console program): instantiates the real plugin class with a hidden OpenGL context, drives
+  it like a host would, checks pixels and saves PNG previews.
+
+  IMPORTANT: this test .exe exports NvOptimusEnablement / AmdPowerXpressRequestHighPerformance (see
+  SeqViewTests.cpp) so that on a dual-GPU (Optimus) laptop it runs on the SAME discrete GPU Resolume itself
+  uses, not whatever GPU Windows picks by default for a plain console app (usually the integrated one). SimpleRect
+  v1 passed every test on the integrated GPU and still failed to render in the real host - the most likely
+  explanation is exactly this mismatch (NVIDIA's driver is stricter about GLSL than Intel's).
+
+  Build + run:
+    msbuild SeqViewTests.vcxproj /p:Configuration=Release /p:Platform=x64
+    bin\x64\Release\SeqViewTests.exe [output-directory]
+-->
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C59FC34B-57C3-4EC3-9D62-6A58C865082D}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>SeqViewTests</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <FFGLRoot>$(MSBuildThisFileDirectory)..\..\..\external\ffgl\</FFGLRoot>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(FFGLRoot)deps\glew.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(MSBuildThisFileDirectory)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)obj\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>SeqViewTests</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- tests\ first: its BuildInfo.h stands in for the one the plugin project generates -->
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(FFGLRoot)source\lib\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>OpenGL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(FFGLRoot)source\lib\ffgl\*.cpp" />
+    <ClCompile Include="$(FFGLRoot)source\lib\ffglex\*.cpp" />
+    <ClCompile Include="$(FFGLRoot)source\lib\ffglquickstart\*.cpp" />
+    <ClCompile Include="..\SeqView.cpp" />
+    <ClCompile Include="GlContext.cpp" />
+    <ClCompile Include="SeqViewTests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\SeqView.h" />
+    <ClInclude Include="..\SeqViewParams.h" />
+    <ClInclude Include="BuildInfo.h" />
+    <ClInclude Include="GlContext.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

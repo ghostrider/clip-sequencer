@@ -79,3 +79,19 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Resolume restart, WS drop, MIDI port loss, composition reload — all recover without restart.
       (tests/recovery.rs with the mock; port loss via the injectable clock supervisor.)
 - [x] Release build, Windows run instructions in `README.md` (`scripts/release.ps1`).
+
+## M11 — "Sequence" FFGL source plugin (SPEC §12)  ⟵ next
+Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, check the host log).
+- [x] M11a probe: minimal source plugin with a `Sequence` text parameter that logs render calls;
+      installed in Resolume (Uli restarts Resolume). Record in `resolume-api-notes.md`: render when
+      previewed / connected at layer opacity 0, `video.sourceparams` shape, setting the text
+      parameter over WS, effect on the custom thumbnail. (Done: notes §11 - all yes.)
+- [ ] M11b sequencer: `/plugin/v1/sequence?name=` (layout + thumbnail URLs + revision) and
+      `/plugin/v1/runtime?name=` (running, pos, pass, bar.beat); auto-set the plugin's `Sequence`
+      parameter on `§` clips; tests against the mock.
+- [ ] M11c plugin `ffgl-plugins/seq_view/`: FFGL 2.1 source, unique 4-char ID, worker thread
+      (WinHTTP) polling the sequencer, thumbnails decoded off the render thread (stb_image),
+      timeline rendering with playhead; test harness per repo convention (hidden WGL context, real
+      FBO, PNG preview); confirmed loading and rendering in Resolume.
+- [ ] Docs: plugin README, sequencer README (setup with the plugin instead of Blank).
+
