@@ -219,5 +219,7 @@ Composition: `dev`, two `§` clips on the SEQ layer holding the plugin. Capture:
 | A connected client gets a WebSocket **Close** frame (`code: Normal`) when the user quits; pings are answered and REST `/product` answers until then. | ✅ `docs/samples/ws-09-resolume-quit.log` (`shutdown_probe` example) |
 | While quitting, Resolume still **accepts new WebSocket connections**; a client that reconnects at once holds such a connection and the shutdown waits forever. | ✅ (the hung process kept one established connection from the sequencer's new client port) |
 
-Client rules (implemented in `resolume-client::ws`): answer/close properly, wait **5 s** after any established session ends before reconnecting, drop a connection that delivers no composition within 3 s, ping every second and drop the connection after 3 s of silence.
+| An idle HTTP keep-alive connection (e.g. a periodic REST health check through a pooling client) blocks the shutdown the same way. | ✅ (hung with only the sequencer's REST connection open after the WebSocket fix) |
+
+Client rules (implemented in `resolume-client::ws` and `::rest`): REST without keep-alive (`pool_max_idle_per_host(0)`); WebSocket: answer/close properly, wait **5 s** after any established session ends before reconnecting, drop a connection that delivers no composition within 3 s, ping every second and drop the connection after 3 s of silence.
 

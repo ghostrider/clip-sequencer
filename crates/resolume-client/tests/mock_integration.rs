@@ -270,3 +270,36 @@ async fn a_connection_without_initial_composition_is_dropped() {
         "dropped after {after:?}"
     );
 }
+
+#[tokio::test]
+async fn rest_client_keeps_no_idle_connection_to_resolume() {
+    // Resolume waits on quit until all its client connections are closed; an idle keep-alive
+    // connection from the health check would block it forever (notes §12).
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut sock, _) = listener.accept().await.unwrap();
+        let mut buf = vec![0u8; 4096];
+        let mut req = Vec::new();
+        while !req.windows(4).any(|w| w == b"\r\n\r\n") {
+            let n = sock.read(&mut buf).await.unwrap();
+            req.extend_from_slice(&buf[..n]);
+        }
+        let body = r#"{"name":"Arena"}"#;
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{body}",
+            body.len()
+        );
+        sock.write_all(resp.as_bytes()).await.unwrap();
+        // The client must close its side by itself, without a second request.
+        tokio::time::timeout(Duration::from_secs(2), sock.read(&mut buf)).await
+    });
+    let rest = RestClient::new(format!("http://{addr}/api/v1"));
+    assert_eq!(rest.product().await.unwrap()["name"], "Arena");
+    let after_response = server.await.unwrap();
+    assert!(
+        matches!(after_response, Ok(Ok(0))),
+        "connection still open after the response: {after_response:?}"
+    );
+}

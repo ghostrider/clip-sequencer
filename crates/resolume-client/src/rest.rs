@@ -39,6 +39,9 @@ impl RestClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .connect_timeout(Duration::from_millis(500))
+            // No keep-alive: Resolume waits on quit until all its client connections are gone,
+            // so an idle pooled connection would block it (notes §12). Requests are rare.
+            .pool_max_idle_per_host(0)
             .build()
             .expect("HTTP client");
         Self {
