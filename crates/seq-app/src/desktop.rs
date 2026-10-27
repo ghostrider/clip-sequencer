@@ -328,6 +328,9 @@ fn main_window(app: &AppHandle, url: Url) -> tauri::Result<()> {
         .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
         .visible(false)
         .background_color(BACKGROUND)
+        // Tauri's native file-drop handler swallows every drag on Windows; the editor needs
+        // HTML5 drag and drop (clip browser -> lane).
+        .disable_drag_drop_handler()
         // Only the local UI inside the window; everything else goes to the system browser.
         .on_navigation(move |target| {
             let local = target.origin() == origin;
