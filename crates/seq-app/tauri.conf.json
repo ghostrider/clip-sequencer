@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Clip Sequencer",
   "identifier": "dev.clip-sequencer.app",
   "build": {
     "frontendDist": "shell"
@@ -13,6 +14,8 @@
   },
   "bundle": {
     "active": false,
+    "publisher": "Ulrich Staudinger",
+    "copyright": "Copyright (c) 2026 Ulrich Staudinger",
     "icon": ["icons/icon.ico", "icons/icon.png"]
   }
 }

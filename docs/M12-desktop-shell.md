@@ -233,18 +233,27 @@ doing, and it shows startup problems before the main UI exists.
 
 ## Phase F — Build and packaging
 
-- [ ] `cargo tauri dev` for development (it uses the Vite dev server and proxies to the engine) and
-      `cargo tauri build` for release. Document both in `CLAUDE.md` and the README.
-- [ ] The NSIS installer has an optional component **"FFGL plugin for Resolume Arena"** (checked by default). It
+- [x] `cargo tauri dev` for development (it uses the Vite dev server and proxies to the engine) and
+      `cargo tauri build` for release. Document both in `CLAUDE.md` and the README. *(Done without the Tauri CLI:
+      plain `cargo build` builds the shell, and with no installer there is nothing for `cargo tauri build` to bundle.
+      Dev: `npm run dev` plus `SEQ_DEV_URL=http://localhost:5173` makes a debug `seq-app` window load the Vite dev
+      server (hot reload); Vite now also proxies `/api`. Documented in `CLAUDE.md` and the README.)*
+- [-] *(Dropped, Decisions: portable only.)* The NSIS installer has an optional component **"FFGL plugin for Resolume Arena"** (checked by default). It
       runs `seq-app --install-ffgl` after installation, so the installer and the in-app feature share one
       implementation (M11 Phase G3). The uninstaller removes the plugin only if the installer put it there.
-- [ ] The release build produces the **NSIS installer** (with the WebView2 bootstrapper, `downloadBootstrapper`
-      mode) and a **portable exe** (Phase A).
-- [ ] Version, product name, copyright and icon come from the same single sources as M11 Phase E
+- [x] The release build produces the **NSIS installer** (with the WebView2 bootstrapper, `downloadBootstrapper`
+      mode) and a **portable exe** (Phase A). *(Portable only: `scripts\release.ps1` builds both exes and
+      `release\clip-sequencer-<version>-windows-x64.zip` with a `.sha256`. Instead of the bootstrapper, `seq-app.exe`
+      checks for WebView2 at start; if it is missing, a native message box explains it, offers the download page
+      and points to `seq-app-cli.exe` (tested with `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` set to a missing folder).)*
+- [x] Version, product name, copyright and icon come from the same single sources as M11 Phase E
       (`[workspace.package]`, the icon file). `tauri.conf.json` must not hold a second, hand-maintained
-      version.
-- [ ] The headless mode works from `seq-app-cli.exe` (shipped next to `seq-app.exe`; see Decisions).
-- [ ] Update `README.md`: desktop usage, headless usage, port fallback and `--strict-port`, where logs live,
+      version. *(Version: `[workspace.package]` only; build.rs fails if `tauri.conf.json` gets a `version`.
+      Product name, publisher and copyright: `tauri.conf.json`, which build.rs exports to the code (`APP_NAME`,
+      `COPYRIGHT`) and tauri-build writes into the exe's version resource. Icon: `icons/icon.ico`. Checked:
+      both exes show ProductName "Clip Sequencer", 0.1.0, LegalCopyright and CompanyName.)*
+- [x] The headless mode works from `seq-app-cli.exe` (shipped next to `seq-app.exe`; see Decisions).
+- [x] Update `README.md`: desktop usage, headless usage, port fallback and `--strict-port`, where logs live,
       and the WebView2 requirement for the portable exe.
 
 ## Phase G — Verification

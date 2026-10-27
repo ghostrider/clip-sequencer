@@ -57,8 +57,8 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - Test: `cargo test --workspace`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all`
 - FFGL plugin (`ffgl/`, second build system: MSVC, not cargo): build + install
-  `powershell -ExecutionPolicy Bypass -File ffgluild_seqview.ps1` (Resolume closed); tests: build
-  `ffgl	ests\SeqViewTests.vcxproj` (Release x64) and run `ffgl	estsind\Release\SeqViewTests.exe`.
+  `powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1` (Resolume closed); tests: build
+  `ffgl\tests\SeqViewTests.vcxproj` (Release x64) and run `ffgl\tests\bin\Release\SeqViewTests.exe`.
   It uses the FFGL SDK and stb from the parent `vj_stuff` repo (`../external/ffgl`, `../third_party/stb`).
   Follow `../ffgl-plugins/AGENTS.md` for plugin work.
 - All checks (fmt, clippy, test): `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` (`-Fix` to format)
@@ -72,7 +72,8 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - Mock Resolume (no Resolume needed): `cargo run -p mock-resolume -- --rest-port 8080 --osc-port 7000`
 - Smoke test vs. real Resolume (triggers + clears the first clip): `cargo run -p resolume-client --example live_check`
 - Headless test run: `cargo run -p seq-app -- --midi-port "Default App Loopback (B)" --start "<sequence>" --exit-when-done`
-- Release: `powershell -ExecutionPolicy Bypass -File scriptselease.ps1` → `release\seq-app.exe`
+- Release: `powershell -ExecutionPolicy Bypass -File scripts\release.ps1` → `release\seq-app.exe`, `seq-app-cli.exe` and the
+  portable zip `clip-sequencer-<version>-windows-x64.zip` (+ `.sha256`). Portable only, no installer (M12).
 - Long-run test: `cargo run --release -p seq-app --example soak -- "Default App Loopback (B)" <minutes>`
   (with clock_gen running)
 - Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
@@ -84,6 +85,10 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
   `tauri.conf.json`, `icons/`, `shell/`); no separate crate, so one `cargo build` gives both exes. The web content
   gets no Tauri IPC; window actions from the UI go over `/ws` (`shell` command). WebView2 DevTools for debugging:
   set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` before starting `seq-app`.
+  Plain `cargo build`/`run`; the Tauri CLI (`cargo tauri dev/build`) is not used (no bundle, the window loads the
+  app's own server). Hot reload in the window: `npm run dev` in `web/`, then `SEQ_DEV_URL=http://localhost:5173`
+  for a debug `seq-app` (debug builds only). Product name and copyright: `tauri.conf.json` (build.rs exports
+  them to the code and the exe resource); the version only in `[workspace.package]`.
 - Logging: `seq_app::logging` (not env_logger) feeds the Console tab and `<data-dir>/logs/` (7 days);
   `RUST_LOG` filters as before. Use `log::` macros; never log from inside the logger's own send path.
 

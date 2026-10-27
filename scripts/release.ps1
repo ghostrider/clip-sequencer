@@ -1,6 +1,8 @@
-# Builds the browser UI and the release binaries, and copies seq-app.exe (desktop app) and
-# seq-app-cli.exe (console, headless) to release\.
-# The binary embeds web\dist, so the UI must be built first.
+# Builds the browser UI and the release binaries, copies seq-app.exe (desktop app) and
+# seq-app-cli.exe (console, headless) to release\, and packs the portable zip
+# release\clip-sequencer-<version>-windows-x64.zip (+ .sha256).
+# The binary embeds web\dist, so the UI must be built first. No installer (M12 decision: portable
+# only); the exe needs the WebView2 Runtime, which ships with Windows 11.
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 
 $ErrorActionPreference = 'Stop'
@@ -21,4 +23,23 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 New-Item -ItemType Directory -Force release | Out-Null
 Copy-Item target\release\seq-app.exe release\seq-app.exe -Force
 Copy-Item target\release\seq-app-cli.exe release\seq-app-cli.exe -Force
-Write-Host 'Done: release\seq-app.exe, release\seq-app-cli.exe' -ForegroundColor Green
+
+# The version the binary reports ("seq-app-cli 0.1.0"); [workspace.package] is its only source.
+$version = ((& release\seq-app-cli.exe --version) -split ' ')[-1]
+$name = "clip-sequencer-$version-windows-x64"
+Write-Host "==> $name.zip" -ForegroundColor Cyan
+$stage = Join-Path release $name
+Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory $stage | Out-Null
+Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md $stage
+foreach ($f in 'LICENSE', 'THIRD_PARTY_LICENSES.txt', 'CHANGELOG.md') {
+    if (Test-Path $f) { Copy-Item $f $stage }
+}
+$zip = Join-Path release "$name.zip"
+Remove-Item $zip -Force -ErrorAction SilentlyContinue
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+Remove-Item $stage -Recurse -Force
+$hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+"$hash  $name.zip" | Set-Content -Encoding ascii "$zip.sha256"
+
+Write-Host "Done: release\seq-app.exe, release\seq-app-cli.exe, release\$name.zip (sha256 $hash)" -ForegroundColor Green

@@ -58,6 +58,8 @@ const ZOOM_STEP: f64 = 0.1;
 const ZOOM_RANGE: (f64, f64) = (0.5, 2.0);
 /// Upper bound for waiting on `runner`'s shutdown (which itself aims for 2 s).
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(3);
+/// Where the WebView2 Runtime is offered (the portable exe needs it; Windows 11 ships it).
+const WEBVIEW2_DOWNLOAD: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 
 /// Shell state, shared by the event handlers.
 struct Shell {
@@ -82,6 +84,14 @@ struct Backend {
 
 pub fn run(config: Config) -> ExitCode {
     log::debug!("desktop: starting the shell");
+    match tauri::webview_version() {
+        Ok(v) => log::info!("WebView2 Runtime {v}"),
+        Err(e) => {
+            log::error!("no WebView2 Runtime: {e}");
+            webview2_missing();
+            return ExitCode::FAILURE;
+        }
+    }
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("seq-runtime")
@@ -177,9 +187,10 @@ async fn start(app: AppHandle, config: Config) {
     let _ = presenter.await; // every step shown (warnings stay readable)
     match result {
         Ok(running) => {
-            let url = match Url::parse(&running.ui_url) {
+            let ui_url = window_url(&running.ui_url);
+            let url = match Url::parse(&ui_url) {
                 Ok(u) => u,
-                Err(e) => return fatal(&app, format!("bad UI URL {}: {e}", running.ui_url), false),
+                Err(e) => return fatal(&app, format!("bad UI URL {ui_url}: {e}"), false),
             };
             *shell.backend.lock().unwrap() = Some(Backend {
                 commands: running.commands,
@@ -289,6 +300,17 @@ fn splash_action(app: AppHandle, action: String) {
     }
 }
 
+/// The page the main window loads: the in-process UI server. Debug builds take `SEQ_DEV_URL`
+/// instead (the Vite dev server, `npm run dev`, for hot reload; it proxies to the engine).
+fn window_url(engine: &str) -> String {
+    #[cfg(debug_assertions)]
+    if let Some(dev) = std::env::var("SEQ_DEV_URL").ok().filter(|u| !u.is_empty()) {
+        log::info!("SEQ_DEV_URL: the window loads {dev} (engine UI at {engine})");
+        return dev;
+    }
+    engine.to_owned()
+}
+
 fn main_window(app: &AppHandle, url: Url) -> tauri::Result<()> {
     let origin = url.origin();
     let opener = app.clone();
@@ -377,6 +399,37 @@ fn focus_running_instance(data_dir: &std::path::Path, url: &str) -> bool {
         _ => false,
     }
 }
+
+/// No WebView2, no window at all (not even the splash): say so with a plain Win32 message box and
+/// offer the download page.
+#[cfg(windows)]
+fn webview2_missing() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONERROR, MB_YESNO};
+    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let text = wide(&format!(
+        "{APP_NAME} needs the Microsoft Edge WebView2 Runtime, which is not installed on this \
+         computer.\n\nInstall it (\"Evergreen\" runtime) and start {APP_NAME} again, or run \
+         seq-app-cli.exe and open its UI in a browser.\n\nOpen the download page now?"
+    ));
+    let title = wide(APP_NAME);
+    // SAFETY: both strings are NUL-terminated UTF-16 and outlive the (modal) call.
+    let answer = unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_YESNO | MB_ICONERROR,
+        )
+    };
+    if answer == IDYES {
+        if let Err(e) = tauri_plugin_opener::open_url(WEBVIEW2_DOWNLOAD, None::<&str>) {
+            log::warn!("could not open {WEBVIEW2_DOWNLOAD}: {e}");
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn webview2_missing() {}
 
 #[cfg(windows)]
 fn focus_process_window(pid: u32) -> bool {

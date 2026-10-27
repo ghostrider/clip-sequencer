@@ -3,6 +3,8 @@
 //! Build info (`SEQ_BUILD_NUMBER`, `SEQ_GIT_COMMIT`) comes from git, with fallbacks.
 //! With the `desktop` feature, tauri-build embeds `tauri.conf.json`, the icon, the Windows
 //! manifest and the splash page in `shell/` (M12), which gets the UI's design tokens copied in.
+//! Product name and copyright come from `tauri.conf.json` (`SEQ_APP_NAME`, `SEQ_COPYRIGHT`), so
+//! the code and the exe's version resource share one source; the version comes from Cargo only.
 
 use std::path::Path;
 use std::process::Command;
@@ -23,6 +25,7 @@ fn main() {
     }
 
     build_info(manifest);
+    product_info(manifest);
 
     // The splash page uses the same tokens as the UI (one source: web/src/tokens.css).
     let tokens = manifest.join("../../web/src/tokens.css");
@@ -31,6 +34,30 @@ fn main() {
 
     #[cfg(feature = "desktop")]
     tauri_build::build();
+}
+
+/// Name and copyright from `tauri.conf.json`, which tauri-build also writes into the exe. The config
+/// must not carry a version of its own: Tauri then takes Cargo's (`[workspace.package]`).
+fn product_info(manifest: &Path) {
+    let path = manifest.join("tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", path.display());
+    let text = std::fs::read_to_string(&path).expect("read tauri.conf.json");
+    let conf: serde_json::Value = serde_json::from_str(&text).expect("parse tauri.conf.json");
+    assert!(
+        conf.get("version").is_none(),
+        "tauri.conf.json must not set \"version\": it comes from [workspace.package]"
+    );
+    let field = |ptr: &str| {
+        conf.pointer(ptr)
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("tauri.conf.json: {ptr} missing"))
+            .to_owned()
+    };
+    println!("cargo:rustc-env=SEQ_APP_NAME={}", field("/productName"));
+    println!(
+        "cargo:rustc-env=SEQ_COPYRIGHT={}",
+        field("/bundle/copyright")
+    );
 }
 
 /// Build number = commit count, the same in every checkout; commit = short hash, `-dirty` if the

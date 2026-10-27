@@ -11,6 +11,7 @@ export default defineConfig({
     proxy: {
       '/ws': { target: app.replace('http', 'ws'), ws: true },
       '/thumbs': app,
+      '/api': app,
     },
   },
   build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 1000 },

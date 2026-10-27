@@ -105,5 +105,5 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [x] Phase D Tauri shell (minimised-window timing check moves to Phase G)
 - [x] Phase D2 splash screen
 - [x] Phase E log capture and Console tab
-- [ ] Phase F build and packaging (portable exe)
+- [x] Phase F build and packaging (portable exe; zip + sha256 via scripts\release.ps1, WebView2 check)
 - [ ] Phase G verification

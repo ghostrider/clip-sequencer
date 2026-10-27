@@ -20,7 +20,8 @@ pub mod ui_port;
 
 /// Product name shown in the window title, splash and `/api/version`. A placeholder until the
 /// open-source release names the project (docs/M11-open-source-release.md, Phase A).
-pub const APP_NAME: &str = "Clip Sequencer";
+/// Source: `productName` in `tauri.conf.json` (also the exe's ProductName; build.rs).
+pub const APP_NAME: &str = env!("SEQ_APP_NAME");
 /// Stable identifier in `/api/version`; a second instance recognises a running one by it.
 pub const APP_ID: &str = "seq-app";
 /// From `[workspace.package]`, the only version source.
@@ -30,4 +31,5 @@ pub const BUILD_NUMBER: &str = env!("SEQ_BUILD_NUMBER");
 /// Short commit hash, `-dirty` with uncommitted changes (build.rs).
 pub const GIT_COMMIT: &str = env!("SEQ_GIT_COMMIT");
 /// Copyright line (M12 Phase A; same as the LICENSE of the open-source release).
-pub const COPYRIGHT: &str = "Copyright (c) 2026 Ulrich Staudinger";
+/// Source: `bundle.copyright` in `tauri.conf.json` (also the exe's LegalCopyright; build.rs).
+pub const COPYRIGHT: &str = env!("SEQ_COPYRIGHT");

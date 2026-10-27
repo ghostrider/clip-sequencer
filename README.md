@@ -12,6 +12,10 @@ Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolum
 - Resolume Arena 7.26 or newer (tested with 7.28.1).
 - The **MIDI Clock Shifter** (`../midi-clock-shifter`) running, providing its `Clock Shifter Out`
   virtual port. Resolume and the sequencer both follow that same (shifted) clock.
+- The desktop app (`seq-app.exe`) needs the **Microsoft Edge WebView2 Runtime**. It ships with
+  Windows 11. On Windows 10 without it, the app says so and offers the
+  [download page](https://developer.microsoft.com/microsoft-edge/webview2/) ("Evergreen" runtime).
+  `seq-app-cli.exe` doesn't need it.
 - To build: Rust (stable) and Node.js 20+.
 
 ## Resolume setup (once per composition)
@@ -35,37 +39,80 @@ Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolum
 powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 ```
 
-This builds the UI (`web/`) and the release binaries and copies them to `release\`:
-`seq-app.exe` is the desktop app (no console window; its window arrives with M12 Phase D) and
-`seq-app-cli.exe` the console program (headless, `--validate`, `--list-midi-ports`, `--clock-debug`).
-Both contain the UI; no other files are needed to run them.
+This builds the UI (`web/`) and the release binaries. It puts them in `release\`, together with the
+portable zip `clip-sequencer-<version>-windows-x64.zip` and its `.sha256`:
+
+- `seq-app.exe` is the desktop app: a native window, no console.
+- `seq-app-cli.exe` is the console program: headless, `--validate`, `--list-midi-ports`, `--clock-debug`.
+
+Both contain the UI. Nothing needs installing: unzip anywhere and run.
 
 ## Run
+
+### Desktop app
+
+Double-click **`seq-app.exe`**.
+- A splash screen shows the startup steps. A missing Resolume or MIDI port only gives a warning; the
+  sequencer keeps retrying in the background.
+- Then the window opens with the UI.
+- The first time, pick the MIDI clock input under **File → Preferences…** (or click the CLOCK chip,
+  or press Ctrl+,). It's saved and used on every start.
+
+Menu:
+- **File:** Reload composition, Save now, Open data folder, Preferences…, Quit (Ctrl+Q).
+- **View:** zoom (Ctrl+= / Ctrl+- / Ctrl+0) and Toggle Console.
+- **Help:** Keyboard shortcuts.
+
+Closing the window while a sequence runs asks first. Then the sequences end as configured (layers
+cleared or held) before the app exits. The window size and position are remembered. Starting
+`seq-app.exe` a second time doesn't start a second sequencer: it offers to bring the running one to
+the front.
+
+The same options as below work on the command line (e.g. `seq-app.exe --midi-port "Clock Shifter Out"`
+overrides the saved port for that run). `--no-splash` opens the window without the splash.
+
+### Headless (console, UI in a browser)
 
 ```powershell
 release\seq-app-cli.exe --midi-port "Clock Shifter Out"
 ```
 
-In the desktop app (`release\seq-app.exe`), pick the MIDI clock input under File → Preferences… (or click
-the CLOCK chip, Ctrl+,); it is saved and used on every start. `--midi-port` overrides it for one run.
+It prints the startup steps and then the UI address, normally **http://127.0.0.1:8090**; open it in
+a browser. Ctrl+C stops the sequencer: running sequences end as configured, then it exits.
 
-Then open **http://127.0.0.1:8090** (the console shows the actual address if 8090 was taken; Ctrl+C
-stops the sequencer).
+### UI port
+
+The UI uses port `8090` (`--ui-port`). If another program has it, the sequencer takes the next free
+port from 8091 to 8099, then one the OS assigns. It logs a warning, and the desktop window and
+console output use the actual address. `--strict-port` exits with an error instead of falling back.
+If the port belongs to a running sequencer, no second one starts. The running instance's address is
+written to `%APPDATA%\resolume-sequencer\runtime.json` (`pid`, `ui_url`, `started_at`) while it runs.
+
+### Options
 
 Useful options (`--help` lists all):
 
 | Option | Default | |
 |---|---|---|
-| `--midi-port <name>` | — | MIDI clock input (exact name or a substring) |
+| `--midi-port <name>` | saved in Preferences | MIDI clock input (exact name or a substring) |
 | `--resolume-host`, `--rest-port`, `--osc-port` | `127.0.0.1`, `8080`, `7000` | Where Resolume listens |
-| `--ui-port` | `8090` | Browser UI port |
+| `--ui-port` | `8090` | UI port (falls back, see above) |
+| `--strict-port` | | Don't fall back if the UI port is taken |
+| `--no-splash` | | Desktop app: no splash screen |
 | `--seq-layer`, `--seq-prefix` | `SEQ`, `"§ "` | Placeholder layer and clip-name prefix |
-| `--data-dir` | `%APPDATA%\resolume-sequencer` | Sequence files, thumbnail and deck caches |
-| `--list-midi-ports` | | Print MIDI input ports and exit |
-| `--clock-debug` | | Show the incoming clock (bar.beat.tick, BPM) to check the port |
-| `--validate <file>` | | Check a `.seq.json` file and exit |
+| `--data-dir` | `%APPDATA%\resolume-sequencer` | Sequence files, settings, logs, thumbnail and deck caches |
+| `--list-midi-ports` | | Print MIDI input ports and exit (`seq-app-cli.exe`) |
+| `--clock-debug` | | Show the incoming clock (bar.beat.tick, BPM) to check the port (`seq-app-cli.exe`) |
+| `--validate <file>` | | Check a `.seq.json` file and exit (`seq-app-cli.exe`) |
 
-Logging: set `RUST_LOG=debug` to see every OSC message with microsecond timestamps.
+### Logs
+
+- **Files:** daily log files in `%APPDATA%\resolume-sequencer\logs\` (`seq-app-YYYY-MM-DD.log`). They
+  are kept for 7 days.
+- **Console tab:** shows the log live (Ctrl+2), with level filters, pause, copy and save. In the
+  desktop app, it opens with View → Toggle Console.
+- **Headless:** `seq-app-cli.exe` also prints the log to the console.
+- **More detail:** set `RUST_LOG=debug` to see every OSC message with microsecond timestamps.
 
 ### Before a show
 
@@ -119,6 +166,17 @@ See [`CLAUDE.md`](CLAUDE.md) for the layout and commands. In short:
 powershell -ExecutionPolicy Bypass -File scripts\check.ps1      # fmt, clippy, tests
 cargo run -p mock-resolume -- --rest-port 8080 --osc-port 7000   # fake Resolume
 cd web; npm run dev                                              # UI with hot reload (app on :8090)
+$env:SEQ_DEV_URL='http://localhost:5173'; cargo run -p seq-app   # desktop window on the hot-reload UI
 cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128   # test clock
 cargo run --release -p seq-app --example soak -- "Default App Loopback (B)" 120          # long-run test
 ```
+
+The desktop shell (Tauri v2) is built by plain `cargo build`. The Tauri CLI (`cargo tauri dev` /
+`cargo tauri build`) isn't needed: there is no installer to bundle, and the window loads the UI
+from the app's own server.
+- **Debug builds:** they read `web/dist` from disk, so `npm run build` is enough to see UI changes
+  after a reload.
+- **Hot reload:** `SEQ_DEV_URL` (debug builds only) points the window at the Vite dev server instead.
+  Vite proxies `/ws`, `/api` and `/thumbs` to the app; set `SEQ_APP` for Vite if the app isn't on :8090.
+- **Release builds** embed `web/dist`.
+- **WebView2 DevTools:** set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`.
