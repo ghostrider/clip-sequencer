@@ -78,7 +78,8 @@ release\seq-app-cli.exe --midi-port "Clock Shifter Out"
 ```
 
 It prints the startup steps and then the UI address, normally **http://127.0.0.1:8090**; open it in
-a browser. Ctrl+C stops the sequencer: running sequences end as configured, then it exits.
+a browser. Ctrl+C (or closing the console window) stops the sequencer: running sequences end as
+configured, then it exits.
 
 ### UI port
 

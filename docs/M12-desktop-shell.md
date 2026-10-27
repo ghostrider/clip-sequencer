@@ -258,21 +258,59 @@ doing, and it shows startup problems before the main UI exists.
 
 ## Phase G — Verification
 
+*Run 2026-10-27 against Arena 7.28 with the composition "show-b", the Clock Shifter's clock at
+120 BPM on "Default App Loopback (B)", and the exes from the portable zip, unzipped into a new folder. A copy of
+the data folder held the test sequence "G test": three 2-bar clips on `fw_background`, repeated endlessly.
+The run found three bugs, all fixed (commits `94947a3`, `5659eeb`):*
+- *A late confirmation (~700 ms, Resolume busy) counted as a manual trigger and yielded the lane.*
+- *A failing first window panicked silently.*
+- *`seq-app-cli` died without cleanup on Ctrl+Break or when its console window was closed.*
+
 - [ ] Fresh Windows 11 machine or Windows Sandbox: install via NSIS, start, and the window appears with
-      no console. Repeat with the portable exe.
-- [ ] Port taken by another program: the app starts on 8091, and the splash, window, log, About and
-      `runtime.json` all show 8091.
-- [ ] Splash: appears within ~200 ms; steps progress in order; with Resolume closed it shows the warning and
+      no console. Repeat with the portable exe. *(Open: Windows Sandbox needs Pro/Enterprise, and this machine
+      runs Home. Done instead: the portable zip unzipped into a new folder with an empty data folder. The
+      window appears without a console, and the first run works without settings ("No MIDI clock port
+      selected" warning). The missing-WebView2 path was simulated in Phase F.)*
+- [x] Port taken by another program: the app starts on 8091, and the splash, window, log, About and
+      `runtime.json` all show 8091. *(A dummy listener held 8090. The startup step warned "port 8090 is in use",
+      and the window URL, `/api/version` `ui_port` and `runtime.json` all showed 8091. There is no About
+      dialog yet (M11 F).)*
+- [x] Splash: appears within ~200 ms; steps progress in order; with Resolume closed it shows the warning and
       continues; with `--strict-port` and the port taken it shows the error panel with Open log / Copy / Quit;
       no white flash when switching to the main window; `--no-splash` and `--headless` behave as specified.
-- [ ] Second launch while running: the dialog appears and no second engine starts (check the Resolume
-      triggers: no doubles).
-- [ ] Close the window during a running sequence: the confirmation appears, layers are cleared per SPEC,
-      and the process exits within 2 s with `runtime.json` removed.
-- [ ] The Console tab shows live logs; the filters, pause, copy and save all work. A 30-minute run at
-      128 BPM shows no UI slowdown.
-- [ ] Minimised window for 5 minutes during a sequence: triggers stay in time (compare the WS confirmations).
-- [ ] `--headless` from a terminal: output appears in the terminal, and the UI works in Chrome.
+      *(Visible after 123 ms and 52 ms on warm starts. The very first start of the newly unzipped exe took
+      1.3 s (Defender scan). With Resolume unreachable: the warning shows, and the window opens after 5.6 s
+      (3 s step limit + 1.5 s warning pause). `--strict-port`: the error panel shows "Port 8090 is in use"
+      with Retry / Open log / Copy details / Quit, and Esc quits. `--no-splash` and the white-flash check
+      were done in D2.)*
+- [x] Second launch while running: the dialog appears and no second engine starts (check the Resolume
+      triggers: no doubles). *(The "already running" dialog appeared with Open / Cancel. Open brought the
+      first window to the front, and the second process exited. The log has no second engine, and the
+      first instance's `runtime.json` stayed.)*
+- [x] Close the window during a running sequence: the confirmation appears, layers are cleared per SPEC,
+      and the process exits within 2 s with `runtime.json` removed. *(Quit / Cancel dialog. After Quit:
+      the layer clear was sent, the shutdown took 3 ms, and the process ended 257 ms after the click.
+      Resolume then had no clip connected, and `runtime.json` was gone.)*
+- [x] The Console tab shows live logs; the filters, pause, copy and save all work. A 30-minute run at
+      128 BPM shows no UI slowdown. *(31 min at 120 BPM (the Clock Shifter's tempo) with
+      `RUST_LOG=info,seq_app=debug` and the Console tab open the whole time.
+      - UI at the start: eval 0.4 ms, frames 16.7 ms median, heap 3.3 MB, 787 nodes.
+      - UI after 30 min: eval 0.7 ms, frames 17.8 ms median / 19.7 ms max, heap 2.9 MB, 1207 nodes (55 rows
+        rendered); the app process used 42 MB.
+      - Filters, pause, copy and save were tested in Phase E.)*
+- [x] Minimised window for 5 minutes during a sequence: triggers stay in time (compare the WS confirmations).
+      *(455 triggers, one every 4000 ms.
+      - Visible: intervals within ±1 ms (one at −6 ms during a build); WS confirmation 4.6 ms median.
+      - Minimised for 5 min: 75 intervals within ±2 ms; confirmation 3.5 ms median, 14.6 ms max.
+      - An earlier minimise was undone after ~3 min by a click on the window (same result).
+      - One trigger was confirmed after ~700 ms while the window was visible: the late-confirmation bug above.)*
+- [x] `--headless` from a terminal: output appears in the terminal, and the UI works in Chrome.
+      *(Done with `seq-app-cli.exe`:
+      - It prints the steps `[1/7]`–`[7/7]` and the UI URL; the UI page and `/api/version` answer
+        (`desktop: false`).
+      - Each stop is clean and removes `runtime.json`: Ctrl+Break (exit 0 after 51 ms), closing its console
+        window (391 ms, with "G test" running; the layer cleared) and Ctrl+C (Phase C).
+      - The UI was used in a browser in earlier phases.)*
 
 ---
 
