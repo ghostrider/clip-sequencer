@@ -34,11 +34,14 @@ pub struct ServerCtx {
     pub runtime: watch::Receiver<RuntimeState>,
     pub thumbs: Arc<ThumbCache>,
     pub rest: RestClient,
+    /// The port the UI server actually listens on (after any fallback).
+    pub ui_port: u16,
 }
 
 pub fn router(ctx: ServerCtx) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
+        .route("/api/version", get(api_version))
         .route("/thumbs/clip/{file}", get(clip_thumb))
         .route("/thumbs/seq/{file}", get(seq_thumb))
         .route("/plugin/v1/view.txt", get(plugin_view))
@@ -47,10 +50,20 @@ pub fn router(ctx: ServerCtx) -> Router {
 }
 
 pub async fn serve(listener: tokio::net::TcpListener, ctx: ServerCtx) -> anyhow::Result<()> {
-    log::info!("UI on http://{}", listener.local_addr()?);
+    log::info!("UI listening on http://{}", listener.local_addr()?);
     tokio::spawn(prefetch_live_thumbnails(ctx.clone()));
     axum::serve(listener, router(ctx)).await?;
     Ok(())
+}
+
+/// Identifies the app (also used by a second instance to find this one, `ui_port`).
+async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
+    axum::Json(json!({
+        "app": crate::APP_ID,
+        "name": crate::APP_NAME,
+        "version": crate::VERSION,
+        "ui_port": ctx.ui_port,
+    }))
 }
 
 // ---- WebSocket ----

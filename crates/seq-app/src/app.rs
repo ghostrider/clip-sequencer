@@ -28,8 +28,8 @@ pub struct AppConfig {
     pub engine: EngineConfig,
     pub clock: ClockSource,
     pub debounce: DebounceConfig,
-    /// Where the browser UI listens; `None` = no UI server.
-    pub ui: Option<std::net::SocketAddr>,
+    /// The bound UI server socket (see `ui_port::bind_ui`); `None` = no UI server.
+    pub ui: Option<std::net::TcpListener>,
 }
 
 pub struct App {
@@ -40,6 +40,8 @@ pub struct App {
     /// Bound address of the UI server.
     pub ui_addr: Option<std::net::SocketAddr>,
     shutdown: tokio::sync::oneshot::Sender<()>,
+    /// `<data-dir>/runtime.json`, written while the UI server runs.
+    runtime_file: Option<std::path::PathBuf>,
     _clock: Option<ClockIn>,
 }
 
@@ -50,6 +52,9 @@ impl App {
         drop(self.commands);
         let _ = self.engine_task.await;
         let _ = tokio::time::timeout(Duration::from_secs(5), self.saver_task).await;
+        if let Some(path) = self.runtime_file {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -102,6 +107,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     let thumbs_dir = cfg.storage.dir().join("thumbs");
+    let data_dir = cfg.storage.dir().to_path_buf();
     let (mut engine, outputs) = Engine::new(
         cfg.engine,
         osc,
@@ -129,8 +135,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     });
 
     let ui_addr = match cfg.ui {
-        Some(addr) => {
-            let std_listener = std::net::TcpListener::bind(addr)?;
+        Some(std_listener) => {
             std_listener.set_nonblocking(true)?;
             let bound = std_listener.local_addr()?;
             let listener = tokio::net::TcpListener::from_std(std_listener)?;
@@ -144,6 +149,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                     rest.clone(),
                 )),
                 rest,
+                ui_port: bound.port(),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {
@@ -155,8 +161,17 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         None => None,
     };
 
+    let runtime_file = ui_addr.map(|addr| {
+        let path = data_dir.join("runtime.json");
+        if let Err(e) = write_runtime_file(&path, addr) {
+            log::warn!("{}: {e}", path.display());
+        }
+        path
+    });
+
     Ok(App {
         ui_addr,
+        runtime_file,
         commands: cmd_tx,
         outputs,
         engine_task,
@@ -164,4 +179,41 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         shutdown: shutdown_tx,
         _clock: clock_in,
     })
+}
+
+/// `{ "pid", "ui_url", "started_at" }`, so other tools can find the running instance.
+fn write_runtime_file(path: &std::path::Path, addr: std::net::SocketAddr) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let body = serde_json::json!({
+        "pid": std::process::id(),
+        "ui_url": format!("http://{addr}"),
+        "started_at": utc_now_iso8601(),
+    });
+    std::fs::write(path, serde_json::to_vec_pretty(&body)?)
+}
+
+/// Current UTC time as `YYYY-MM-DDTHH:MM:SSZ` (days-from-civil, Howard Hinnant).
+fn utc_now_iso8601() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }

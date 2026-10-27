@@ -16,8 +16,12 @@ pub struct Config {
     pub rest_port: u16,
     #[arg(long, default_value_t = 7000)]
     pub osc_port: u16,
+    /// UI server port; if taken, the next 9 ports, then one the OS assigns (see --strict-port).
     #[arg(long, default_value_t = 8090)]
     pub ui_port: u16,
+    /// Exit with an error instead of falling back when --ui-port is taken.
+    #[arg(long)]
+    pub strict_port: bool,
     /// Name of the Resolume layer holding the `§` placeholder clips.
     #[arg(long, default_value = "SEQ")]
     pub seq_layer: String,

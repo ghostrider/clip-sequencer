@@ -120,7 +120,7 @@ fn start_app_ui(
             quiet: Duration::from_millis(50),
             max_wait: Duration::from_millis(200),
         },
-        ui,
+        ui: ui.map(|addr| std::net::TcpListener::bind(addr).unwrap()),
     })
     .unwrap();
     (app, clock)
@@ -894,4 +894,34 @@ async fn live_deck_thumbnails_are_cached_without_a_browser() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     app.shutdown().await;
+}
+
+#[tokio::test]
+async fn api_version_and_runtime_file_name_the_actual_ui_port() {
+    let h = harness().await;
+    let Harness { mock, app, dir, .. } = h;
+    app.shutdown().await;
+    let (app, _clock) = start_app_ui(&mock, dir.path(), Some("127.0.0.1:0".parse().unwrap()));
+    let ui = app.ui_addr.unwrap();
+    let v: serde_json::Value = reqwest::get(format!("http://{ui}/api/version"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(v["app"], seq_app::APP_ID);
+    assert_eq!(v["name"], seq_app::APP_NAME);
+    assert_eq!(v["version"], seq_app::VERSION);
+    assert_eq!(v["ui_port"], ui.port());
+    let runtime = dir.path().join("runtime.json");
+    let r: serde_json::Value = serde_json::from_slice(&std::fs::read(&runtime).unwrap()).unwrap();
+    assert_eq!(r["pid"], std::process::id());
+    assert_eq!(r["ui_url"], format!("http://{ui}"));
+    let started = r["started_at"].as_str().unwrap();
+    assert!(started.len() == 20 && started.ends_with('Z'), "{started}");
+    app.shutdown().await;
+    assert!(
+        !runtime.exists(),
+        "runtime.json is removed on clean shutdown"
+    );
 }

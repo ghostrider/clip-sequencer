@@ -7,6 +7,7 @@ use seq_app::config::Config;
 use seq_app::engine::{EngineCommand, EngineConfig};
 use seq_app::saver::DebounceConfig;
 use seq_app::storage::{load_text, Storage};
+use seq_app::ui_port::{bind_ui, UiBind};
 
 fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -80,6 +81,13 @@ fn main() -> ExitCode {
 async fn run(config: Config) -> anyhow::Result<()> {
     let storage = Storage::new(config.data_dir());
     log::info!("sequence files in {}", storage.dir().display());
+    let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+    let listener = match bind_ui(ip, config.ui_port, config.strict_port).await? {
+        UiBind::Bound { listener, .. } => listener,
+        UiBind::AlreadyRunning { url } => {
+            anyhow::bail!("The sequencer is already running ({url}); not starting a second one")
+        }
+    };
     let app = app::start(app::AppConfig {
         resolume: ResolumeAddr {
             host: config.resolume_host.clone(),
@@ -97,10 +105,14 @@ async fn run(config: Config) -> anyhow::Result<()> {
             None => app::ClockSource::None,
         },
         debounce: DebounceConfig::default(),
-        ui: Some(std::net::SocketAddr::from(([127, 0, 0, 1], config.ui_port))),
+        ui: Some(listener),
     })?;
     if let Some(addr) = app.ui_addr {
-        println!("Sequencer UI: http://{addr}");
+        println!(
+            "
+    Sequencer UI:  http://{addr}
+"
+        );
     }
     if let Some(name) = &config.start {
         app.commands
