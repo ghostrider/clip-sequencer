@@ -80,6 +80,7 @@ content into it or clearing it does not change the id. Consequences for clip res
 | `GET /composition/clips/by-id/{id}/thumbnail` | `200 image/png`, `ETag: "<last_update>"` | ✅ |
 | `GET /composition/layers/{L}/clips/{C}/thumbnail` | same bytes, same ETag | ✅ |
 | `GET /composition/clips/by-id/{id}/thumbnail/{last_update}` | 200 if it matches the current `last_update`, **404** otherwise | ✅ |
+| Clip of a deck that is not live | **404** (by id; the clip is not in the composition until its deck is selected). Thumbnails of other decks can only be shown from a cache filled while they were live. | ✅ (2026-10-27) |
 | Empty slot / no thumbnail | returns the 394-byte dummy PNG, same as `GET /composition/thumbnail/dummy` (cacheable forever per OpenAPI) | ✅ |
 | Size | thumbnails are 320×240 PNG (~128 KB for video clips) | ✅ |
 | **Set a custom thumbnail** | `POST /composition/clips/by-id/{id}/thumbnail` as `multipart/form-data`, field `file`, `image/png` → `204`. Leaves the clip's source unchanged. Resolume sends a WS `thumbnail_update` with the new `last_update`, and GET then returns exactly the uploaded bytes. Also accepts a `text/plain` `file:///…` URL (📄). `DELETE` on the same path reverts to the auto thumbnail (📄). | ✅ |

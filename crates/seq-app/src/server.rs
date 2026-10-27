@@ -48,6 +48,7 @@ pub fn router(ctx: ServerCtx) -> Router {
 
 pub async fn serve(listener: tokio::net::TcpListener, ctx: ServerCtx) -> anyhow::Result<()> {
     log::info!("UI on http://{}", listener.local_addr()?);
+    tokio::spawn(prefetch_live_thumbnails(ctx.clone()));
     axum::serve(listener, router(ctx)).await?;
     Ok(())
 }
@@ -199,6 +200,41 @@ async fn push_thumbnail(ctx: ServerCtx, seq: Uuid) {
 }
 
 // ---- thumbnails ----
+
+/// Fetches the thumbnails of the live deck's clips into the disk cache. Resolume serves
+/// thumbnails of live-deck clips only (notes §3), so a deck shown from the cache later has
+/// thumbnails only if they were fetched while it was live.
+async fn prefetch_live_thumbnails(ctx: ServerCtx) {
+    let mut rx = ctx.structure.clone();
+    loop {
+        let wanted: Vec<(u64, String)> = rx
+            .borrow_and_update()
+            .decks
+            .iter()
+            .filter(|d| d.live)
+            .flat_map(|d| &d.layers)
+            .flat_map(|l| &l.clips)
+            .filter_map(|c| Some((c.id, c.thumb.clone()?)))
+            .collect();
+        let mut fetched = 0;
+        for (id, version) in wanted {
+            if rx.has_changed().unwrap_or(true) {
+                break; // deck switch or edit: start over with the new live deck
+            }
+            if !ctx.thumbs.is_cached(id, &version).await
+                && ctx.thumbs.clip(id, Some(&version)).await.is_some()
+            {
+                fetched += 1;
+            }
+        }
+        if fetched > 0 {
+            log::debug!("prefetched {fetched} clip thumbnail(s) of the live deck");
+        }
+        if rx.changed().await.is_err() {
+            return;
+        }
+    }
+}
 
 #[derive(Deserialize)]
 struct VersionQuery {

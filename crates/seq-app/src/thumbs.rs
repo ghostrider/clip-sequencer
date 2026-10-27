@@ -32,6 +32,13 @@ impl ThumbCache {
         self.dir.join(format!("{id}-{safe}.png"))
     }
 
+    /// Whether this version of the clip's thumbnail is on disk.
+    pub async fn is_cached(&self, id: u64, version: &str) -> bool {
+        tokio::fs::try_exists(self.path(id, version))
+            .await
+            .unwrap_or(false)
+    }
+
     /// PNG for a clip. `version` is the `thumbnail.last_update` the caller saw.
     pub async fn clip(&self, id: u64, version: Option<&str>) -> Option<Vec<u8>> {
         if let Some(v) = version {

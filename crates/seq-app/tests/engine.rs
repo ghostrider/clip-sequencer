@@ -852,3 +852,46 @@ async fn decks_with_the_same_name_are_flagged_and_only_the_selected_one_is_live(
         .all(|d| !d.ambiguous));
     h.app.shutdown().await;
 }
+
+#[tokio::test]
+async fn live_deck_thumbnails_are_cached_without_a_browser() {
+    let h = harness().await;
+    let Harness { mock, app, dir, .. } = h;
+    app.shutdown().await;
+    let (app, _clock) = start_app_ui(&mock, dir.path(), Some("127.0.0.1:0".parse().unwrap()));
+    let wanted: Vec<(u64, String)> = loop {
+        let s = app.outputs.structure.borrow().clone();
+        let w: Vec<_> = s
+            .decks
+            .iter()
+            .filter(|d| d.live)
+            .flat_map(|d| &d.layers)
+            .flat_map(|l| &l.clips)
+            .filter_map(|c| Some((c.id, c.thumb.clone()?)))
+            .collect();
+        if !w.is_empty() {
+            break w;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    // No UI client asks for them: the server fetches them so the deck has thumbnails once it
+    // is no longer live (Resolume then answers 404).
+    let thumbs = dir.path().join("thumbs");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let missing = wanted
+            .iter()
+            .filter(|(id, v)| !thumbs.join(format!("{id}-{v}.png")).exists())
+            .count();
+        if missing == 0 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{missing} of {} live-deck thumbnails not cached",
+            wanted.len()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    app.shutdown().await;
+}
