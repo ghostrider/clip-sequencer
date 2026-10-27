@@ -128,7 +128,20 @@ fn run_headless(config: Config) -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         let shutdown = CancellationToken::new();
-        let running = match runner::run(config, shutdown.clone(), None).await {
+        // The startup steps the desktop app shows on its splash screen (M12 D2).
+        let (progress, mut steps) = tokio::sync::mpsc::unbounded_channel::<runner::StartupStep>();
+        let printer = tokio::spawn(async move {
+            while let Some(s) = steps.recv().await {
+                if s.warning {
+                    println!("        ! {}", s.text);
+                } else {
+                    println!("  [{}/{}] {}", s.index, s.total, s.text);
+                }
+            }
+        });
+        let result = runner::run(config, shutdown.clone(), None, Some(progress)).await;
+        let _ = printer.await;
+        let running = match result {
             Ok(r) => r,
             Err(e) => {
                 log::error!("{e}");

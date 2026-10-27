@@ -38,6 +38,8 @@ pub struct ServerCtx {
     pub ui_port: u16,
     /// The desktop shell, if the UI runs in its window (`ShellAction`s go there).
     pub shell: Option<mpsc::UnboundedSender<ShellAction>>,
+    /// Set once the first batch of the live deck's thumbnails is cached (startup splash).
+    pub thumbs_ready: Arc<watch::Sender<bool>>,
 }
 
 /// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
@@ -76,6 +78,8 @@ async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
         "app": crate::APP_ID,
         "name": crate::APP_NAME,
         "version": crate::VERSION,
+        "build": crate::BUILD_NUMBER,
+        "commit": crate::GIT_COMMIT,
         "ui_port": ctx.ui_port,
         "desktop": ctx.shell.is_some(),
     }))
@@ -239,6 +243,9 @@ async fn push_thumbnail(ctx: ServerCtx, seq: Uuid) {
 /// Fetches the thumbnails of the live deck's clips into the disk cache. Resolume serves
 /// thumbnails of live-deck clips only (notes §3), so a deck shown from the cache later has
 /// thumbnails only if they were fetched while it was live.
+/// Startup waits for this many thumbnails at most; the rest load in the background.
+const FIRST_THUMBNAILS: usize = 12;
+
 async fn prefetch_live_thumbnails(ctx: ServerCtx) {
     let mut rx = ctx.structure.clone();
     loop {
@@ -252,7 +259,10 @@ async fn prefetch_live_thumbnails(ctx: ServerCtx) {
             .filter_map(|c| Some((c.id, c.thumb.clone()?)))
             .collect();
         let mut fetched = 0;
-        for (id, version) in wanted {
+        for (i, (id, version)) in wanted.into_iter().enumerate() {
+            if i == FIRST_THUMBNAILS {
+                ctx.thumbs_ready.send_replace(true);
+            }
             if rx.has_changed().unwrap_or(true) {
                 break; // deck switch or edit: start over with the new live deck
             }
@@ -262,6 +272,7 @@ async fn prefetch_live_thumbnails(ctx: ServerCtx) {
                 fetched += 1;
             }
         }
+        ctx.thumbs_ready.send_replace(true);
         if fetched > 0 {
             log::debug!("prefetched {fetched} clip thumbnail(s) of the live deck");
         }

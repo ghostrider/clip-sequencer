@@ -141,17 +141,22 @@ drive the same Resolume at the same time.
 Shown from the moment the exe starts until the main window is ready. It reports what the app is
 doing, and it shows startup problems before the main UI exists.
 
-- [ ] **Window:** a separate small Tauri window, ≈560×340, frameless, centred, not resizable, no
+- [x] **Window:** a separate small Tauri window, ≈560×340, frameless, centred, not resizable, no
       taskbar entry, always on top only while it's visible. It's created **first**, before the tokio
       runtime starts, so it appears within ~200 ms of launch.
-- [ ] **Content is bundled static HTML/CSS** in the Tauri shell (it can't be served by axum, because the
+     *(Created in `setup` before the sequencer starts. Release build, second launch: window visible after 80 ms
+      (dark background), page loaded at ~300 ms. The very first launch of a freshly built exe took 1.1 s: Windows
+      Defender scans it.)*
+- [x] **Content is bundled static HTML/CSS** in the Tauri shell (it can't be served by axum, because the
       server isn't up yet). It uses the same tokens as `web/src/tokens.css` and the bundled fonts (offline).
-- [ ] **Layout:**
+     *(`crates/seq-app/shell/`; build.rs copies `web/src/tokens.css` in. IBM Plex is bundled in M11 D;
+      until then the token font stack falls back to system fonts.)*
+- [x] **Layout:**
   - logo or artwork (Phase A) and the app name
   - version and build (`0.1.0 · build 42 · abc1234`)
   - one **status line** with the current step, plus a thin progress bar (determinate: steps done / total)
   - small footer: `Copyright (c) 2026 <holder> · MIT License · Not affiliated with Resolume BV`
-- [ ] **Startup steps reported** (from `run()` via a progress channel → Tauri event → splash):
+- [x] **Startup steps reported** (from `run()` via a progress channel → Tauri event → splash):
   1. Loading configuration
   2. Starting UI server, showing the actual port (`on port 8091` if the fallback was used)
   3. Opening MIDI clock input, with the port name
@@ -159,23 +164,33 @@ doing, and it shows startup problems before the main UI exists.
   5. Loading composition and sequences
   6. Fetching thumbnails (only the first batch; the rest continues in the background)
   7. Ready
-- [ ] **Non-blocking failures don't stop startup.** If Resolume isn't reachable or the MIDI port is
+     *(`runner::run` sends `StartupStep`s; the shell `eval`s them into the splash page. Build number and
+      commit come from git via build.rs and are also in `/api/version`.)*
+- [x] **Non-blocking failures don't stop startup.** If Resolume isn't reachable or the MIDI port is
       missing, the splash shows a warning line ("Resolume not reachable, will keep retrying"), waits
       ≈1.5 s so it can be read, and continues. The main UI then shows the red connection chips as usual.
       Startup must never hang on Resolume or MIDI: each step has a timeout of ≤3 s.
-- [ ] **Fatal failures** (e.g. `--strict-port` with the port taken, unreadable config, data dir not
+     *(Checked: no MIDI port and no Resolume give two warnings, each shown 1.5 s; the main
+      window follows.)*
+- [x] **Fatal failures** (e.g. `--strict-port` with the port taken, unreadable config, data dir not
       writable) turn the splash into an error panel: the message, then **Open log**, **Copy details**
       and **Quit** buttons (plus **Retry** where it makes sense). The splash doesn't close by itself in
       this case.
-- [ ] **Second instance** (Phase B): the "already running" dialog is shown from the splash, which then closes.
-- [ ] **Timing:** the splash stays visible at least ≈800 ms (no flicker on fast starts). When the main
+     *(Checked with `--strict-port` and 8090 taken: error panel, Retry after freeing the port starts normally,
+      Copy details (real click) copies the message with version/build, Esc quits with exit code 1. Open log opens
+      `<data-dir>/logs` once Phase E writes logs there, the data folder until then.)*
+- [x] **Second instance** (Phase B): the "already running" dialog is shown from the splash, which then closes.
+     *(Checked: dialog with the splash behind it; Cancel/Open close both, exit 0.)*
+- [x] **Timing:** the splash stays visible at least ≈800 ms (no flicker on fast starts). When the main
       window has loaded the UI, show the main window first, then close the splash with a short fade
       (≤150 ms).
-- [ ] **Flags:** `--no-splash` skips it (the main window then appears when ready). `--headless` never
+- [x] **Flags:** `--no-splash` skips it (the main window then appears when ready). `--headless` never
       shows it; the same steps are printed to stdout instead.
-- [ ] **Accessibility:** status changes go into an `aria-live="polite"` region; the error panel buttons
+     *(Checked: `--no-splash` shows only the main window; `seq-app-cli` prints `[n/7] step` and `! warning`
+      lines.)*
+- [x] **Accessibility:** status changes go into an `aria-live="polite"` region; the error panel buttons
       are keyboard-focusable; Esc on the error panel = Quit.
-- [ ] Every startup step is also written to the log, so the Console tab shows the full startup sequence afterwards.
+- [x] Every startup step is also written to the log, so the Console tab shows the full startup sequence afterwards.
 
 ## Phase E — Log capture and Console tab
 

@@ -4,16 +4,19 @@
 //! clients) runs on a separate tokio runtime ([`seq-runtime`] threads), which Tauri also uses for
 //! its own async work, so nothing time-critical ever runs on the UI thread.
 //!
-//! The window loads the UI from the in-process server (`runner::run` reports the actual URL), is
-//! created hidden on the UI's background colour and shown once the page has loaded. The web
-//! content gets no Tauri IPC at all (no capabilities): the menu, close handling and dialogs are
-//! native, and talk to the engine through its command channel.
+//! Startup (Phase D2): the splash window (bundled `shell/` page) is created first and shows the
+//! steps `runner::run` reports. Then the main window loads the UI from the in-process server, is
+//! created hidden on the UI's background colour and shown once the page has loaded; the splash
+//! fades out after it. A fatal startup error turns the splash into an error panel (Retry, Open
+//! log, Copy details, Quit). The remote UI in the main window gets no Tauri IPC (no
+//! capabilities): the menu, close handling and dialogs are native and talk to the engine through
+//! its command channel. Only the local splash page calls one command, `splash_action`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -29,11 +32,19 @@ use tokio_util::sync::CancellationToken;
 use crate::config::Config;
 use crate::engine::view::RuntimeState;
 use crate::engine::EngineCommand;
-use crate::runner::{self, StartError};
+use crate::runner::{self, StartError, StartupStep};
 use crate::server::ShellAction;
-use crate::{APP_NAME, VERSION};
+use crate::{APP_NAME, BUILD_NUMBER, COPYRIGHT, GIT_COMMIT, VERSION};
 
 const MAIN: &str = "main";
+const SPLASH: &str = "splash";
+const SPLASH_SIZE: (f64, f64) = (560.0, 340.0);
+/// The splash stays at least this long (no flicker on fast starts).
+const SPLASH_MIN: Duration = Duration::from_millis(800);
+/// A startup warning stays readable this long before the next step.
+const WARNING_PAUSE: Duration = Duration::from_millis(1500);
+/// The splash's own CSS fade (`body.fade`) before it is closed.
+const SPLASH_FADE: Duration = Duration::from_millis(150);
 /// Remembered between runs (Phase A: size and position, yes). Visibility is ours to decide.
 const WINDOW_STATE: StateFlags = StateFlags::SIZE
     .union(StateFlags::POSITION)
@@ -51,7 +62,13 @@ const SHUTDOWN_WAIT: Duration = Duration::from_secs(3);
 /// Shell state, shared by the event handlers.
 struct Shell {
     shutdown: CancellationToken,
+    /// For Retry on the splash error panel.
+    config: Config,
     data_dir: PathBuf,
+    /// When the splash was created; `None` with `--no-splash`.
+    splash_since: Mutex<Option<Instant>>,
+    /// The splash page has loaded (its `window.splash` can take steps).
+    splash_ready: watch::Sender<bool>,
     backend: Mutex<Option<Backend>>,
     zoom: Mutex<f64>,
     quitting: AtomicBool,
@@ -64,6 +81,7 @@ struct Backend {
 }
 
 pub fn run(config: Config) -> ExitCode {
+    log::debug!("desktop: starting the shell");
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("seq-runtime")
@@ -73,7 +91,10 @@ pub fn run(config: Config) -> ExitCode {
 
     let shell = Shell {
         shutdown: CancellationToken::new(),
+        config: config.clone(),
         data_dir: config.data_dir(),
+        splash_since: Mutex::new(None),
+        splash_ready: watch::channel(false).0,
         backend: Mutex::new(None),
         zoom: Mutex::new(1.0),
         quitting: AtomicBool::new(false),
@@ -87,6 +108,7 @@ pub fn run(config: Config) -> ExitCode {
                 .build(),
         )
         .manage(shell)
+        .invoke_handler(tauri::generate_handler![splash_action])
         .menu(build_menu)
         .on_menu_event(on_menu)
         .on_window_event(|window, event| {
@@ -98,17 +120,29 @@ pub fn run(config: Config) -> ExitCode {
             }
         })
         .setup(move |app| {
+            // First, so it appears right away; the sequencer starts behind it.
+            if !config.no_splash {
+                splash_window(app.handle())?;
+                log::debug!("desktop: splash window created");
+            }
             tauri::async_runtime::spawn(start(app.handle().clone(), config));
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("desktop shell");
     app.run(|app, event| {
-        // Closing the last window must go through the shutdown above, not end the process.
+        // Closing the last window must go through the shutdown above, not end the process. The
+        // only other way to close every window is closing the splash before the main window
+        // exists (Alt+F4): that ends startup.
         if let RunEvent::ExitRequested { api, code, .. } = event {
-            let quitting = app.state::<Shell>().quitting.load(Ordering::SeqCst);
-            if code.is_none() && !quitting {
-                api.prevent_exit();
+            let shell = app.state::<Shell>();
+            if code.is_none() && !shell.quitting.load(Ordering::SeqCst) {
+                if shell.backend.lock().unwrap().is_some() {
+                    api.prevent_exit();
+                    request_quit(app);
+                } else {
+                    shell.shutdown.cancel();
+                }
             }
         }
     });
@@ -118,6 +152,8 @@ pub fn run(config: Config) -> ExitCode {
 /// Starts the sequencer, then the main window (or reports why it could not start).
 async fn start(app: AppHandle, config: Config) {
     let shell = app.state::<Shell>();
+    let (progress, steps) = mpsc::unbounded_channel();
+    let presenter = tauri::async_runtime::spawn(present_steps(app.clone(), steps));
     let (actions_tx, mut actions) = mpsc::unbounded_channel();
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -130,23 +166,134 @@ async fn start(app: AppHandle, config: Config) {
             }
         }
     });
-    match runner::run(config, shell.shutdown.clone(), Some(actions_tx)).await {
+    let result = runner::run(
+        config,
+        shell.shutdown.clone(),
+        Some(actions_tx),
+        Some(progress),
+    )
+    .await;
+    let _ = presenter.await; // every step shown (warnings stay readable)
+    match result {
         Ok(running) => {
             let url = match Url::parse(&running.ui_url) {
                 Ok(u) => u,
-                Err(e) => return fatal(&app, format!("bad UI URL {}: {e}", running.ui_url)),
+                Err(e) => return fatal(&app, format!("bad UI URL {}: {e}", running.ui_url), false),
             };
             *shell.backend.lock().unwrap() = Some(Backend {
                 commands: running.commands,
                 runtime: running.outputs.runtime,
                 done: Some(running.done),
             });
+            let since = *shell.splash_since.lock().unwrap();
+            if let Some(since) = since {
+                tokio::time::sleep(SPLASH_MIN.saturating_sub(since.elapsed())).await;
+            }
             if let Err(e) = main_window(&app, url) {
-                fatal(&app, format!("could not open the main window: {e}"));
+                fatal(&app, format!("could not open the main window: {e}"), false);
             }
         }
         Err(StartError::AlreadyRunning { url }) => already_running(&app, url),
-        Err(e) => fatal(&app, e.to_string()),
+        Err(e) => {
+            let retryable = e.retryable();
+            fatal(&app, e.to_string(), retryable);
+        }
+    }
+}
+
+/// The splash: small, frameless, centred, on top while visible, not in the taskbar.
+fn splash_window(app: &AppHandle) -> tauri::Result<()> {
+    let info = serde_json::json!({
+        "name": APP_NAME,
+        "version": VERSION,
+        "build": BUILD_NUMBER,
+        "commit": GIT_COMMIT,
+        "copyright": COPYRIGHT,
+    });
+    WebviewWindowBuilder::new(app, SPLASH, WebviewUrl::App("index.html".into()))
+        .title(APP_NAME)
+        .inner_size(SPLASH_SIZE.0, SPLASH_SIZE.1)
+        .resizable(false)
+        .decorations(false)
+        .center()
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .focused(true)
+        .background_color(BACKGROUND)
+        .initialization_script(format!("window.SPLASH_INFO = {info};"))
+        .on_page_load(|window, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                log::debug!("desktop: splash page loaded");
+                window.state::<Shell>().splash_ready.send_replace(true);
+            }
+        })
+        .build()?;
+    *app.state::<Shell>().splash_since.lock().unwrap() = Some(Instant::now());
+    Ok(())
+}
+
+/// Shows the startup steps on the splash; warnings stay for `WARNING_PAUSE`. Ends when `runner`
+/// is done reporting.
+async fn present_steps(app: AppHandle, mut steps: mpsc::UnboundedReceiver<StartupStep>) {
+    let splash = app.get_webview_window(SPLASH);
+    if splash.is_some() {
+        let mut ready = app.state::<Shell>().splash_ready.subscribe();
+        let _ = tokio::time::timeout(Duration::from_secs(2), ready.wait_for(|r| *r)).await;
+    }
+    while let Some(step) = steps.recv().await {
+        let Some(splash) = &splash else { continue };
+        let _ = splash.eval(format!(
+            "window.splash && splash.step({}, {}, {}, {})",
+            step.index,
+            step.total,
+            serde_json::Value::String(step.text),
+            step.warning
+        ));
+        if step.warning {
+            tokio::time::sleep(WARNING_PAUSE).await;
+        }
+    }
+}
+
+/// The main window has shown the UI: fade the splash out and close it.
+fn close_splash(app: &AppHandle) {
+    let Some(splash) = app.get_webview_window(SPLASH) else {
+        return;
+    };
+    let _ = splash.set_always_on_top(false);
+    let _ = splash.eval("window.splash && splash.fadeOut()");
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SPLASH_FADE).await;
+        let _ = splash.close();
+    });
+}
+
+/// Buttons of the splash's error panel.
+#[tauri::command]
+fn splash_action(app: AppHandle, action: String) {
+    let shell = app.state::<Shell>();
+    match action.as_str() {
+        "quit" => app.exit(1),
+        "retry" => {
+            if let Some(splash) = app.get_webview_window(SPLASH) {
+                let _ = splash.eval("window.splash && splash.reset()");
+                let _ = splash.set_always_on_top(true);
+            }
+            tauri::async_runtime::spawn(start(app.clone(), shell.config.clone()));
+        }
+        "open_log" => {
+            // The log files arrive with the Console tab (Phase E); until then the data folder.
+            let logs = shell.data_dir.join("logs");
+            let dir = if logs.is_dir() {
+                logs
+            } else {
+                shell.data_dir.clone()
+            };
+            if let Err(e) = app.opener().open_path(dir.to_string_lossy(), None::<&str>) {
+                log::warn!("could not open {}: {e}", dir.display());
+            }
+        }
+        other => log::warn!("unknown splash action {other:?}"),
     }
 }
 
@@ -176,6 +323,7 @@ fn main_window(app: &AppHandle, url: Url) -> tauri::Result<()> {
             if payload.event() == PageLoadEvent::Finished && !window.is_visible().unwrap_or(true) {
                 let _ = window.show();
                 let _ = window.set_focus();
+                close_splash(window.app_handle());
             }
         })
         .build()?;
@@ -190,13 +338,15 @@ fn open_external(app: &AppHandle, url: &Url) {
     }
 }
 
-/// A second desktop instance: offer to bring up the running one, then exit (Phase B).
+/// A second desktop instance: offer to bring up the running one, then exit (Phase B). Shown from
+/// the splash, which closes with the dialog.
 fn already_running(app: &AppHandle, url: String) {
     log::error!("{APP_NAME} is already running ({url}); not starting a second engine");
     let port = url.rsplit(':').next().unwrap_or("?").to_owned();
     let handle = app.clone();
     let data_dir = app.state::<Shell>().data_dir.clone();
-    app.dialog()
+    let mut dialog = app
+        .dialog()
         .message(format!(
             "The sequencer is already running (port {port}). Open it?"
         ))
@@ -205,13 +355,20 @@ fn already_running(app: &AppHandle, url: String) {
         .buttons(MessageDialogButtons::OkCancelCustom(
             "Open".into(),
             "Cancel".into(),
-        ))
-        .show(move |open| {
-            if open && !focus_running_instance(&data_dir, &url) {
-                let _ = handle.opener().open_url(&url, None::<&str>);
-            }
-            handle.exit(0);
-        });
+        ));
+    if let Some(splash) = app.get_webview_window(SPLASH) {
+        let _ = splash.set_always_on_top(false);
+        dialog = dialog.parent(&splash);
+    }
+    dialog.show(move |open| {
+        if let Some(splash) = handle.get_webview_window(SPLASH) {
+            let _ = splash.close();
+        }
+        if open && !focus_running_instance(&data_dir, &url) {
+            let _ = handle.opener().open_url(&url, None::<&str>);
+        }
+        handle.exit(0);
+    });
 }
 
 /// Brings the running instance's window to the front (its pid is in `runtime.json`). False if
@@ -280,9 +437,23 @@ fn focus_process_window(_pid: u32) -> bool {
     false
 }
 
-/// Startup failed before there is a UI: say why, then exit.
-fn fatal(app: &AppHandle, message: String) {
+/// Startup failed before there is a UI: the splash turns into an error panel (Retry, Open log,
+/// Copy details, Quit) and stays; without a splash a dialog says why, then the app exits.
+fn fatal(app: &AppHandle, message: String, retryable: bool) {
     log::error!("{message}");
+    if let Some(splash) = app.get_webview_window(SPLASH) {
+        let details = format!(
+            "{APP_NAME} {VERSION} (build {BUILD_NUMBER}, {GIT_COMMIT}) could not start:\n{message}"
+        );
+        let _ = splash.set_always_on_top(false);
+        let _ = splash.eval(format!(
+            "window.splash && splash.error({}, {}, {retryable})",
+            serde_json::Value::String(message),
+            serde_json::Value::String(details)
+        ));
+        let _ = splash.set_focus();
+        return;
+    }
     let handle = app.clone();
     app.dialog()
         .message(message)

@@ -103,7 +103,7 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [x] Phase B UI port selection and single instance
 - [x] Phase C in-process runtime (desktop thread split done with Phase D)
 - [x] Phase D Tauri shell (minimised-window timing check moves to Phase G)
-- [ ] Phase D2 splash screen
+- [x] Phase D2 splash screen
 - [ ] Phase E log capture and Console tab
 - [ ] Phase F build and packaging (portable exe)
 - [ ] Phase G verification

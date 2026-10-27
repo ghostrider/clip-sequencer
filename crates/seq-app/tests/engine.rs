@@ -968,9 +968,36 @@ async fn runner_starts_and_stops_through_its_token() {
         dir.path().display().to_string(),
     ]);
     let token = tokio_util::sync::CancellationToken::new();
-    let running = seq_app::runner::run(config, token.clone(), None)
+    let (progress, mut steps_rx) = mpsc::unbounded_channel();
+    let running = seq_app::runner::run(config, token.clone(), None, Some(progress))
         .await
         .unwrap();
+    let mut steps = Vec::new();
+    while let Some(s) = steps_rx.recv().await {
+        steps.push(s);
+    }
+    let indices: Vec<u8> = steps.iter().map(|s| s.index).collect();
+    assert!(indices.windows(2).all(|w| w[0] <= w[1]), "{indices:?}");
+    assert_eq!(indices.first(), Some(&1));
+    let last = steps.last().unwrap();
+    assert_eq!(
+        (last.index, last.text.as_str()),
+        (seq_app::runner::STEPS, "Ready")
+    );
+    let warnings: Vec<&str> = steps
+        .iter()
+        .filter(|s| s.warning)
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(
+        warnings.len(),
+        1,
+        "only the missing MIDI port: {warnings:?}"
+    );
+    assert!(warnings[0].contains("No MIDI clock port"));
+    assert!(steps
+        .iter()
+        .any(|s| s.text.starts_with("Loaded composition \"dev\"")));
     let v: serde_json::Value = reqwest::get(format!("{}/api/version", running.ui_url))
         .await
         .unwrap()
@@ -978,6 +1005,7 @@ async fn runner_starts_and_stops_through_its_token() {
         .await
         .unwrap();
     assert_eq!(v["app"], seq_app::APP_ID);
+    assert_eq!(v["build"], seq_app::BUILD_NUMBER);
     assert!(dir.path().join("runtime.json").exists());
     let started = Instant::now();
     token.cancel();

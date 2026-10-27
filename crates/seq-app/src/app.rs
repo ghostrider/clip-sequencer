@@ -41,6 +41,8 @@ pub struct App {
     pub saver_task: JoinHandle<()>,
     /// Bound address of the UI server.
     pub ui_addr: Option<std::net::SocketAddr>,
+    /// True once the first batch of live-deck thumbnails is cached (never without a UI server).
+    pub thumbs_ready: tokio::sync::watch::Receiver<bool>,
     shutdown: tokio::sync::oneshot::Sender<()>,
     /// `<data-dir>/runtime.json`, written while the UI server runs.
     runtime_file: Option<std::path::PathBuf>,
@@ -149,6 +151,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         }
     });
 
+    let (thumbs_ready_tx, thumbs_ready) = tokio::sync::watch::channel(false);
     let ui_addr = match cfg.ui {
         Some(std_listener) => {
             std_listener.set_nonblocking(true)?;
@@ -166,6 +169,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 rest,
                 ui_port: bound.port(),
                 shell: cfg.shell.clone(),
+                thumbs_ready: std::sync::Arc::new(thumbs_ready_tx),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {
@@ -187,6 +191,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
 
     Ok(App {
         ui_addr,
+        thumbs_ready,
         runtime_file,
         commands: cmd_tx,
         outputs,

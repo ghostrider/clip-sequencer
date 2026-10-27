@@ -3,8 +3,64 @@
 <head>
 <meta charset="utf-8">
 <title>Clip Sequencer</title>
-<!-- Bundled with the desktop shell; the splash screen (M12 Phase D2) replaces this page. -->
-<style>html, body { margin: 0; height: 100%; background: #0E0F11; }</style>
+<!-- Splash screen of the desktop app (docs/M12-desktop-shell.md, Phase D2). Bundled with the shell:
+     shown before the UI server exists. Steps arrive from Rust through `window.splash` (eval);
+     buttons call the `splash_action` command. Colours: tokens.css, copied from web/src/tokens.css. -->
+<link rel="stylesheet" href="tokens.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font);
+    overflow: hidden; user-select: none; -webkit-user-select: none; }
+  body { transition: opacity 140ms ease-out; }
+  body.fade { opacity: 0; }
+  .frame { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; padding: 28px 32px 18px;
+    border: 1px solid var(--line-strong); }
+  .mark { font: 600 15px var(--mono); letter-spacing: .08em; color: var(--accent); }
+  h1 { margin: 10px 0 2px; font-size: 26px; font-weight: 600; letter-spacing: .01em; }
+  .version { font: 12px var(--mono); color: var(--muted); }
+  .grow { flex: 1; }
+  .status { min-height: 20px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .warnings { min-height: 36px; margin-top: 4px; font-size: 12px; color: var(--accent-text); }
+  .warnings div::before { content: "! "; color: var(--accent); font-weight: 600; }
+  .bar { height: 3px; margin-top: 10px; background: var(--control); border-radius: 2px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width 160ms ease-out; }
+  footer { margin-top: 16px; font-size: 11px; color: var(--faint); }
+  /* error panel */
+  .error { display: none; }
+  body.failed .error { display: block; }
+  body.failed .progress { display: none; }
+  .error h2 { margin: 0 0 6px; font-size: 14px; color: var(--err-text); }
+  .error p { margin: 0 0 12px; max-height: 64px; overflow: auto; color: var(--text-2); user-select: text; -webkit-user-select: text; }
+  .buttons { display: flex; gap: 8px; }
+  button { font: inherit; padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--line-strong);
+    background: var(--control); color: var(--text); cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { border-color: var(--err-line); background: var(--err-bg); color: var(--err-text); }
+  button[hidden] { display: none; }
+</style>
 </head>
-<body></body>
+<body>
+<div class="frame">
+  <div class="mark">§ SEQ</div>
+  <h1 id="name">Clip Sequencer</h1>
+  <div class="version" id="version"></div>
+  <div class="grow"></div>
+  <div class="progress">
+    <div class="status" id="status" role="status" aria-live="polite">Starting…</div>
+    <div class="warnings" id="warnings" aria-live="polite"></div>
+    <div class="bar" role="progressbar" aria-label="Startup" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0" id="bar"><div></div></div>
+  </div>
+  <div class="error" role="alertdialog" aria-labelledby="error-title" aria-describedby="error-text">
+    <h2 id="error-title">The sequencer could not start</h2>
+    <p id="error-text"></p>
+    <div class="buttons">
+      <button id="retry">Retry</button>
+      <button id="open-log">Open log</button>
+      <button id="copy">Copy details</button>
+      <button id="quit" class="primary">Quit</button>
+    </div>
+  </div>
+  <footer id="footer"></footer>
+</div>
+<script src="splash.js"></script>
+</body>
 </html>

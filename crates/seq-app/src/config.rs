@@ -23,6 +23,9 @@ pub struct Config {
     /// without the `desktop` build feature).
     #[arg(long)]
     pub headless: bool,
+    /// Desktop app: no splash screen; the window appears when the UI is ready.
+    #[arg(long)]
+    pub no_splash: bool,
     /// Exit with an error instead of falling back when --ui-port is taken.
     #[arg(long)]
     pub strict_port: bool,

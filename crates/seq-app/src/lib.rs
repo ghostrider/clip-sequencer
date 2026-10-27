@@ -23,3 +23,9 @@ pub const APP_NAME: &str = "Clip Sequencer";
 pub const APP_ID: &str = "seq-app";
 /// From `[workspace.package]`, the only version source.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Git commit count (build.rs); the same for a commit in every checkout.
+pub const BUILD_NUMBER: &str = env!("SEQ_BUILD_NUMBER");
+/// Short commit hash, `-dirty` with uncommitted changes (build.rs).
+pub const GIT_COMMIT: &str = env!("SEQ_GIT_COMMIT");
+/// Copyright line (M12 Phase A; same as the LICENSE of the open-source release).
+pub const COPYRIGHT: &str = "Copyright (c) 2026 Ulrich Staudinger";
