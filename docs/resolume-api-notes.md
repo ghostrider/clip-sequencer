@@ -132,6 +132,13 @@ Duplicate subscriptions to the same parameter (by id and by path) are accepted.
 Messages carry **no origin information**: an OSC-triggered connect looks the same as any other
 (SPEC §7.3's time-window heuristic for manual override is still needed).
 
+**Loading another composition (2026-10-27, Arena 7.28, `dev` <-> `show-b`):** the composition push for
+the new composition arrives first. Subscribe requests for its parameter ids sent right after that push are partly
+lost: of ~350, about 100 got neither `parameter_subscribed` nor an error, and Resolume answered ~250 requests with
+`{"error":"Invalid parameter path"}` (no id; mostly the unsubscribes of the old composition's ids). Sending the
+missing subscribes again 1 s later is answered normally. The sequencer re-sends unanswered subscriptions every
+second (`engine::RESUBSCRIBE_AFTER`).
+
 ### 5.4 Consequences for the design
 - Subscribe **by parameter id**, taken from the composition, and match updates by `id`.
 - Composition pushes are frequent and large: parse them off the engine task. Rebuild the clip

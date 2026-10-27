@@ -59,6 +59,9 @@ pub enum WsCommand {
     /// Replace the subscription set (parameter ids). Diffs are sent while connected; the full
     /// set is re-sent after every reconnect.
     SetSubscriptions(BTreeSet<u64>),
+    /// Send the subscribe request again for these ids (those still in the set; answers lost or
+    /// refused while Resolume was loading a composition).
+    Resubscribe(BTreeSet<u64>),
     /// Send a raw JSON message (e.g. a `set`).
     Raw(String),
 }
@@ -120,7 +123,7 @@ async fn run(
                         () = &mut deadline => break,
                         cmd = cmds.recv() => match cmd {
                             Some(WsCommand::SetSubscriptions(s)) => subs = s,
-                            Some(WsCommand::Raw(_)) => {}
+                            Some(WsCommand::Resubscribe(_) | WsCommand::Raw(_)) => {}
                             None => return,
                         }
                     }
@@ -188,6 +191,11 @@ async fn run(
                             ok &= tx.send(Message::Text(subscribe(*id, false))).await.is_ok();
                         }
                         subs = new;
+                    }
+                    Some(WsCommand::Resubscribe(ids)) => {
+                        for id in ids.intersection(&subs) {
+                            ok &= tx.send(Message::Text(subscribe(*id, true))).await.is_ok();
+                        }
                     }
                     Some(WsCommand::Raw(text)) => {
                         ok &= tx.send(Message::Text(text)).await.is_ok();

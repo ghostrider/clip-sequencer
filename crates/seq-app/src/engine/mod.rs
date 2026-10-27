@@ -136,6 +136,8 @@ pub struct Engine {
     params: HashMap<u64, ParamTarget>,
     /// Subscriptions requested but not yet acknowledged by Resolume.
     unacked: std::collections::HashSet<u64>,
+    /// When subscriptions were last (re)sent while some are unanswered.
+    unacked_since: Instant,
 
     composition: Option<String>,
     model: Option<SeqFile>,
@@ -182,6 +184,8 @@ pub struct Engine {
 const MAX_NOTICES: usize = 8;
 const MAX_UNDO: usize = 200;
 const RUNTIME_PERIOD: Duration = Duration::from_millis(33);
+/// Unanswered subscriptions are requested again after this long.
+const RESUBSCRIBE_AFTER: Duration = Duration::from_secs(1);
 
 impl Engine {
     pub fn new(
@@ -207,6 +211,7 @@ impl Engine {
             deck_cache: HashMap::new(),
             params: HashMap::new(),
             unacked: std::collections::HashSet::new(),
+            unacked_since: Instant::now(),
             composition: None,
             model: None,
             model_error: None,
@@ -299,6 +304,7 @@ impl Engine {
             WsEvent::Connected => {
                 // The WS task re-sends every subscription after a reconnect.
                 self.unacked = self.params.keys().copied().collect();
+                self.unacked_since = Instant::now();
                 self.ws_connected = true;
                 self.runtime_dirty = true;
             }
@@ -499,6 +505,7 @@ impl Engine {
         let ids: BTreeSet<u64> = self.params.keys().copied().collect();
         self.unacked.retain(|id| ids.contains(id));
         self.unacked.extend(ids.iter().copied());
+        self.unacked_since = Instant::now();
         self.runtime_dirty = true;
         let _ = self.ws_cmd.send(WsCommand::SetSubscriptions(ids));
     }
@@ -1075,6 +1082,21 @@ impl Engine {
     // ---- timer ----
 
     pub fn on_timer(&mut self, now: Instant) {
+        // Subscriptions sent while Resolume loads a composition can be refused ("Invalid parameter
+        // path", without saying which) or go unanswered: ask again for the ones still missing.
+        if self.ws_connected
+            && !self.unacked.is_empty()
+            && now.saturating_duration_since(self.unacked_since) > RESUBSCRIBE_AFTER
+        {
+            log::debug!(
+                "re-subscribing {} unanswered parameter(s)",
+                self.unacked.len()
+            );
+            self.unacked_since = now;
+            let _ = self.ws_cmd.send(WsCommand::Resubscribe(
+                self.unacked.iter().copied().collect(),
+            ));
+        }
         // Confirmation timeouts (SPEC §7.5).
         let timeout = self.cfg.confirm_timeout;
         let mut late = Vec::new();
