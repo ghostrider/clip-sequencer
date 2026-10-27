@@ -5,6 +5,8 @@ pub mod app;
 pub mod cli;
 pub mod clock_debug;
 pub mod config;
+#[cfg(feature = "desktop")]
+pub mod desktop;
 pub mod engine;
 pub mod plugin_view;
 pub mod runner;

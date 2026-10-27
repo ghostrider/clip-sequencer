@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from './lib/app.svelte';
+  import type { ShellAction } from './lib/types';
   import TopBar from './components/TopBar.svelte';
   import SequenceList from './components/SequenceList.svelte';
   import Editor from './components/Editor.svelte';
@@ -9,6 +10,16 @@
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
+    if (app.desktop && (e.ctrlKey || e.metaKey) && !e.altKey) {
+      // Window shortcuts of the desktop shell; the native menu never sees keys typed in here.
+      const keys: Record<string, ShellAction> = { '=': 'zoom_in', '+': 'zoom_in', '-': 'zoom_out', '0': 'zoom_reset', q: 'quit' };
+      const action = keys[e.key.toLowerCase()];
+      if (action) {
+        e.preventDefault();
+        app.send({ cmd: 'shell', action });
+        return;
+      }
+    }
     const t = e.target as HTMLElement;
     if (t.closest('input, select, textarea, [contenteditable]')) return;
     const view = app.selected;

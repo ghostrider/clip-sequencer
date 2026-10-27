@@ -58,7 +58,7 @@ drive the same Resolume at the same time.
 - [x] **Single-instance check (before falling back):** if the configured port is taken, first
       request `GET http://127.0.0.1:<port>/api/version` with a short timeout (≈300 ms).
   - If it answers as **this app** (matching app name in the JSON), another sequencer instance
-    is already running. *(Desktop dialog: done in Phase D; headless: done.)* In desktop mode: show a native dialog, "The sequencer is already running
+    is already running. *(Both done; desktop checked: the second instance shows "Open", focuses the running window and exits with 0.)* In desktop mode: show a native dialog, "The sequencer is already running
     (port 8090). Open it?", then focus that instance or open its URL, and **exit without starting
     a second engine**. In headless mode: log an error and exit with a non-zero code.
   - If it answers as something else, or doesn't answer, the port belongs to some other program
@@ -101,31 +101,40 @@ drive the same Resolume at the same time.
 
 ## Phase D — Tauri shell
 
-- [ ] Add Tauri v2 (`tauri`, `tauri-build`) to `seq-app`, or as a thin new crate `seq-desktop` that
+- [x] Add Tauri v2 (`tauri`, `tauri-build`) to `seq-app`, or as a thin new crate `seq-desktop` that
       depends on the `seq-app` library. Pick whichever keeps `seq-app` buildable without Tauri for
       headless use, and record the decision in `CLAUDE.md`.
-- [ ] The main window is created **hidden**. It navigates to the actual UI URL once `run()` reports
+- [x] The main window is created **hidden**. It navigates to the actual UI URL once `run()` reports
       ready, and is shown only after the UI has loaded (no white flash). Until then, the splash screen
       is visible (Phase D2).
-- [ ] Window title `<App name> <version>`; remembered size and position (Phase A); minimum size that
+- [x] Window title `<App name> <version>`; remembered size and position (Phase A); minimum size that
       fits the editor layout (≈1100×700).
-- [ ] **Close handling:** if a sequence is running, show a native confirmation ("Drop A is running.
-      Quit and stop it?"). Then trigger graceful shutdown (Phase C) and close.
-- [ ] **Native menu** (if chosen in Phase A). Items call existing functions over a small Tauri command
+- [x] **Close handling:** if a sequence is running, show a native confirmation ("Drop A is running.
+      Quit and stop it?"). Then trigger graceful shutdown (Phase C) and close. *(Checked against the mock:
+      Cancel keeps "Loop" running; Quit clears its layer and the process is gone 0.7 s later, `runtime.json`
+      removed. Ctrl+Q, window close and the second-instance path all end in the same shutdown.)*
+- [x] **Native menu** (if chosen in Phase A). Items call existing functions over a small Tauri command
       or by sending the existing `/ws` commands from the frontend: File (Reload composition, Save now,
       Open data folder, Install FFGL plugin… (see M11 Phase G3), Quit), View (Zoom in/out/reset, Toggle Console tab), Help (Keyboard shortcuts,
       Documentation, Report an issue, Licenses, About). Platform shortcuts: Ctrl+Q quit, Ctrl+= / Ctrl+- /
-      Ctrl+0 zoom.
-- [ ] **External links** (GitHub, docs, issues) open in the system default browser, never inside the
-      app window. Navigation inside the window is restricted to the local UI URL.
-- [ ] **Security:** Tauri capabilities/permissions limited to what the shell needs (window, dialog,
+      Ctrl+0 zoom. *(Done: File, View, Help as decided in Phase A. Menu shortcuts never fire while the web content
+      has focus (WebView2 handles keys in its own process), so the UI forwards Ctrl+Q and the zoom keys over `/ws`
+      (`shell` command, SPEC §9.6); checked with real keystrokes and over DevTools. Menu clicks still to be tried
+      by Uli.)*
+- [x] **External links** (GitHub, docs, issues) open in the system default browser, never inside the
+      app window. Navigation inside the window is restricted to the local UI URL. *(Checked: a `file:` navigation
+      stays blocked, `window.open` is denied; other origins go to the system browser. The UI has no external
+      links yet; they come with M11 F.)*
+- [x] **Security:** Tauri capabilities/permissions limited to what the shell needs (window, dialog,
       opener/shell-open for external URLs). No filesystem or shell permissions for the web content.
-      The CSP allows only the local UI origin.
-- [ ] Keyboard shortcuts from SPEC §9.3 (Space, Del, R, Esc, Ctrl+Z…) work in the window exactly as
-      in the browser. Check that the webview or the menu doesn't swallow any of them.
+      The CSP allows only the local UI origin. *(No capability files at all: the remote UI has no IPC. The axum
+      server sends the CSP with every UI file; `tauri.conf.json` has one for the bundled shell page.)*
+- [x] Keyboard shortcuts from SPEC §9.3 (Space, Del, R, Esc, Ctrl+Z…) work in the window exactly as
+      in the browser. Check that the webview or the menu doesn't swallow any of them. *(Checked with real
+      keystrokes: Space, Esc, Del, R, Ctrl+Z, Ctrl+Shift+Z all reach the UI.)*
 - [ ] **Throttling note:** WebView2 throttles rendering while minimized. That's acceptable, because
       timing lives in the engine. Verify that a running sequence keeps triggering correctly while the
-      window is minimized for several minutes.
+      window is minimized for several minutes. *(Open: needs a real MIDI clock; done in Phase G.)*
 
 ## Phase D2 — Splash screen
 

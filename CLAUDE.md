@@ -80,5 +80,9 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
   release builds of it have no console. Run headless with `cargo run -p seq-app --bin seq-app-cli -- ...`. The UI port falls
   back from `--ui-port` (8090) to the next 9 ports, then an OS-assigned one; `--strict-port` disables that.)
 - Headless-only build without the desktop shell: `cargo build -p seq-app --no-default-features`
+- Desktop shell (M12): Tauri v2 lives in `seq-app` behind the default-on `desktop` feature (`src/desktop.rs`,
+  `tauri.conf.json`, `icons/`, `shell/`); no separate crate, so one `cargo build` gives both exes. The web content
+  gets no Tauri IPC; window actions from the UI go over `/ws` (`shell` command). WebView2 DevTools for debugging:
+  set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` before starting `seq-app`.
 
 Run tests, clippy and fmt before declaring a milestone done.

@@ -12,6 +12,7 @@ use crate::app::{self, App};
 use crate::config::Config;
 use crate::engine::{EngineCommand, EngineConfig, Outputs};
 use crate::saver::DebounceConfig;
+use crate::server::ShellAction;
 use crate::storage::Storage;
 use crate::ui_port::{bind_ui, BindError, UiBind};
 
@@ -35,7 +36,12 @@ pub struct RunningApp {
     pub done: JoinHandle<()>,
 }
 
-pub async fn run(config: Config, shutdown: CancellationToken) -> Result<RunningApp, StartError> {
+/// `shell`: the desktop shell's channel for window actions from the UI; `None` when headless.
+pub async fn run(
+    config: Config,
+    shutdown: CancellationToken,
+    shell: Option<tokio::sync::mpsc::UnboundedSender<ShellAction>>,
+) -> Result<RunningApp, StartError> {
     let storage = Storage::new(config.data_dir());
     log::info!("sequence files in {}", storage.dir().display());
     let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
@@ -61,6 +67,7 @@ pub async fn run(config: Config, shutdown: CancellationToken) -> Result<RunningA
         },
         debounce: DebounceConfig::default(),
         ui: Some(listener),
+        shell,
     })?;
     let ui_url = format!(
         "http://{}",

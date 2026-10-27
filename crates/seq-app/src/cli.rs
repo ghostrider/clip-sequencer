@@ -116,10 +116,10 @@ pub fn main(exe: Exe) -> ExitCode {
         };
     }
 
-    if config.headless || !cfg!(feature = "desktop") {
-        return run_headless(config);
+    #[cfg(feature = "desktop")]
+    if !config.headless {
+        return crate::desktop::run(config);
     }
-    // The desktop shell (Tauri) arrives in M12 Phase D; until then desktop mode runs headless.
     run_headless(config)
 }
 
@@ -128,7 +128,7 @@ fn run_headless(config: Config) -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         let shutdown = CancellationToken::new();
-        let running = match runner::run(config, shutdown.clone()).await {
+        let running = match runner::run(config, shutdown.clone(), None).await {
             Ok(r) => r,
             Err(e) => {
                 log::error!("{e}");

@@ -93,6 +93,7 @@ fn start_app(rest: u16, osc: u16) -> H {
             max_wait: Duration::from_millis(200),
         },
         ui: None,
+        shell: None,
     })
     .unwrap();
     H {

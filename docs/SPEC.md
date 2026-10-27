@@ -308,7 +308,15 @@ last WebSocket confirmation, yield and error notices.
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
   `edit` operations, `push_thumbnail`). Edits are sent as operations, the engine applies them
   to the stored model, saves, and echoes the new state.
+- UI → desktop shell: `{"cmd": "shell", "action": "quit" | "zoom_in" | "zoom_out" | "zoom_reset"}`.
+  Keys typed into the web content never reach the native menu's shortcuts (WebView2 handles input in
+  its own process), so in the desktop app the UI sends Ctrl+Q and Ctrl+= / + / - / 0 this way; the
+  server forwards them to the shell. Without a shell (browser) they are ignored and the UI leaves
+  these keys to the browser.
+- `GET /api/version`: `{ app, name, version, ui_port, desktop }` (`desktop`: running in the shell's
+  window). Also used by a second instance to detect a running one (M12 Phase B).
 - Thumbnails: `GET /thumbs/clip/{id}.png`, `GET /thumbs/seq/{uuid}.png`.
+- Every UI page is served with a Content-Security-Policy that allows only the server's own origin.
 
 ## 10. Architecture
 

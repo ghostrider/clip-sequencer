@@ -36,6 +36,20 @@ pub struct ServerCtx {
     pub rest: RestClient,
     /// The port the UI server actually listens on (after any fallback).
     pub ui_port: u16,
+    /// The desktop shell, if the UI runs in its window (`ShellAction`s go there).
+    pub shell: Option<mpsc::UnboundedSender<ShellAction>>,
+}
+
+/// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
+/// the native menu's shortcuts (WebView2 handles input in its own process), so the UI sends
+/// Ctrl+Q and the zoom keys here. Ignored when there is no shell (browser).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShellAction {
+    Quit,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
 }
 
 pub fn router(ctx: ServerCtx) -> Router {
@@ -63,6 +77,7 @@ async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
         "name": crate::APP_NAME,
         "version": crate::VERSION,
         "ui_port": ctx.ui_port,
+        "desktop": ctx.shell.is_some(),
     }))
 }
 
@@ -80,6 +95,7 @@ enum ClientMsg {
     Undo,
     Redo,
     PushThumbnail { seq: Uuid },
+    Shell { action: ShellAction },
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<ServerCtx>) -> Response {
@@ -147,6 +163,12 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Redo => EngineCommand::Redo,
         ClientMsg::PushThumbnail { seq } => {
             tokio::spawn(push_thumbnail(ctx.clone(), seq));
+            return;
+        }
+        ClientMsg::Shell { action } => {
+            if let Some(shell) = &ctx.shell {
+                let _ = shell.send(action);
+            }
             return;
         }
     };
@@ -333,13 +355,26 @@ async fn plugin_view(State(ctx): State<ServerCtx>, Query(q): Query<PluginViewQue
 
 // ---- static UI ----
 
+/// Only this server's own origin (M12 Phase D): no external scripts, styles, fonts or requests.
+/// `'unsafe-inline'` styles: Svelte sets `style:` attributes. `'self'` covers the `/ws` socket.
+const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+                   img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; \
+                   object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'";
+
 async fn static_file(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     let path = if path.is_empty() { "index.html" } else { path };
     match Assets::get(path).or_else(|| Assets::get("index.html")) {
         Some(file) => {
             let mime = file.metadata.mimetype().to_owned();
-            ([(header::CONTENT_TYPE, mime)], file.data.into_owned()).into_response()
+            (
+                [
+                    (header::CONTENT_TYPE, mime.as_str()),
+                    (header::CONTENT_SECURITY_POLICY, CSP),
+                ],
+                file.data.into_owned(),
+            )
+                .into_response()
         }
         None => (
             StatusCode::NOT_FOUND,

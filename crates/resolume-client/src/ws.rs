@@ -62,6 +62,9 @@ pub enum WsCommand {
     /// Send the subscribe request again for these ids (those still in the set; answers lost or
     /// refused while Resolume was loading a composition).
     Resubscribe(BTreeSet<u64>),
+    /// Drop the connection and connect again right away (a fresh composition push, all
+    /// subscriptions re-sent). For an explicit "reload" by the user.
+    Reconnect,
     /// Send a raw JSON message (e.g. a `set`).
     Raw(String),
 }
@@ -123,6 +126,7 @@ async fn run(
                         () = &mut deadline => break,
                         cmd = cmds.recv() => match cmd {
                             Some(WsCommand::SetSubscriptions(s)) => subs = s,
+                            Some(WsCommand::Reconnect) => break,
                             Some(WsCommand::Resubscribe(_) | WsCommand::Raw(_)) => {}
                             None => return,
                         }
@@ -150,6 +154,7 @@ async fn run(
         let mut got_message = false;
         let mut beat = tokio::time::interval(HEARTBEAT);
         beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut reconnect_now = false;
         let reason = loop {
             if !ok {
                 break "send failed".to_owned();
@@ -192,6 +197,10 @@ async fn run(
                         }
                         subs = new;
                     }
+                    Some(WsCommand::Reconnect) => {
+                        reconnect_now = true;
+                        break "reconnect requested".to_owned();
+                    }
                     Some(WsCommand::Resubscribe(ids)) => {
                         for id in ids.intersection(&subs) {
                             ok &= tx.send(Message::Text(subscribe(*id, true))).await.is_ok();
@@ -214,7 +223,9 @@ async fn run(
         if events.send(WsEvent::Disconnected { reason }).is_err() {
             return;
         }
-        tokio::time::sleep(AFTER_SESSION).await;
+        if !reconnect_now {
+            tokio::time::sleep(AFTER_SESSION).await;
+        }
     }
 }
 

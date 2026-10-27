@@ -30,6 +30,8 @@ pub struct AppConfig {
     pub debounce: DebounceConfig,
     /// The bound UI server socket (see `ui_port::bind_ui`); `None` = no UI server.
     pub ui: Option<std::net::TcpListener>,
+    /// The desktop shell's channel for window actions from the UI (`None` = browser only).
+    pub shell: Option<mpsc::UnboundedSender<crate::server::ShellAction>>,
 }
 
 pub struct App {
@@ -163,6 +165,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 )),
                 rest,
                 ui_port: bound.port(),
+                shell: cfg.shell.clone(),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {

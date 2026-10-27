@@ -1,5 +1,7 @@
 //! rust-embed needs `web/dist` to exist at compile time. If the UI has not been built yet,
 //! create a placeholder page so the workspace still compiles and tests run.
+//! With the `desktop` feature, tauri-build embeds `tauri.conf.json`, the icon and the Windows
+//! manifest (M12).
 
 use std::path::Path;
 
@@ -16,4 +18,6 @@ fn main() {
         )
         .expect("write placeholder index.html");
     }
+    #[cfg(feature = "desktop")]
+    tauri_build::build();
 }

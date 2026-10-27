@@ -170,4 +170,8 @@ export type Command =
   | { cmd: 'edit'; op: EditOp }
   | { cmd: 'undo' }
   | { cmd: 'redo' }
-  | { cmd: 'push_thumbnail'; seq: Uuid };
+  | { cmd: 'push_thumbnail'; seq: Uuid }
+  | { cmd: 'shell'; action: ShellAction };
+
+/** Window actions for the desktop shell (ignored in a browser). */
+export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset';

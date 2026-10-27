@@ -54,6 +54,10 @@ pub enum EngineCommand {
     Redo,
     /// A message for the status bar (from workers such as the UI server).
     Notice(String),
+    /// Write the pending sequence file change now (menu "Save now").
+    SaveNow,
+    /// Reconnect to Resolume: a fresh composition and subscriptions (menu "Reload composition").
+    ReloadComposition,
 }
 
 /// Results from worker tasks.
@@ -711,6 +715,20 @@ impl Engine {
             }
             EngineCommand::Edit { op } => self.edit(&op),
             EngineCommand::Notice(text) => self.notice(text),
+            EngineCommand::SaveNow => {
+                if let Some(saver) = self.saver.clone() {
+                    let aux = self.aux_tx.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = saver.flush().await {
+                            let _ = aux.send(Aux::SaveFailed(e));
+                        }
+                    });
+                }
+            }
+            EngineCommand::ReloadComposition => {
+                self.notice("reloading the composition from Resolume");
+                let _ = self.ws_cmd.send(WsCommand::Reconnect);
+            }
             EngineCommand::Undo => {
                 if let (Some(prev), Some(cur)) = (self.undo.pop(), self.model.clone()) {
                     self.redo.push(cur);

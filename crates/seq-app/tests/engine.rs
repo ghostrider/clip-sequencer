@@ -122,6 +122,7 @@ fn start_app_ui(
             max_wait: Duration::from_millis(200),
         },
         ui: ui.map(|addr| std::net::TcpListener::bind(addr).unwrap()),
+        shell: None,
     })
     .unwrap();
     (app, clock)
@@ -914,6 +915,7 @@ async fn api_version_and_runtime_file_name_the_actual_ui_port() {
     assert_eq!(v["name"], seq_app::APP_NAME);
     assert_eq!(v["version"], seq_app::VERSION);
     assert_eq!(v["ui_port"], ui.port());
+    assert_eq!(v["desktop"], false);
     let runtime = dir.path().join("runtime.json");
     let r: serde_json::Value = serde_json::from_slice(&std::fs::read(&runtime).unwrap()).unwrap();
     assert_eq!(r["pid"], std::process::id());
@@ -966,7 +968,9 @@ async fn runner_starts_and_stops_through_its_token() {
         dir.path().display().to_string(),
     ]);
     let token = tokio_util::sync::CancellationToken::new();
-    let running = seq_app::runner::run(config, token.clone()).await.unwrap();
+    let running = seq_app::runner::run(config, token.clone(), None)
+        .await
+        .unwrap();
     let v: serde_json::Value = reqwest::get(format!("{}/api/version", running.ui_url))
         .await
         .unwrap()
@@ -983,4 +987,69 @@ async fn runner_starts_and_stops_through_its_token() {
         .unwrap();
     assert!(started.elapsed() < Duration::from_secs(2));
     assert!(!dir.path().join("runtime.json").exists());
+}
+
+#[tokio::test]
+async fn ui_shell_actions_reach_the_desktop_shell() {
+    use futures_util::SinkExt;
+    use seq_app::server::ShellAction;
+    use tokio_tungstenite::tungstenite::Message;
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (shell_tx, mut shell_rx) = mpsc::unbounded_channel();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: Some(shell_tx),
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let v: serde_json::Value = reqwest::get(format!("http://{ui}/api/version"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(v["desktop"], true, "the UI learns that a shell is there");
+    let page = reqwest::get(format!("http://{ui}/")).await.unwrap();
+    let csp = page.headers()["content-security-policy"].to_str().unwrap();
+    assert!(csp.contains("default-src 'self'") && csp.contains("connect-src 'self'"));
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    for action in ["zoom_in", "zoom_out", "zoom_reset", "quit"] {
+        ws.send(Message::Text(
+            json!({"cmd": "shell", "action": action}).to_string(),
+        ))
+        .await
+        .unwrap();
+    }
+    let mut got = Vec::new();
+    while got.len() < 4 {
+        got.push(
+            tokio::time::timeout(Duration::from_secs(3), shell_rx.recv())
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
+    assert_eq!(
+        got,
+        [
+            ShellAction::ZoomIn,
+            ShellAction::ZoomOut,
+            ShellAction::ZoomReset,
+            ShellAction::Quit
+        ]
+    );
+    app.shutdown().await;
 }

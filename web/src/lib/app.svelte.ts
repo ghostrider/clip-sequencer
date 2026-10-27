@@ -18,6 +18,8 @@ class AppState {
   structure = $state<StructureState | null>(null);
   runtime = $state<RuntimeState | null>(null);
   connected = $state(false);
+  /** Running inside the desktop shell (`/api/version`): Ctrl+Q and the zoom keys go to it. */
+  desktop = $state(false);
 
   /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
   viewDeckKey = $state<string | null>(null);
@@ -37,7 +39,13 @@ class AppState {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws = ws;
-    ws.onopen = () => (this.connected = true);
+    ws.onopen = () => {
+      this.connected = true;
+      fetch('/api/version')
+        .then((r) => r.json())
+        .then((v) => (this.desktop = v.desktop === true))
+        .catch(() => {});
+    };
     ws.onclose = () => {
       this.connected = false;
       setTimeout(() => this.connect(), 1000);
