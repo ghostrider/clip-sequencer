@@ -97,7 +97,7 @@ async fn strict_port_fails_instead_of_falling_back() {
 fn run_app(ui_port: u16, extra: &[&str]) -> (bool, String) {
     let dir = tempfile::tempdir().unwrap();
     let dead = free_range(); // nothing listens there: Resolume "not running"
-    let mut child = Command::new(env!("CARGO_BIN_EXE_seq-app"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_seq-app-cli"))
         .args([
             "--ui-port",
             &ui_port.to_string(),

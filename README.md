@@ -35,16 +35,19 @@ Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolum
 powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 ```
 
-This builds the UI (`web/`) and the release binary and copies it to `release\seq-app.exe`. The
-binary contains the UI; no other files are needed to run it.
+This builds the UI (`web/`) and the release binaries and copies them to `release\`:
+`seq-app.exe` is the desktop app (no console window; its window arrives with M12 Phase D) and
+`seq-app-cli.exe` the console program (headless, `--validate`, `--list-midi-ports`, `--clock-debug`).
+Both contain the UI; no other files are needed to run them.
 
 ## Run
 
 ```powershell
-release\seq-app.exe --midi-port "Clock Shifter Out"
+release\seq-app-cli.exe --midi-port "Clock Shifter Out"
 ```
 
-Then open **http://127.0.0.1:8090**.
+Then open **http://127.0.0.1:8090** (the console shows the actual address if 8090 was taken; Ctrl+C
+stops the sequencer).
 
 Useful options (`--help` lists all):
 

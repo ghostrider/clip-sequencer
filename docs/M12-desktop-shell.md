@@ -20,7 +20,8 @@ summarise, and wait for Uli. Items marked **[Uli]** need his decision or action.
   (Phase B), and loads the UI from that port in the window.
 - At the top of the UI is a tab strip: **Sequencer | Console**.
 - Closing the window shuts the server and engine down cleanly.
-- `seq-app.exe --headless` behaves as before: console output, no window, UI reachable in a
+- `seq-app-cli.exe` (the console companion, decided 2026-10-27, see Decisions) behaves as the old headless
+  exe: console output, no window, UI reachable in a
   normal browser.
 
 ## Phase A — Decisions [Uli]
@@ -94,8 +95,9 @@ drive the same Resolume at the same time.
 - [x] `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` hides the console window
       in release builds. In `--headless` mode on Windows, attach to the parent console
       (`AttachConsole(ATTACH_PARENT_PROCESS)`) so output still appears when started from a terminal.
-      *(Only with the `desktop` feature; the attach happens unless stdout/stderr are redirected. Release exe
-      checked: PE subsystem GUI. Output in a real terminal window still to be checked by Uli.)*
+      *(Superseded after Uli's test: a GUI exe started from a terminal runs in the background without Ctrl+C.
+      Console use moved to `seq-app-cli.exe`; `seq-app.exe` attaches only to print `--help`, `--version` and a
+      pointer to `seq-app-cli.exe`. Release check: `seq-app.exe` subsystem GUI, `seq-app-cli.exe` console.)*
 
 ## Phase D — Tauri shell
 
@@ -208,7 +210,7 @@ doing, and it shows startup problems before the main UI exists.
 - [ ] Version, product name, copyright and icon come from the same single sources as M11 Phase E
       (`[workspace.package]`, the icon file). `tauri.conf.json` must not hold a second, hand-maintained
       version.
-- [ ] The headless mode still works from the same exe (`--headless`). No separate binary is needed.
+- [ ] The headless mode works from `seq-app-cli.exe` (shipped next to `seq-app.exe`; see Decisions).
 - [ ] Update `README.md`: desktop usage, headless usage, port fallback and `--strict-port`, where logs live,
       and the WebView2 requirement for the portable exe.
 
@@ -234,7 +236,7 @@ doing, and it shows startup problems before the main UI exists.
 
 ## Definition of done
 
-- One exe; double-click shows the splash screen immediately, then a native window with the UI. There's no
+- `seq-app.exe` plus the console companion `seq-app-cli.exe`; double-clicking `seq-app.exe` shows the splash screen immediately, then a native window with the UI. There's no
   console window in release builds.
 - The splash reports each startup step, continues past a missing Resolume or MIDI port, and shows fatal
   errors with Open log / Copy / Quit.
@@ -281,5 +283,11 @@ _(filled in during Phase A, 2026-10-27)_
 - Taken over from M11 because the shell needs it now: one version source in `[workspace.package]` (M11 E) and a
   minimal `GET /api/version` (`name`, `version`, `ui_port`); M11 E adds build number, commit, date and target.
 - Tauri in `seq-app` or a separate `seq-desktop` crate (Phase D): **in `seq-app`, behind a default-on cargo feature
-  `desktop`**. One exe serves both modes (`--headless`); `cargo build -p seq-app --no-default-features` builds a
+  `desktop`**. `cargo build -p seq-app --no-default-features` builds a
   headless-only binary without Tauri. A separate crate would produce a second exe.
+- Console use (changed 2026-10-27, after testing Phase C): **two executables**. A GUI-subsystem exe started from a
+  terminal runs in the background (the shell returns at once) and gets no Ctrl+C, so `--headless` from
+  `seq-app.exe` did not work. `seq-app.exe` is the desktop app (GUI subsystem in release builds, no console flash);
+  `seq-app-cli.exe` is a console program that is always headless and also runs `--validate`, `--list-midi-ports`
+  and `--clock-debug`. Both are thin `main`s over `seq_app::cli`. `seq-app.exe` with a console-only flag prints a
+  pointer to `seq-app-cli.exe` and exits with code 2. The portable zip ships both.

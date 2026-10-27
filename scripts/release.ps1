@@ -1,4 +1,5 @@
-# Builds the browser UI and the release binary, and copies seq-app.exe to release\.
+# Builds the browser UI and the release binaries, and copies seq-app.exe (desktop app) and
+# seq-app-cli.exe (console, headless) to release\.
 # The binary embeds web\dist, so the UI must be built first.
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 
@@ -19,4 +20,5 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 New-Item -ItemType Directory -Force release | Out-Null
 Copy-Item target\release\seq-app.exe release\seq-app.exe -Force
-Write-Host 'Done: release\seq-app.exe' -ForegroundColor Green
+Copy-Item target\release\seq-app-cli.exe release\seq-app-cli.exe -Force
+Write-Host 'Done: release\seq-app.exe, release\seq-app-cli.exe' -ForegroundColor Green

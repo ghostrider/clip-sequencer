@@ -19,8 +19,8 @@ pub struct Config {
     /// UI server port; if taken, the next 9 ports, then one the OS assigns (see --strict-port).
     #[arg(long, default_value_t = 8090)]
     pub ui_port: u16,
-    /// No window: log to the console, UI in a browser (the only mode without the `desktop`
-    /// build feature).
+    /// No window: log to the console, UI in a browser (always on in seq-app-cli; the only mode
+    /// without the `desktop` build feature).
     #[arg(long)]
     pub headless: bool,
     /// Exit with an error instead of falling back when --ui-port is taken.
