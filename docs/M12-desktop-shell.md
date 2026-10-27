@@ -194,7 +194,7 @@ doing, and it shows startup problems before the main UI exists.
 
 ## Phase E — Log capture and Console tab
 
-- [ ] **Log capture:** replace or wrap the current logger (`log` + `env_logger`, or a `tracing`
+- [x] **Log capture:** replace or wrap the current logger (`log` + `env_logger`, or a `tracing`
       subscriber) with one that sends every record to three places:
   1. stderr (headless mode only)
   2. a **ring buffer** of the last 5,000 records in memory
@@ -202,25 +202,34 @@ doing, and it shows startup problems before the main UI exists.
   - plus a **log file** in `<data-dir>/logs/`, rotated daily, keeping 7 days.
   The record shape is `{ ts, level, target, message }`. Logging must never block the engine; if the
   channel is full, drop records and count them (`dropped: N` shown in the UI).
-- [ ] **Protocol:** extend the UI WebSocket (SPEC §9.6) with
+  *(`seq_app::logging`, replacing env_logger; `RUST_LOG` still filters. Files `seq-app-YYYY-MM-DD.log`, UTC day.
+  stderr in headless mode and debug builds. Found while testing at `RUST_LOG=trace`: the WebSocket crates log
+  every frame, so forwarding their records to the Console logged the forwarding itself, endlessly; live
+  subscribers now get DEBUG/TRACE only from the app's own crates. Checked: ~285 lines/s at trace level with the
+  Console closed and open alike.)*
+- [x] **Protocol:** extend the UI WebSocket (SPEC §9.6) with
   - engine → UI: `log_snapshot` (the ring buffer, on connect or on request) and `log` (new records,
     batched at most every 100 ms)
   - UI → engine: `log_subscribe` / `log_unsubscribe` (only send log traffic while the Console tab is
     open), `log_set_level` (runtime filter, optional)
-  Document the new message types in `docs/SPEC.md` §9.6.
-- [ ] **Tab strip** in the Svelte app: **Sequencer | Console**, using the existing tokens. It's shown
+  Document the new message types in `docs/SPEC.md` §9.6. *(Done; plus `log_stats` (error badge, dropped
+  count) sent always, `GET /api/logs/current` for "Save log…". `log_set_level` was optional and is left out.)*
+- [x] **Tab strip** in the Svelte app: **Sequencer | Console**, using the existing tokens. It's shown
       in both desktop and browser mode. The Sequencer tab is the current UI, unchanged.
       Ctrl+1 / Ctrl+2 switch tabs. The Console tab shows a red count badge when new errors arrive
-      while it isn't visible.
-- [ ] **Console tab:**
-  - [ ] a monospace list with timestamp, level (coloured: error = `--err`, warn = `--accent`,
+      while it isn't visible. *(The desktop menu View → Toggle Console switches it too.)*
+- [x] **Console tab:**
+  - [x] a monospace list with timestamp, level (coloured: error = `--err`, warn = `--accent`,
         info = `--text-2`, debug/trace = `--muted`), target and message
-  - [ ] level filter toggles (Error / Warn / Info / Debug) and a text filter
-  - [ ] auto-scroll to the newest line; scrolling up pauses it ("⏸ paused · N new", click to resume)
-  - [ ] buttons: Clear view (client-side only), Copy visible, Save log… (downloads the current file
+  - [x] level filter toggles (Error / Warn / Info / Debug) and a text filter
+  - [x] auto-scroll to the newest line; scrolling up pauses it ("⏸ paused · N new", click to resume)
+  - [x] buttons: Clear view (client-side only), Copy visible, Save log… (downloads the current file
         or the buffer as `.log`), Open logs folder (desktop only)
-  - [ ] virtualised rendering, so 5,000 lines stay smooth
-  - [ ] a header line showing the app version, build, UI URL, and dropped-record count if any
+  - [x] virtualised rendering, so 5,000 lines stay smooth
+  - [x] a header line showing the app version, build, UI URL, and dropped-record count if any
+  *(Checked in the desktop window against the mock: Ctrl+2, Debug toggle 41 → 15 rows, text filter, Clear
+  view, scrolling up pauses with "⏸ paused · 10 new", resume follows again, 55 DOM rows for 3,803 records,
+  level colours. Copy visible uses the same clipboard path as the splash's Copy details.)*
 
 ## Phase F — Build and packaging
 

@@ -37,9 +37,6 @@ pub fn main(exe: Exe) -> ExitCode {
         // --help, --version and the hint below should still reach a terminal that started us.
         attach_parent_console();
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_micros()
-        .init();
     let matches = Config::command().name(exe.name()).get_matches();
     let mut config = match Config::from_arg_matches(&matches) {
         Ok(c) => c,
@@ -61,6 +58,21 @@ pub fn main(exe: Exe) -> ExitCode {
             Exe::Console.name()
         );
         return ExitCode::from(2);
+    }
+    // Console commands log to stderr only; the sequencer also to daily files (Console tab, M12 E).
+    let runs = config.validate.is_none() && !config.list_midi_ports && !config.clock_debug;
+    crate::logging::init(crate::logging::LogConfig {
+        stderr: config.headless || !runs || cfg!(debug_assertions),
+        dir: runs.then(|| config.data_dir().join("logs")),
+    });
+    if runs {
+        log::info!(
+            "{} {} (build {}, {})",
+            crate::APP_NAME,
+            crate::VERSION,
+            crate::BUILD_NUMBER,
+            crate::GIT_COMMIT
+        );
     }
 
     if let Some(path) = &config.validate {

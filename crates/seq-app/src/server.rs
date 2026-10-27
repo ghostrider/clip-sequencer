@@ -15,7 +15,11 @@ use resolume_client::rest::RestClient;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 use serde_json::json;
-use tokio::sync::{mpsc, watch};
+use std::time::Duration;
+
+use tokio::sync::{broadcast, mpsc, watch};
+
+use crate::logging::{self, LogRecord};
 use uuid::Uuid;
 
 use crate::engine::view::{RuntimeState, SequenceView, StructureState};
@@ -52,12 +56,15 @@ pub enum ShellAction {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    /// Open `<data-dir>/logs` in Explorer (Console tab).
+    OpenLogs,
 }
 
 pub fn router(ctx: ServerCtx) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
         .route("/api/version", get(api_version))
+        .route("/api/logs/current", get(current_log))
         .route("/thumbs/clip/{file}", get(clip_thumb))
         .route("/thumbs/seq/{file}", get(seq_thumb))
         .route("/plugin/v1/view.txt", get(plugin_view))
@@ -91,15 +98,31 @@ async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 enum ClientMsg {
-    Start { seq: Uuid },
-    Stop { seq: Uuid },
+    Start {
+        seq: Uuid,
+    },
+    Stop {
+        seq: Uuid,
+    },
     StopAll,
-    ResumeLane { seq: Uuid, lane: usize },
-    Edit { op: EditOp },
+    ResumeLane {
+        seq: Uuid,
+        lane: usize,
+    },
+    Edit {
+        op: EditOp,
+    },
     Undo,
     Redo,
-    PushThumbnail { seq: Uuid },
-    Shell { action: ShellAction },
+    PushThumbnail {
+        seq: Uuid,
+    },
+    Shell {
+        action: ShellAction,
+    },
+    /// Console tab opened: snapshot, then live records (M12 E).
+    LogSubscribe,
+    LogUnsubscribe,
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<ServerCtx>) -> Response {
@@ -113,9 +136,17 @@ fn msg(kind: &str, data: &impl serde::Serialize) -> Message {
 async fn session(mut socket: WebSocket, ctx: ServerCtx) {
     let mut structure = ctx.structure.clone();
     let mut runtime = ctx.runtime.clone();
+    // Log records go out only while this UI shows its Console tab; the stats (error count for
+    // the tab's badge, dropped records) always.
+    let mut logs: Option<broadcast::Receiver<LogRecord>> = None;
+    let mut batch: Vec<LogRecord> = Vec::new();
+    let mut stats = logging::stats();
+    let mut log_tick = tokio::time::interval(LOG_BATCH);
+    log_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let first = [
         msg("structure", &*structure.borrow_and_update()),
         msg("runtime", &*runtime.borrow_and_update()),
+        msg("log_stats", &stats),
     ];
     for m in first {
         if socket.send(m).await.is_err() {
@@ -134,16 +165,93 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
             },
             incoming = socket.recv() => {
                 let Some(Ok(m)) = incoming else { return };
-                if let Message::Text(text) = m {
-                    handle(&ctx, &text);
+                let Message::Text(text) = m else { continue };
+                match serde_json::from_str::<ClientMsg>(&text) {
+                    Ok(ClientMsg::LogSubscribe) => {
+                        logs = logging::subscribe(); // first: the snapshot may overlap, never miss
+                        batch.clear();
+                        let snapshot = json!({"records": logging::snapshot(), "stats": logging::stats()});
+                        msg("log_snapshot", &snapshot)
+                    }
+                    Ok(ClientMsg::LogUnsubscribe) => {
+                        logs = None;
+                        batch.clear();
+                        continue;
+                    }
+                    _ => {
+                        handle(&ctx, &text);
+                        continue;
+                    }
+                }
+            }
+            record = next_log(&mut logs) => {
+                match record {
+                    Ok(r) => batch.push(r),
+                    Err(broadcast::error::RecvError::Lagged(n)) => logging::note_dropped(n),
+                    Err(broadcast::error::RecvError::Closed) => logs = None,
                 }
                 continue;
+            }
+            _ = log_tick.tick() => {
+                let now = logging::stats();
+                if !batch.is_empty() {
+                    msg("log", &std::mem::take(&mut batch))
+                } else if now != stats {
+                    stats = now;
+                    msg("log_stats", &stats)
+                } else {
+                    continue;
+                }
             }
         };
         if socket.send(out).await.is_err() {
             return;
         }
     }
+}
+
+/// Log records are sent in batches at most this often (M12 E).
+const LOG_BATCH: Duration = Duration::from_millis(100);
+
+async fn next_log(
+    logs: &mut Option<broadcast::Receiver<LogRecord>>,
+) -> Result<LogRecord, broadcast::error::RecvError> {
+    match logs {
+        Some(rx) => rx.recv().await,
+        None => std::future::pending().await,
+    }
+}
+
+/// "Save log…": today's log file, or the in-memory buffer when there is none.
+async fn current_log() -> Response {
+    let file = logging::current_file();
+    let (name, body) = match &file {
+        Some(path) if path.is_file() => (
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "seq-app.log".into()),
+            tokio::fs::read(path).await.unwrap_or_default(),
+        ),
+        _ => (
+            "seq-app.log".to_owned(),
+            logging::snapshot()
+                .iter()
+                .map(|r| r.line() + "\n")
+                .collect::<String>()
+                .into_bytes(),
+        ),
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}\""),
+            ),
+        ],
+        body,
+    )
+        .into_response()
 }
 
 fn handle(ctx: &ServerCtx, text: &str) {
@@ -175,6 +283,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
             }
             return;
         }
+        ClientMsg::LogSubscribe | ClientMsg::LogUnsubscribe => return, // per session, above
     };
     let _ = ctx.commands.send(engine_cmd);
 }

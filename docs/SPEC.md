@@ -313,8 +313,21 @@ last WebSocket confirmation, yield and error notices.
   its own process), so in the desktop app the UI sends Ctrl+Q and Ctrl+= / + / - / 0 this way; the
   server forwards them to the shell. Without a shell (browser) they are ignored and the UI leaves
   these keys to the browser.
-- `GET /api/version`: `{ app, name, version, ui_port, desktop }` (`desktop`: running in the shell's
-  window). Also used by a second instance to detect a running one (M12 Phase B).
+- UI → desktop shell also: `"open_logs"` (Console tab, opens `<data-dir>/logs`).
+- Console tab (M12 Phase E):
+  - UI → engine: `{"cmd": "log_subscribe"}` when the Console tab opens, `{"cmd": "log_unsubscribe"}` when it
+    closes. Log records only flow while subscribed.
+  - Engine → UI: `log_snapshot` `{ records, stats }` (the ring buffer of the last 5,000 records) on subscribe,
+    then `log` with an array of new records, batched at most every 100 ms. A record is
+    `{ seq, ts, level, target, message }`; `seq` increases by one, so the UI can merge snapshot and batches.
+    DEBUG/TRACE records of dependencies (WebSocket, HTTP crates) are not sent live: sending them would log
+    the sending itself. They are in the ring and the log file.
+  - Engine → UI, always: `log_stats` `{ errors, dropped }` on connect and when it changes (red error badge on
+    the Console tab; records that did not reach the file or a subscriber).
+  - `GET /api/logs/current`: today's log file as a download (the in-memory buffer if there is no file).
+  - Log files: `<data-dir>/logs/seq-app-YYYY-MM-DD.log` (UTC day), kept 7 days.
+- `GET /api/version`: `{ app, name, version, build, commit, ui_port, desktop }` (`desktop`: running in the
+  shell's window). Also used by a second instance to detect a running one (M12 Phase B).
 - Thumbnails: `GET /thumbs/clip/{id}.png`, `GET /thumbs/seq/{uuid}.png`.
 - Every UI page is served with a Content-Security-Policy that allows only the server's own origin.
 

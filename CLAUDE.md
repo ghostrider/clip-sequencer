@@ -84,5 +84,7 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
   `tauri.conf.json`, `icons/`, `shell/`); no separate crate, so one `cargo build` gives both exes. The web content
   gets no Tauri IPC; window actions from the UI go over `/ws` (`shell` command). WebView2 DevTools for debugging:
   set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` before starting `seq-app`.
+- Logging: `seq_app::logging` (not env_logger) feeds the Console tab and `<data-dir>/logs/` (7 days);
+  `RUST_LOG` filters as before. Use `log::` macros; never log from inside the logger's own send path.
 
 Run tests, clippy and fmt before declaring a milestone done.

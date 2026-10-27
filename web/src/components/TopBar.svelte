@@ -13,11 +13,19 @@
 
 <header class="topbar">
   <div class="logo">§ SEQ</div>
+  <div class="tabs view-tabs" role="tablist" aria-label="View">
+    <button class="tab" role="tab" aria-selected={app.tab === 'sequencer'} title="Ctrl+1"
+      onclick={() => app.setTab('sequencer')}>Sequencer</button>
+    <button class="tab" role="tab" aria-selected={app.tab === 'console'} title="Ctrl+2"
+      onclick={() => app.setTab('console')}>
+      Console{#if app.newErrors > 0}<span class="error-badge" aria-label="{app.newErrors} new errors">{app.newErrors}</span>{/if}
+    </button>
+  </div>
   <div>
     <span style="color:var(--muted)">Composition</span>
     <span class="mono">{app.structure?.composition ?? '—'}</span>
   </div>
-  <div class="tabs" role="tablist" aria-label="Decks">
+  <div class="tabs" role="tablist" aria-label="Decks" hidden={app.tab !== 'sequencer'}>
     {#each app.decks as d (deckKey(d))}
       <button
         class="tab"

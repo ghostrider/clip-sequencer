@@ -2,9 +2,12 @@
 // sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
 
 import type {
-  ClipRef, ClipView, Command, DeckView, EditOp, RunView, RuntimeState, SequenceView,
-  StructureState, Uuid,
+  ClipRef, ClipView, Command, DeckView, EditOp, LogRecord, LogStats, RunView, RuntimeState,
+  SequenceView, StructureState, Uuid, VersionInfo,
 } from './types';
+
+/** Records the Console tab keeps (the app's ring buffer holds as many). */
+export const LOG_LIMIT = 5000;
 
 export const EIGHTHS_PER_BAR = 8;
 export const TICKS_PER_EIGHTH = 12;
@@ -20,6 +23,14 @@ class AppState {
   connected = $state(false);
   /** Running inside the desktop shell (`/api/version`): Ctrl+Q and the zoom keys go to it. */
   desktop = $state(false);
+  version = $state<VersionInfo | null>(null);
+
+  /** Top-level tab (M12 E). Log records only flow while the Console tab is open. */
+  tab = $state<'sequencer' | 'console'>('sequencer');
+  logs = $state.raw<LogRecord[]>([]);
+  logStats = $state<LogStats>({ errors: 0, dropped: 0 });
+  /** Error count when the Console tab was last visible (for the badge). */
+  errorsSeen = $state(0);
 
   /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
   viewDeckKey = $state<string | null>(null);
@@ -43,8 +54,12 @@ class AppState {
       this.connected = true;
       fetch('/api/version')
         .then((r) => r.json())
-        .then((v) => (this.desktop = v.desktop === true))
+        .then((v: VersionInfo) => {
+          this.version = v;
+          this.desktop = v.desktop === true;
+        })
         .catch(() => {});
+      if (this.tab === 'console') this.send({ cmd: 'log_subscribe' });
     };
     ws.onclose = () => {
       this.connected = false;
@@ -54,6 +69,11 @@ class AppState {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'structure') this.structure = msg.data;
       else if (msg.type === 'runtime') this.runtime = msg.data;
+      else if (msg.type === 'log_snapshot') {
+        this.logs = msg.data.records.slice(-LOG_LIMIT);
+        this.logStats = msg.data.stats;
+      } else if (msg.type === 'log') this.addLogs(msg.data);
+      else if (msg.type === 'log_stats') this.logStats = msg.data;
     };
   }
 
@@ -63,6 +83,29 @@ class AppState {
 
   edit(op: EditOp) {
     this.send({ cmd: 'edit', op });
+  }
+
+  // ---- console ----
+
+  setTab(tab: 'sequencer' | 'console') {
+    if (tab === this.tab) return;
+    this.errorsSeen = this.logStats.errors;
+    this.tab = tab;
+    this.send({ cmd: tab === 'console' ? 'log_subscribe' : 'log_unsubscribe' });
+  }
+
+  /** New errors since the Console tab was last visible (badge on the tab). */
+  get newErrors(): number {
+    return this.tab === 'console' ? 0 : Math.max(0, this.logStats.errors - this.errorsSeen);
+  }
+
+  private addLogs(records: LogRecord[]) {
+    const last = this.logs.length ? this.logs[this.logs.length - 1].seq : -1;
+    const fresh = records.filter((r) => r.seq > last); // the snapshot may overlap the first batch
+    if (!fresh.length) return;
+    const errors = fresh.filter((r) => r.level === 'ERROR').length;
+    if (errors) this.logStats = { ...this.logStats, errors: this.logStats.errors + errors };
+    this.logs = [...this.logs, ...fresh].slice(-LOG_LIMIT);
   }
 
   // ---- derived ----
@@ -184,3 +227,7 @@ export function formatLength(eighths: number): string {
 export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
   return r.mode === 'once' ? 'once' : r.mode === 'infinite' ? '∞' : `×${r.count}`;
 }
+
+// The desktop shell's View > Toggle Console menu item calls this (it has no IPC into the page).
+(window as unknown as { __seqToggleConsole: () => void }).__seqToggleConsole = () =>
+  app.setTab(app.tab === 'console' ? 'sequencer' : 'console');

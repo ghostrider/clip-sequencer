@@ -7,6 +7,7 @@
   import SidePanel from './components/SidePanel.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import SwitchModal from './components/SwitchModal.svelte';
+  import Console from './components/Console.svelte';
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -20,6 +21,12 @@
         return;
       }
     }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === '1' || e.key === '2')) {
+      e.preventDefault();
+      app.setTab(e.key === '1' ? 'sequencer' : 'console');
+      return;
+    }
+    if (app.tab !== 'sequencer') return; // editor shortcuts only in the editor
     const t = e.target as HTMLElement;
     if (t.closest('input, select, textarea, [contenteditable]')) return;
     const view = app.selected;
@@ -61,11 +68,15 @@
   {:else if app.structure?.model_error}
     <div class="banner">Sequence file problem (read-only until fixed): {app.structure.model_error}</div>
   {/if}
-  <div class="body">
-    <SequenceList />
-    <Editor />
-    <SidePanel />
-  </div>
+  {#if app.tab === 'console'}
+    <Console />
+  {:else}
+    <div class="body">
+      <SequenceList />
+      <Editor />
+      <SidePanel />
+    </div>
+  {/if}
   <StatusBar />
 </div>
 <SwitchModal />

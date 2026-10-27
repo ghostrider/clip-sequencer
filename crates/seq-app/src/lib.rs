@@ -8,6 +8,7 @@ pub mod config;
 #[cfg(feature = "desktop")]
 pub mod desktop;
 pub mod engine;
+pub mod logging;
 pub mod plugin_view;
 pub mod runner;
 pub mod saver;

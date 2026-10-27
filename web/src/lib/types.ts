@@ -171,7 +171,34 @@ export type Command =
   | { cmd: 'undo' }
   | { cmd: 'redo' }
   | { cmd: 'push_thumbnail'; seq: Uuid }
-  | { cmd: 'shell'; action: ShellAction };
+  | { cmd: 'shell'; action: ShellAction }
+  | { cmd: 'log_subscribe' }
+  | { cmd: 'log_unsubscribe' };
 
 /** Window actions for the desktop shell (ignored in a browser). */
-export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset';
+export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs';
+
+/** One log record (Console tab, M12 E). */
+export interface LogRecord {
+  seq: number;
+  ts: string;
+  level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
+  target: string;
+  message: string;
+}
+
+export interface LogStats {
+  errors: number;
+  dropped: number;
+}
+
+/** `GET /api/version`. */
+export interface VersionInfo {
+  app: string;
+  name: string;
+  version: string;
+  build: string;
+  commit: string;
+  ui_port: number;
+  desktop: boolean;
+}

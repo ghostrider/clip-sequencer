@@ -163,6 +163,7 @@ async fn start(app: AppHandle, config: Config) {
                 ShellAction::ZoomIn => zoom(&handle, Some(ZOOM_STEP)),
                 ShellAction::ZoomOut => zoom(&handle, Some(-ZOOM_STEP)),
                 ShellAction::ZoomReset => zoom(&handle, None),
+                ShellAction::OpenLogs => open_logs(&handle),
             }
         }
     });
@@ -282,16 +283,7 @@ fn splash_action(app: AppHandle, action: String) {
             tauri::async_runtime::spawn(start(app.clone(), shell.config.clone()));
         }
         "open_log" => {
-            // The log files arrive with the Console tab (Phase E); until then the data folder.
-            let logs = shell.data_dir.join("logs");
-            let dir = if logs.is_dir() {
-                logs
-            } else {
-                shell.data_dir.clone()
-            };
-            if let Err(e) = app.opener().open_path(dir.to_string_lossy(), None::<&str>) {
-                log::warn!("could not open {}: {e}", dir.display());
-            }
+            open_logs(&app);
         }
         other => log::warn!("unknown splash action {other:?}"),
     }
@@ -548,6 +540,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&item_key("zoom_in", "Zoom in", "CmdOrCtrl+=")?)
         .item(&item_key("zoom_out", "Zoom out", "CmdOrCtrl+-")?)
         .item(&item_key("zoom_reset", "Reset zoom", "CmdOrCtrl+0")?)
+        .separator()
+        .item(&item("console", "Toggle Console")?)
         .build()?;
     let help = SubmenuBuilder::new(app, "Help")
         .item(&item("shortcuts", "Keyboard shortcuts")?)
@@ -577,6 +571,12 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
         "zoom_in" => zoom(app, Some(ZOOM_STEP)),
         "zoom_out" => zoom(app, Some(-ZOOM_STEP)),
         "zoom_reset" => zoom(app, None),
+        "console" => {
+            // The tab lives in the page; Ctrl+1 / Ctrl+2 switch it there too.
+            if let Some(window) = app.get_webview_window(MAIN) {
+                let _ = window.eval("window.__seqToggleConsole && window.__seqToggleConsole()");
+            }
+        }
         "shortcuts" => {
             app.dialog()
                 .message(SHORTCUTS)
@@ -585,6 +585,17 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
                 .show(|_| {});
         }
         _ => {}
+    }
+}
+
+/// `<data-dir>/logs` (the daily log files) in Explorer; the data folder if there are none yet.
+fn open_logs(app: &AppHandle) {
+    let shell = app.state::<Shell>();
+    let dir = crate::logging::logs_dir()
+        .filter(|d| d.is_dir())
+        .unwrap_or_else(|| shell.data_dir.clone());
+    if let Err(e) = app.opener().open_path(dir.to_string_lossy(), None::<&str>) {
+        log::warn!("could not open {}: {e}", dir.display());
     }
 }
 
@@ -613,5 +624,6 @@ Ctrl+Shift+Z\tredo
 Alt+drag\tduplicate a step
 Ctrl+wheel\tzoom the lane grid
 
+Ctrl+1 / Ctrl+2\tSequencer / Console tab
 Ctrl+= / Ctrl+- / Ctrl+0\tzoom the window
 Ctrl+Q\tquit";
