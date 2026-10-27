@@ -31,6 +31,8 @@ class AppState {
   logStats = $state<LogStats>({ errors: 0, dropped: 0 });
   /** Error count when the Console tab was last visible (for the badge). */
   errorsSeen = $state(0);
+  /** Preferences dialog (MIDI clock input). */
+  prefsOpen = $state(false);
 
   /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
   viewDeckKey = $state<string | null>(null);
@@ -231,3 +233,6 @@ export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
 // The desktop shell's View > Toggle Console menu item calls this (it has no IPC into the page).
 (window as unknown as { __seqToggleConsole: () => void }).__seqToggleConsole = () =>
   app.setTab(app.tab === 'console' ? 'sequencer' : 'console');
+
+// The desktop shell's File > Preferences menu item calls this.
+(window as unknown as { __seqOpenPrefs: () => void }).__seqOpenPrefs = () => (app.prefsOpen = true);

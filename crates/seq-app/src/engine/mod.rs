@@ -58,6 +58,10 @@ pub enum EngineCommand {
     SaveNow,
     /// Reconnect to Resolume: a fresh composition and subscriptions (menu "Reload composition").
     ReloadComposition,
+    /// The clock input now listens to this MIDI port (Preferences); `None` = no clock input.
+    ClockPortChanged {
+        port: Option<String>,
+    },
 }
 
 /// Results from worker tasks.
@@ -724,6 +728,16 @@ impl Engine {
                         }
                     });
                 }
+            }
+            EngineCommand::ClockPortChanged { port } => {
+                self.clock_connected = false;
+                self.clock_running = false;
+                self.tempo = TempoEstimator::new();
+                self.notice(match &port {
+                    Some(p) => format!("MIDI clock: listening on \"{p}\""),
+                    None => "MIDI clock: no port selected".to_owned(),
+                });
+                self.clock_port = port;
             }
             EngineCommand::ReloadComposition => {
                 self.notice("reloading the composition from Resolume");

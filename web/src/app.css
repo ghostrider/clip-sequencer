@@ -22,6 +22,7 @@ button, input, select { font: inherit; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; font: 12px var(--mono); }
 .chip { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--ok-line); background: var(--ok-bg); color: var(--ok-text); }
 .chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.chip-btn { font: inherit; cursor: pointer; }
 .chip.bad { border-color: var(--err-line); background: var(--err-bg); color: var(--err-text); }
 .chip.bad::before { background: var(--err); }
 

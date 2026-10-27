@@ -1081,3 +1081,92 @@ async fn ui_shell_actions_reach_the_desktop_shell() {
     );
     app.shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn preferences_switch_and_save_the_midi_clock_port() {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::Message;
+    const PORT: &str = "No Such MIDI Port (test)";
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::None, // a real (switchable) MIDI input, none selected yet
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let ports: serde_json::Value = reqwest::get(format!("http://{ui}/api/midi/ports"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        ports["ports"].is_array() && ports["selected"].is_null(),
+        "{ports}"
+    );
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        json!({"cmd": "set_midi_port", "port": PORT}).to_string(),
+    ))
+    .await
+    .unwrap();
+    let mut rt = app.outputs.runtime.clone();
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        rt.wait_for(|r| r.clock.port.as_deref() == Some(PORT) && !r.clock.connected),
+    )
+    .await
+    .expect("the engine follows the new port")
+    .unwrap();
+    assert_eq!(
+        seq_app::settings::Settings::load(dir.path())
+            .midi_port
+            .as_deref(),
+        Some(PORT),
+        "saved for the next start"
+    );
+    app.shutdown().await;
+
+    // The next start without --midi-port uses the saved port.
+    let config = seq_app::config::Config::parse_from([
+        "seq-app".to_owned(),
+        "--rest-port".into(),
+        mock.rest_addr.port().to_string(),
+        "--osc-port".into(),
+        mock.osc_addr.port().to_string(),
+        "--ui-port".into(),
+        "0".into(),
+        "--data-dir".into(),
+        dir.path().display().to_string(),
+    ]);
+    let (progress, mut steps_rx) = mpsc::unbounded_channel();
+    let token = tokio_util::sync::CancellationToken::new();
+    let running = seq_app::runner::run(config, token.clone(), None, Some(progress))
+        .await
+        .unwrap();
+    let mut texts = Vec::new();
+    while let Some(s) = steps_rx.recv().await {
+        texts.push(s.text);
+    }
+    assert!(
+        texts
+            .iter()
+            .any(|t| t == &format!("Opening MIDI clock input \"{PORT}\"")),
+        "{texts:?}"
+    );
+    token.cancel();
+    let _ = running.done.await;
+}

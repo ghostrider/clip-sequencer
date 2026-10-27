@@ -173,7 +173,8 @@ export type Command =
   | { cmd: 'push_thumbnail'; seq: Uuid }
   | { cmd: 'shell'; action: ShellAction }
   | { cmd: 'log_subscribe' }
-  | { cmd: 'log_unsubscribe' };
+  | { cmd: 'log_unsubscribe' }
+  | { cmd: 'set_midi_port'; port: string | null };
 
 /** Window actions for the desktop shell (ignored in a browser). */
 export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs';

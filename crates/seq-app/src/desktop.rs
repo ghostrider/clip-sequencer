@@ -533,6 +533,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&item("reload", "Reload composition")?)
         .item(&item("save", "Save now")?)
         .item(&item("data", "Open data folder")?)
+        .item(&item("prefs", "Preferences…")?)
         .separator()
         .item(&item_key("quit", "Quit", "CmdOrCtrl+Q")?)
         .build()?;
@@ -571,6 +572,11 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
         "zoom_in" => zoom(app, Some(ZOOM_STEP)),
         "zoom_out" => zoom(app, Some(-ZOOM_STEP)),
         "zoom_reset" => zoom(app, None),
+        "prefs" => {
+            if let Some(window) = app.get_webview_window(MAIN) {
+                let _ = window.eval("window.__seqOpenPrefs && window.__seqOpenPrefs()");
+            }
+        }
         "console" => {
             // The tab lives in the page; Ctrl+1 / Ctrl+2 switch it there too.
             if let Some(window) = app.get_webview_window(MAIN) {
@@ -625,5 +631,6 @@ Alt+drag\tduplicate a step
 Ctrl+wheel\tzoom the lane grid
 
 Ctrl+1 / Ctrl+2\tSequencer / Console tab
+Ctrl+,\tPreferences
 Ctrl+= / Ctrl+- / Ctrl+0\tzoom the window
 Ctrl+Q\tquit";

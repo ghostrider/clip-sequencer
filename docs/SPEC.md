@@ -326,6 +326,9 @@ last WebSocket confirmation, yield and error notices.
     the Console tab; records that did not reach the file or a subscriber).
   - `GET /api/logs/current`: today's log file as a download (the in-memory buffer if there is no file).
   - Log files: `<data-dir>/logs/seq-app-YYYY-MM-DD.log` (UTC day), kept 7 days.
+- Preferences (MIDI clock input): `GET /api/midi/ports` → `{ ports, selected }`; UI → engine
+  `{"cmd": "set_midi_port", "port": "<name>" | null}` switches the clock input at once and saves it in
+  `<data-dir>/settings.json` (`{ "midi_port": ... }`). At startup `--midi-port` wins over the saved port.
 - `GET /api/version`: `{ app, name, version, build, commit, ui_port, desktop }` (`desktop`: running in the
   shell's window). Also used by a second instance to detect a running one (M12 Phase B).
 - Thumbnails: `GET /thumbs/clip/{id}.png`, `GET /thumbs/seq/{uuid}.png`.

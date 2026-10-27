@@ -46,7 +46,8 @@
   </div>
   <div class="spacer"></div>
   <div class="chips">
-    <span class="chip" class:bad={!clockOk} title={rt?.clock.port ?? 'no MIDI port configured'}>{clockText}</span>
+    <button class="chip chip-btn" class:bad={!clockOk} title={(rt?.clock.port ?? 'no MIDI port selected') + ' · click to choose (Ctrl+,)'}
+      onclick={() => (app.prefsOpen = true)}>{clockText}</button>
     <span class="chip" class:bad={!rt?.rest}>REST</span>
     <span class="chip" class:bad={!rt?.ws}>WS</span>
     <span class="chip" class:bad={!rt?.osc}>OSC</span>

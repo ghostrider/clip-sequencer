@@ -34,6 +34,40 @@ pub struct AppConfig {
     pub shell: Option<mpsc::UnboundedSender<crate::server::ShellAction>>,
 }
 
+/// Owns the MIDI clock input and switches it to another port at runtime (Preferences dialog).
+pub struct ClockControl {
+    tx: mpsc::UnboundedSender<ClockEvent>,
+    input: std::sync::Mutex<Option<ClockIn>>,
+    commands: mpsc::UnboundedSender<EngineCommand>,
+    data_dir: std::path::PathBuf,
+}
+
+impl ClockControl {
+    /// Listens to `port` from now on (`None` = no clock input), tells the engine and saves the
+    /// choice in the settings.
+    pub async fn set_port(self: &std::sync::Arc<Self>, port: Option<String>) -> Result<(), String> {
+        let port = port.map(|p| p.trim().to_owned()).filter(|p| !p.is_empty());
+        let this = self.clone();
+        let chosen = port.clone();
+        tokio::task::spawn_blocking(move || {
+            // Dropping the old input joins its thread: keep that off the async workers.
+            let old = this.input.lock().unwrap().take();
+            drop(old);
+            let new = chosen.clone().map(|p| ClockIn::spawn(p, this.tx.clone()));
+            *this.input.lock().unwrap() = new;
+            let mut settings = crate::settings::Settings::load(&this.data_dir);
+            settings.midi_port = chosen;
+            settings.save(&this.data_dir)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("saving the settings failed: {e}"))?;
+        log::info!("MIDI clock port set to {port:?}");
+        let _ = self.commands.send(EngineCommand::ClockPortChanged { port });
+        Ok(())
+    }
+}
+
 pub struct App {
     pub commands: mpsc::UnboundedSender<EngineCommand>,
     pub outputs: Outputs,
@@ -46,7 +80,8 @@ pub struct App {
     shutdown: tokio::sync::oneshot::Sender<()>,
     /// `<data-dir>/runtime.json`, written while the UI server runs.
     runtime_file: Option<std::path::PathBuf>,
-    _clock: Option<ClockIn>,
+    /// The MIDI clock input (`None` with `ClockSource::Channel`).
+    pub clock: Option<std::sync::Arc<ClockControl>>,
 }
 
 impl App {
@@ -87,15 +122,26 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     let ws = ws::spawn(cfg.resolume.ws_url());
     let osc = OscSender::new(&cfg.resolume.osc_target())?;
 
-    let (clock_rx, clock_in, port) = match cfg.clock {
-        ClockSource::Midi(port) => {
-            let (tx, rx) = mpsc::unbounded_channel();
-            (rx, Some(ClockIn::spawn(port.clone(), tx)), Some(port))
-        }
+    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+    let (clock_rx, clock, port) = match cfg.clock {
         ClockSource::Channel(rx) => (rx, None, None),
-        ClockSource::None => {
-            log::warn!("no MIDI clock port configured (--midi-port): sequences will not advance");
-            (mpsc::unbounded_channel().1, None, None)
+        source => {
+            let (tx, rx) = mpsc::unbounded_channel();
+            let port = match source {
+                ClockSource::Midi(port) => Some(port),
+                _ => {
+                    log::warn!("no MIDI clock port selected (Preferences, or --midi-port): sequences will not advance");
+                    None
+                }
+            };
+            let input = port.clone().map(|p| ClockIn::spawn(p, tx.clone()));
+            let control = ClockControl {
+                tx,
+                input: std::sync::Mutex::new(input),
+                commands: cmd_tx.clone(),
+                data_dir: cfg.storage.dir().to_path_buf(),
+            };
+            (rx, Some(std::sync::Arc::new(control)), port)
         }
     };
 
@@ -113,7 +159,6 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         });
     }
 
-    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     let thumbs_dir = cfg.storage.dir().join("thumbs");
     let data_dir = cfg.storage.dir().to_path_buf();
@@ -170,6 +215,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 ui_port: bound.port(),
                 shell: cfg.shell.clone(),
                 thumbs_ready: std::sync::Arc::new(thumbs_ready_tx),
+                clock: clock.clone(),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {
@@ -198,7 +244,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         engine_task,
         saver_task,
         shutdown: shutdown_tx,
-        _clock: clock_in,
+        clock,
     })
 }
 

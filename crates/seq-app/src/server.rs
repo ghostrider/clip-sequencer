@@ -44,6 +44,8 @@ pub struct ServerCtx {
     pub shell: Option<mpsc::UnboundedSender<ShellAction>>,
     /// Set once the first batch of the live deck's thumbnails is cached (startup splash).
     pub thumbs_ready: Arc<watch::Sender<bool>>,
+    /// The MIDI clock input, for the Preferences dialog (`None` in tests with a clock channel).
+    pub clock: Option<Arc<crate::app::ClockControl>>,
 }
 
 /// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
@@ -65,6 +67,7 @@ pub fn router(ctx: ServerCtx) -> Router {
         .route("/ws", get(ws_upgrade))
         .route("/api/version", get(api_version))
         .route("/api/logs/current", get(current_log))
+        .route("/api/midi/ports", get(midi_ports))
         .route("/thumbs/clip/{file}", get(clip_thumb))
         .route("/thumbs/seq/{file}", get(seq_thumb))
         .route("/plugin/v1/view.txt", get(plugin_view))
@@ -123,6 +126,10 @@ enum ClientMsg {
     /// Console tab opened: snapshot, then live records (M12 E).
     LogSubscribe,
     LogUnsubscribe,
+    /// Preferences: listen to this MIDI port (`null` = none); saved in the settings.
+    SetMidiPort {
+        port: Option<String>,
+    },
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<ServerCtx>) -> Response {
@@ -222,6 +229,17 @@ async fn next_log(
     }
 }
 
+/// Preferences: the MIDI inputs on this machine and the port the clock listens to.
+async fn midi_ports(State(ctx): State<ServerCtx>) -> Response {
+    let ports = tokio::task::spawn_blocking(clock_in::list_ports).await;
+    let selected = ctx.runtime.borrow().clock.port.clone();
+    match ports {
+        Ok(Ok(ports)) => axum::Json(json!({"ports": ports, "selected": selected})).into_response(),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 /// "Save log…": today's log file, or the in-memory buffer when there is none.
 async fn current_log() -> Response {
     let file = logging::current_file();
@@ -284,6 +302,25 @@ fn handle(ctx: &ServerCtx, text: &str) {
             return;
         }
         ClientMsg::LogSubscribe | ClientMsg::LogUnsubscribe => return, // per session, above
+        ClientMsg::SetMidiPort { port } => {
+            let commands = ctx.commands.clone();
+            match ctx.clock.clone() {
+                Some(clock) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = clock.set_port(port).await {
+                            let _ =
+                                commands.send(EngineCommand::Notice(format!("MIDI clock: {e}")));
+                        }
+                    });
+                }
+                None => {
+                    let _ = commands.send(EngineCommand::Notice(
+                        "MIDI clock: this app has no MIDI input to change".into(),
+                    ));
+                }
+            }
+            return;
+        }
     };
     let _ = ctx.commands.send(engine_cmd);
 }

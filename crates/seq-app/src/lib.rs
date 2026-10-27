@@ -13,6 +13,7 @@ pub mod plugin_view;
 pub mod runner;
 pub mod saver;
 pub mod server;
+pub mod settings;
 pub mod storage;
 pub mod thumbs;
 pub mod ui_port;

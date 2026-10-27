@@ -8,6 +8,7 @@
   import StatusBar from './components/StatusBar.svelte';
   import SwitchModal from './components/SwitchModal.svelte';
   import Console from './components/Console.svelte';
+  import PreferencesDialog from './components/PreferencesDialog.svelte';
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -26,6 +27,12 @@
       app.setTab(e.key === '1' ? 'sequencer' : 'console');
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === ',') {
+      e.preventDefault();
+      app.prefsOpen = true;
+      return;
+    }
+    if (app.prefsOpen) return; // the dialog handles its own keys
     if (app.tab !== 'sequencer') return; // editor shortcuts only in the editor
     const t = e.target as HTMLElement;
     if (t.closest('input, select, textarea, [contenteditable]')) return;
@@ -80,3 +87,4 @@
   <StatusBar />
 </div>
 <SwitchModal />
+<PreferencesDialog />

@@ -46,6 +46,9 @@ Both contain the UI; no other files are needed to run them.
 release\seq-app-cli.exe --midi-port "Clock Shifter Out"
 ```
 
+In the desktop app (`release\seq-app.exe`), pick the MIDI clock input under File → Preferences… (or click
+the CLOCK chip, Ctrl+,); it is saved and used on every start. `--midi-port` overrides it for one run.
+
 Then open **http://127.0.0.1:8090** (the console shows the actual address if 8090 was taken; Ctrl+C
 stops the sequencer).
 

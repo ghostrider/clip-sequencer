@@ -111,6 +111,11 @@ pub async fn run(
         path: data_dir.display().to_string(),
         reason: e.to_string(),
     })?;
+    // The MIDI port: --midi-port for this run, else the one picked in Preferences.
+    let midi_port = config
+        .midi_port
+        .clone()
+        .or_else(|| crate::settings::Settings::load(&data_dir).midi_port);
     let storage = Storage::new(data_dir);
     log::info!("sequence files in {}", storage.dir().display());
 
@@ -152,7 +157,7 @@ pub async fn run(
             seq_prefix: config.seq_prefix.clone(),
             ..EngineConfig::default()
         },
-        clock: match &config.midi_port {
+        clock: match &midi_port {
             Some(p) => app::ClockSource::Midi(p.clone()),
             None => app::ClockSource::None,
         },
@@ -164,7 +169,7 @@ pub async fn run(
     let mut structure = app.outputs.structure.clone();
 
     // 3. MIDI clock.
-    match &config.midi_port {
+    match &midi_port {
         Some(name) => {
             report(
                 &progress,
@@ -184,7 +189,7 @@ pub async fn run(
         None => report(
             &progress,
             3,
-            "No MIDI clock port configured (--midi-port): sequences will not advance",
+            "No MIDI clock port selected (Preferences, or --midi-port): sequences will not advance",
             true,
         ),
     }
