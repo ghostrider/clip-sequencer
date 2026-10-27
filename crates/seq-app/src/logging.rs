@@ -204,6 +204,49 @@ pub fn note_dropped(n: u64) {
     }
 }
 
+/// An error the process may not outlive (a panic, a window that cannot open): kept in the ring
+/// and appended to today's file right away instead of through the writer thread, which a dying
+/// process may not give the time. stderr is left to the caller (the default panic hook prints).
+pub fn error_now(target: &str, message: &str) {
+    let Some(state) = STATE.get() else { return };
+    let rec = LogRecord {
+        seq: state.seq.fetch_add(1, Ordering::Relaxed),
+        ts: utc_iso8601(SystemTime::now(), true),
+        level: "ERROR",
+        target: target.to_owned(),
+        message: message.to_owned(),
+    };
+    state.errors.fetch_add(1, Ordering::Relaxed);
+    {
+        let mut ring = state.ring.lock().unwrap_or_else(|e| e.into_inner());
+        if ring.len() == RING {
+            ring.pop_front();
+        }
+        ring.push_back(rec.clone());
+    }
+    let _ = state.live.send(rec.clone());
+    if let Some(path) = current_file() {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{}", rec.line());
+        }
+    }
+}
+
+/// Panics go to the log file too (the desktop app has no console to print them to).
+pub fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        let name = thread.name().unwrap_or("unnamed");
+        error_now("panic", &format!("thread '{name}' {info}"));
+        default(info);
+    }));
+}
+
 /// `<data-dir>/logs`, if logging to files.
 pub fn logs_dir() -> Option<PathBuf> {
     STATE.get().and_then(|s| s.dir.clone())

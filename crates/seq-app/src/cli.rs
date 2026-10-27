@@ -65,6 +65,7 @@ pub fn main(exe: Exe) -> ExitCode {
         stderr: config.headless || !runs || cfg!(debug_assertions),
         dir: runs.then(|| config.data_dir().join("logs")),
     });
+    crate::logging::log_panics();
     if runs {
         log::info!(
             "{} {} (build {}, {})",
@@ -169,7 +170,7 @@ fn run_headless(config: Config) -> ExitCode {
         );
         let mut done = running.done;
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
+            _ = stop_requested() => {
                 shutdown.cancel();
                 let _ = done.await;
             }
@@ -177,6 +178,27 @@ fn run_headless(config: Config) -> ExitCode {
         }
         ExitCode::SUCCESS
     })
+}
+
+/// Ctrl+C, Ctrl+Break or closing the console window: each ends the sequencer cleanly (sequences
+/// end per `after_last_pass`, `runtime.json` is removed). For a closing window Windows waits
+/// about 5 s (tokio holds its handler); the shutdown takes at most 2 s.
+async fn stop_requested() {
+    #[cfg(windows)]
+    {
+        use tokio::signal::windows::{ctrl_break, ctrl_c, ctrl_close};
+        if let (Ok(mut c), Ok(mut b), Ok(mut x)) = (ctrl_c(), ctrl_break(), ctrl_close()) {
+            let what = tokio::select! {
+                _ = c.recv() => "Ctrl+C",
+                _ = b.recv() => "Ctrl+Break",
+                _ = x.recv() => "console window closed",
+            };
+            log::info!("{what}: stopping");
+            return;
+        }
+    }
+    let _ = tokio::signal::ctrl_c().await;
+    log::info!("Ctrl+C: stopping");
 }
 
 /// A GUI-subsystem exe has no console, so its output would vanish. Attach to the parent's

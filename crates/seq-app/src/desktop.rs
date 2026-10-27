@@ -109,7 +109,7 @@ pub fn run(config: Config) -> ExitCode {
         zoom: Mutex::new(1.0),
         quitting: AtomicBool::new(false),
     };
-    let app = tauri::Builder::default()
+    let built = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -132,14 +132,21 @@ pub fn run(config: Config) -> ExitCode {
         .setup(move |app| {
             // First, so it appears right away; the sequencer starts behind it.
             if !config.no_splash {
-                splash_window(app.handle())?;
+                // Tauri panics on a setup error; the first webview failing (e.g. WebView2
+                // refusing its data folder) must reach the user instead.
+                if let Err(e) = splash_window(app.handle()) {
+                    window_failed(&e.to_string());
+                }
                 log::debug!("desktop: splash window created");
             }
             tauri::async_runtime::spawn(start(app.handle().clone(), config));
             Ok(())
         })
-        .build(tauri::generate_context!())
-        .expect("desktop shell");
+        .build(tauri::generate_context!());
+    let app = match built {
+        Ok(app) => app,
+        Err(e) => window_failed(&e.to_string()),
+    };
     app.run(|app, event| {
         // Closing the last window must go through the shutdown above, not end the process. The
         // only other way to close every window is closing the splash before the main window
@@ -402,34 +409,57 @@ fn focus_running_instance(data_dir: &std::path::Path, url: &str) -> bool {
 
 /// No WebView2, no window at all (not even the splash): say so with a plain Win32 message box and
 /// offer the download page.
-#[cfg(windows)]
 fn webview2_missing() {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONERROR, MB_YESNO};
-    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
-    let text = wide(&format!(
-        "{APP_NAME} needs the Microsoft Edge WebView2 Runtime, which is not installed on this \
-         computer.\n\nInstall it (\"Evergreen\" runtime) and start {APP_NAME} again, or run \
-         seq-app-cli.exe and open its UI in a browser.\n\nOpen the download page now?"
-    ));
-    let title = wide(APP_NAME);
-    // SAFETY: both strings are NUL-terminated UTF-16 and outlive the (modal) call.
-    let answer = unsafe {
-        MessageBoxW(
-            std::ptr::null_mut(),
-            text.as_ptr(),
-            title.as_ptr(),
-            MB_YESNO | MB_ICONERROR,
-        )
-    };
-    if answer == IDYES {
+    let open = message_box(
+        &format!(
+            "{APP_NAME} needs the Microsoft Edge WebView2 Runtime, which is not installed on this \
+             computer.\n\nInstall it (\"Evergreen\" runtime) and start {APP_NAME} again, or run \
+             seq-app-cli.exe and open its UI in a browser.\n\nOpen the download page now?"
+        ),
+        true,
+    );
+    if open {
         if let Err(e) = tauri_plugin_opener::open_url(WEBVIEW2_DOWNLOAD, None::<&str>) {
             log::warn!("could not open {WEBVIEW2_DOWNLOAD}: {e}");
         }
     }
 }
 
+/// The shell could not create its first window (e.g. WebView2 refuses its data folder because
+/// another instance runs with other WebView2 arguments). Nothing has started yet: say so and exit.
+fn window_failed(error: &str) -> ! {
+    let message = format!("{APP_NAME} could not open its window:\n\n{error}");
+    crate::logging::error_now("seq_app::desktop", &message);
+    message_box(&message, false);
+    std::process::exit(1);
+}
+
+/// A plain Win32 error box, for errors before any window exists. With `yes_no`, whether the user
+/// chose Yes.
+#[cfg(windows)]
+fn message_box(text: &str, yes_no: bool) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, IDYES, MB_ICONERROR, MB_OK, MB_YESNO,
+    };
+    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let (text, title) = (wide(text), wide(APP_NAME));
+    let buttons = if yes_no { MB_YESNO } else { MB_OK };
+    // SAFETY: both strings are NUL-terminated UTF-16 and outlive the (modal) call.
+    let answer = unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            buttons | MB_ICONERROR,
+        )
+    };
+    answer == IDYES
+}
+
 #[cfg(not(windows))]
-fn webview2_missing() {}
+fn message_box(_text: &str, _yes_no: bool) -> bool {
+    false
+}
 
 #[cfg(windows)]
 fn focus_process_window(pid: u32) -> bool {
