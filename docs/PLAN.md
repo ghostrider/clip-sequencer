@@ -101,7 +101,7 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 `docs/M11-open-source-release.md` (not the "M11" Sequence plugin above).
 - [x] Phase A decisions (recorded in the M12 doc)
 - [x] Phase B UI port selection and single instance
-- [ ] Phase C in-process runtime
+- [x] Phase C in-process runtime (desktop thread split done with Phase D)
 - [ ] Phase D Tauri shell
 - [ ] Phase D2 splash screen
 - [ ] Phase E log capture and Console tab

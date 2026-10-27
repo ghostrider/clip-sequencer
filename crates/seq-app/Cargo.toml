@@ -23,6 +23,15 @@ log.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-util = "0.7"
+
+[features]
+# The desktop shell (Tauri, M12 Phase D). Without it the binary is headless only.
+default = ["desktop"]
+desktop = []
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
 
 [dev-dependencies]
 futures-util = "0.3"

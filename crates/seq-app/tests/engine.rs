@@ -1,5 +1,6 @@
 //! Engine against the mock Resolume with an injected clock (SPEC §7).
 
+use clap::Parser;
 use std::time::{Duration, Instant};
 
 use clock_in::{ClockEvent, ClockMsg};
@@ -924,4 +925,62 @@ async fn api_version_and_runtime_file_name_the_actual_ui_port() {
         !runtime.exists(),
         "runtime.json is removed on clean shutdown"
     );
+}
+
+#[tokio::test]
+async fn shutdown_ends_running_sequences_per_after_last_pass() {
+    let h = harness().await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B }); // "Loop" on L2, after_last_pass = clear
+    h.runtime(|r| r.running.len() == 1).await;
+    h.osc(1).await;
+    h.mock.clear_osc_log();
+    let Harness { mock, app, .. } = h;
+    let started = Instant::now();
+    app.shutdown().await;
+    assert!(started.elapsed() < Duration::from_secs(2));
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while mock.osc_log().len() < 2 && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let log: Vec<_> = mock
+        .osc_log()
+        .into_iter()
+        .map(|r| (r.addr, r.args))
+        .collect();
+    assert_eq!(log, clear(2).to_vec(), "the owned layer is cleared");
+}
+
+#[tokio::test]
+async fn runner_starts_and_stops_through_its_token() {
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let config = seq_app::config::Config::parse_from([
+        "seq-app".to_owned(),
+        "--rest-port".into(),
+        mock.rest_addr.port().to_string(),
+        "--osc-port".into(),
+        mock.osc_addr.port().to_string(),
+        "--ui-port".into(),
+        "0".into(),
+        "--data-dir".into(),
+        dir.path().display().to_string(),
+    ]);
+    let token = tokio_util::sync::CancellationToken::new();
+    let running = seq_app::runner::run(config, token.clone()).await.unwrap();
+    let v: serde_json::Value = reqwest::get(format!("{}/api/version", running.ui_url))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(v["app"], seq_app::APP_ID);
+    assert!(dir.path().join("runtime.json").exists());
+    let started = Instant::now();
+    token.cancel();
+    tokio::time::timeout(Duration::from_secs(3), running.done)
+        .await
+        .expect("shutdown completes")
+        .unwrap();
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(!dir.path().join("runtime.json").exists());
 }

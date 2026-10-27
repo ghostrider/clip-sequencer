@@ -1,15 +1,20 @@
+// Release builds of the desktop app have no console window; `--headless` attaches to the
+// console of the terminal that started it (see `attach_parent_console`).
+#![cfg_attr(
+    all(not(debug_assertions), feature = "desktop"),
+    windows_subsystem = "windows"
+)]
+
 use std::process::ExitCode;
 
 use clap::Parser;
-use resolume_client::ResolumeAddr;
-use seq_app::app;
 use seq_app::config::Config;
-use seq_app::engine::{EngineCommand, EngineConfig};
-use seq_app::saver::DebounceConfig;
-use seq_app::storage::{load_text, Storage};
-use seq_app::ui_port::{bind_ui, UiBind};
+use seq_app::runner;
+use seq_app::storage::load_text;
+use tokio_util::sync::CancellationToken;
 
 fn main() -> ExitCode {
+    attach_parent_console();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_timestamp_micros()
         .init();
@@ -68,76 +73,60 @@ fn main() -> ExitCode {
         };
     }
 
+    if config.headless || !cfg!(feature = "desktop") {
+        return run_headless(config);
+    }
+    // The desktop shell (Tauri) arrives in M12 Phase D; until then desktop mode runs headless.
+    run_headless(config)
+}
+
+/// Headless mode: console output, UI in a browser, Ctrl+C stops.
+fn run_headless(config: Config) -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    match rt.block_on(run(config)) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{e:#}");
-            ExitCode::FAILURE
+    rt.block_on(async {
+        let shutdown = CancellationToken::new();
+        let running = match runner::run(config, shutdown.clone()).await {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("{e}");
+                eprintln!("{e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        println!(
+            "
+    Sequencer UI:  {}
+",
+            running.ui_url
+        );
+        let mut done = running.done;
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                shutdown.cancel();
+                let _ = done.await;
+            }
+            _ = &mut done => {}
+        }
+        ExitCode::SUCCESS
+    })
+}
+
+/// A GUI-subsystem exe has no console: output started from a terminal would vanish. Attach to
+/// the parent's console unless the standard handles were redirected (pipe, file).
+#[cfg(windows)]
+fn attach_parent_console() {
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, GetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    // SAFETY: plain Win32 calls without pointers.
+    unsafe {
+        let redirected =
+            !GetStdHandle(STD_OUTPUT_HANDLE).is_null() || !GetStdHandle(STD_ERROR_HANDLE).is_null();
+        if !redirected {
+            AttachConsole(ATTACH_PARENT_PROCESS);
         }
     }
 }
 
-async fn run(config: Config) -> anyhow::Result<()> {
-    let storage = Storage::new(config.data_dir());
-    log::info!("sequence files in {}", storage.dir().display());
-    let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
-    let listener = match bind_ui(ip, config.ui_port, config.strict_port).await? {
-        UiBind::Bound { listener, .. } => listener,
-        UiBind::AlreadyRunning { url } => {
-            anyhow::bail!("The sequencer is already running ({url}); not starting a second one")
-        }
-    };
-    let app = app::start(app::AppConfig {
-        resolume: ResolumeAddr {
-            host: config.resolume_host.clone(),
-            rest_port: config.rest_port,
-            osc_port: config.osc_port,
-        },
-        storage,
-        engine: EngineConfig {
-            seq_layer: config.seq_layer.clone(),
-            seq_prefix: config.seq_prefix.clone(),
-            ..EngineConfig::default()
-        },
-        clock: match &config.midi_port {
-            Some(p) => app::ClockSource::Midi(p.clone()),
-            None => app::ClockSource::None,
-        },
-        debounce: DebounceConfig::default(),
-        ui: Some(listener),
-    })?;
-    if let Some(addr) = app.ui_addr {
-        println!(
-            "
-    Sequencer UI:  http://{addr}
-"
-        );
-    }
-    if let Some(name) = &config.start {
-        app.commands
-            .send(EngineCommand::StartByName { name: name.clone() })?;
-    }
-    let mut runtime = app.outputs.runtime.clone();
-    let mut seen_running = false;
-    loop {
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => break,
-            changed = runtime.changed() => {
-                if changed.is_err() {
-                    break;
-                }
-                let state = runtime.borrow_and_update().clone();
-                if !state.running.is_empty() {
-                    seen_running = true;
-                }
-                if config.exit_when_done && seen_running && state.running.is_empty() {
-                    log::info!("no sequence running any more; exiting");
-                    break;
-                }
-            }
-        }
-    }
-    app.shutdown().await;
-    Ok(())
-}
+#[cfg(not(windows))]
+fn attach_parent_console() {}

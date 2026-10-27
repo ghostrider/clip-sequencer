@@ -6,6 +6,7 @@ pub mod clock_debug;
 pub mod config;
 pub mod engine;
 pub mod plugin_view;
+pub mod runner;
 pub mod saver;
 pub mod server;
 pub mod storage;

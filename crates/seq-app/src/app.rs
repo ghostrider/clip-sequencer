@@ -46,17 +46,22 @@ pub struct App {
 }
 
 impl App {
-    /// Stops the engine (no clears) and waits for pending saves.
+    /// Stops the engine (running sequences end per their `after_last_pass`, SPEC §7.4), closes
+    /// the Resolume connections and waits for the pending save.
     pub async fn shutdown(self) {
         let _ = self.shutdown.send(());
         drop(self.commands);
         let _ = self.engine_task.await;
-        let _ = tokio::time::timeout(Duration::from_secs(5), self.saver_task).await;
+        let _ = tokio::time::timeout(SAVE_FLUSH_LIMIT, self.saver_task).await;
         if let Some(path) = self.runtime_file {
             let _ = std::fs::remove_file(path);
         }
     }
 }
+
+/// Shutdown budget (M12 Phase C: the whole shutdown within ~2 s).
+const WS_CLOSE_LIMIT: Duration = Duration::from_millis(300);
+const SAVE_FLUSH_LIMIT: Duration = Duration::from_millis(1500);
 
 pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     let (aux_tx, aux_rx) = mpsc::unbounded_channel();
@@ -130,8 +135,16 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
             },
         )
         .await;
+        // Without commands the WS task sends a Close frame and ends; don't wait for a WS task
+        // that is between reconnect attempts.
         drop(ws.commands);
-        ws.task.abort();
+        let mut ws_task = ws.task;
+        if tokio::time::timeout(WS_CLOSE_LIMIT, &mut ws_task)
+            .await
+            .is_err()
+        {
+            ws_task.abort();
+        }
     });
 
     let ui_addr = match cfg.ui {

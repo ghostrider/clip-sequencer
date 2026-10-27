@@ -1448,7 +1448,8 @@ pub async fn run(mut engine: Engine, mut inputs: Inputs) {
             _ = timer.tick() => engine.on_timer(Instant::now()),
         }
     }
-    let acts = engine.scheduler.stop_all(StopMode::Release);
+    // Shutting down: running sequences end as if stopped (SPEC §7.4: `after_last_pass`).
+    let acts = engine.scheduler.stop_all(StopMode::AfterLastPass);
     engine.execute(acts);
     engine.on_timer(Instant::now());
 }

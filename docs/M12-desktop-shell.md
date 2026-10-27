@@ -76,20 +76,26 @@ drive the same Resolume at the same time.
 
 ## Phase C — In-process runtime
 
-- [ ] Refactor `seq-app` so that startup (config, storage, engine, axum server) is a library
+- [x] Refactor `seq-app` so that startup (config, storage, engine, axum server) is a library
       function: `async fn run(config, shutdown: CancellationToken) -> Result<RunningApp>`, where
-      `RunningApp` exposes the actual UI URL and a join handle.
-- [ ] `main` decides the mode:
+      `RunningApp` exposes the actual UI URL and a join handle. *(`seq_app::runner`; `RunningApp` also carries the
+      engine command sender and the state watches, which the shell needs for close confirmation.)*
+- [x] `main` decides the mode:
   - `--headless` → current behaviour: run on the tokio runtime, Ctrl+C triggers shutdown
-  - default → desktop mode (Phase D)
-- [ ] The engine never runs on the UI/main thread. In desktop mode the tokio runtime runs on its own
+  - default → desktop mode (Phase D) *(until Phase D, desktop mode runs headless; a build without the `desktop`
+    feature is always headless)*
+- [ ] The engine never runs on the UI/main thread. *(`run()` is async on its own tokio runtime; the desktop
+      thread split is done with the shell in Phase D.)* In desktop mode the tokio runtime runs on its own
       thread(s), and the Tauri event loop owns the main thread.
-- [ ] **Graceful shutdown** for both modes: stop all sequences (apply `after_last_pass` / clear owned
+- [x] **Graceful shutdown** for both modes: stop all sequences (apply `after_last_pass` / clear owned
       layers per SPEC §7.4), flush the pending save, close the WebSocket and OSC, delete `runtime.json`,
-      and exit within ~2 s.
-- [ ] `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` hides the console window
+      and exit within ~2 s. *(Tested: shutdown with a running sequence sends its clears; runner shutdown via the
+      token < 2 s and removes `runtime.json`.)*
+- [x] `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` hides the console window
       in release builds. In `--headless` mode on Windows, attach to the parent console
       (`AttachConsole(ATTACH_PARENT_PROCESS)`) so output still appears when started from a terminal.
+      *(Only with the `desktop` feature; the attach happens unless stdout/stderr are redirected. Release exe
+      checked: PE subsystem GUI. Output in a real terminal window still to be checked by Uli.)*
 
 ## Phase D — Tauri shell
 

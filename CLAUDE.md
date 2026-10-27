@@ -76,5 +76,9 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - Long-run test: `cargo run --release -p seq-app --example soak -- "Default App Loopback (B)" <minutes>`
   (with clock_gen running)
 - Run: `cargo run -p seq-app -- --midi-port "Clock Shifter" --resolume-host 127.0.0.1`
+  (`--headless`: no window, UI in a browser; the default desktop mode needs the `desktop` feature, M12. Release
+  builds have no console window; `--headless` attaches to the terminal it was started from. The UI port falls
+  back from `--ui-port` (8090) to the next 9 ports, then an OS-assigned one; `--strict-port` disables that.)
+- Headless-only build without the desktop shell: `cargo build -p seq-app --no-default-features`
 
 Run tests, clippy and fmt before declaring a milestone done.
