@@ -1,6 +1,6 @@
 # SeqView – "1000A Sequence" (FFGL source plugin)
 
-Shows a sequence of the Resolume Clip Sequencer (`../../resolume-sequencer`, SPEC §12) on the `§` placeholder clips
+Shows a sequence of the Resolume Clip Sequencer (this repository, SPEC §12) on the `§` placeholder clips
 of the SEQ layer, instead of a *Blank* source: sequence name, deck and length, one row per lane (layer name, lane
 state, steps as blocks with clip thumbnails, rests, unresolved steps framed red), and while the sequence runs a
 moving playhead, `bar.beat` and the pass counter. Plugin ID `VJSQ`, FFGL 2.1, type Source.
@@ -29,7 +29,7 @@ Starting and stopping is unchanged: triggering the `§` clip starts the sequence
 ## How it works
 
 - **Data:** a worker thread polls `GET http://<Server>/plugin/v1/view.txt?name=<Sequence>&rev=<layout revision>`
-  every 50 ms (format: `resolume-sequencer/crates/seq-app/src/plugin_view.rs`). The layout is only resent when its
+  every 50 ms (format: `../crates/seq-app/src/plugin_view.rs`). The layout is only resent when its
   revision changes. Clip thumbnails come from `/thumbs/clip/<id>.png?v=<version>` and are decoded (stb_image) on the
   worker. HTTP is WinHTTP (system DLL, nothing to deploy).
 - **Only while rendered:** polling runs between the host's `Connect` and `Disconnect` calls, i.e. while Resolume

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  SeqView FFGL source plugin. Same layout as every other plugin here: lives outside the external/ffgl submodule
-  and pulls the SDK sources in by relative path (same sources, glew.props, FFGLPlugins.def as the SDK's own
+  SeqView FFGL source plugin (resolume-sequencer/ffgl, moved from vj_stuff/ffgl-plugins/seq_view; same layout as
+  the plugins there): lives outside the vj_stuff external/ffgl submodule and pulls the SDK sources in by relative path (same sources, glew.props, FFGLPlugins.def as the SDK's own
   build/windows/*.vcxproj files).
   Build: msbuild SeqView.vcxproj /p:Configuration=Release /p:Platform=x64
   Build + install in one step: build_seqview.ps1

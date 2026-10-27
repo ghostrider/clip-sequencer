@@ -1,0 +1,5 @@
+bin/
+obj/
+*.user
+build_number.txt
+test_output*/

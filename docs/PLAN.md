@@ -90,7 +90,7 @@ Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, c
       `/plugin/v1/runtime?name=` (running, pos, pass, bar.beat); auto-set the plugin's `Sequence`
       parameter on `§` clips; tests against the mock. (Done as one line-based endpoint,
       `/plugin/v1/view.txt`, format in crates/seq-app/src/plugin_view.rs.)
-- [ ] M11c plugin `ffgl-plugins/seq_view/`: FFGL 2.1 source, unique 4-char ID, worker thread
+- [ ] M11c plugin `ffgl/` (moved from `ffgl-plugins/seq_view/` on 2026-10-27): FFGL 2.1 source, unique 4-char ID, worker thread
       (WinHTTP) polling the sequencer, thumbnails decoded off the render thread (stb_image),
       timeline rendering with playhead; test harness per repo convention (hidden WGL context, real
       FBO, PNG preview); confirmed loading and rendering in Resolume.

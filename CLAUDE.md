@@ -42,6 +42,7 @@ crates/seq-app/         binary: wiring, engine task, storage, thumbnails, axum U
 tools/resolume-probe/   Milestone 0: explores the live API, writes findings
 tools/mock-resolume/    fake REST/WS/OSC server for integration tests
 web/                    Svelte UI
+ffgl/                   "1000A Sequence" FFGL source plugin (C++/MSVC, own build: build_seqview.ps1, SPEC §12)
 docs/                   SPEC.md, PLAN.md, resolume-api-notes.md, samples/
 docs/ui/                editor-mockup.html — the binding UI reference (layout, tokens, states)
 ```
@@ -55,6 +56,11 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - Build: `cargo build --workspace`
 - Test: `cargo test --workspace`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all`
+- FFGL plugin (`ffgl/`, second build system: MSVC, not cargo): build + install
+  `powershell -ExecutionPolicy Bypass -File ffgluild_seqview.ps1` (Resolume closed); tests: build
+  `ffgl	ests\SeqViewTests.vcxproj` (Release x64) and run `ffgl	estsind\Release\SeqViewTests.exe`.
+  It uses the FFGL SDK and stb from the parent `vj_stuff` repo (`../external/ffgl`, `../third_party/stb`).
+  Follow `../ffgl-plugins/AGENTS.md` for plugin work.
 - All checks (fmt, clippy, test): `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` (`-Fix` to format)
 - UI: `cd web && npm install && npm run build` (dev: `npm run dev`, proxies `/ws` and `/thumbs` to the
   app on :8090). Build the UI before `cargo build --release`: release binaries embed `web/dist`.

@@ -208,7 +208,7 @@ the source: the placeholder keeps its transparent `Blank` source and only its gr
 
 ## 11. FFGL source plugins on clips (probed for M11, 2026-10-26)
 
-Probe: `ffgl-plugins/seq_view` stage M11a ("1000A Sequence", ID `VJSQ`), which logs its lifecycle and frames per
+Probe: `ffgl/` (then `ffgl-plugins/seq_view`) stage M11a ("1000A Sequence", ID `VJSQ`), which logs its lifecycle and frames per
 second to Resolume's log (`%LOCALAPPDATA%\Resolume Arena\Resolume Arena log.txt`, lines `FFGL: SeqView#n ...`).
 Composition: `dev`, two `§` clips on the SEQ layer holding the plugin. Capture: `docs/samples/ws-08-plugin-param-set.jsonl`.
 
