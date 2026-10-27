@@ -230,6 +230,9 @@ Each trigger is expected to show up as `connected` on the WebSocket. If it does 
 ~250 ms, the step is marked red in the UI ("not confirmed") and logged. No retry.
 (Observed latency is 3–7 ms on localhost.) Re-triggering a clip that is already connected
 produces no `connected` change, so such a step counts as confirmed immediately.
+A confirmation that arrives after the timeout (seen once at ~700 ms with a busy Resolume) still
+counts as the sequencer's own trigger, up to 5 s or the lane's next trigger: it clears the red mark
+and is logged as late, and it does not yield the lane (§7.3).
 
 ## 8. Thumbnails
 

@@ -83,6 +83,8 @@ pub struct Shared {
     push_delay: Duration,
     push_pending: Arc<Mutex<bool>>,
     ws_silent: bool,
+    /// How long received OSC waits before it takes effect (a Resolume busy loading a clip).
+    osc_delay: Arc<Mutex<Duration>>,
 }
 
 impl Shared {
@@ -145,6 +147,11 @@ impl Mock {
         self.shared.state.lock().unwrap().osc_log.clear();
     }
 
+    /// From now on, OSC takes effect this much later (`ZERO` = at once).
+    pub fn set_osc_delay(&self, delay: Duration) {
+        *self.shared.osc_delay.lock().unwrap() = delay;
+    }
+
     /// Simulates a click on a clip in Resolume's UI.
     pub fn manual_connect(&self, layer: usize, column: usize) {
         self.shared.apply(|s| s.connect(layer, column));
@@ -187,6 +194,7 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
         push_delay: cfg.push_delay,
         push_pending: Arc::new(Mutex::new(false)),
         ws_silent: cfg.ws_silent,
+        osc_delay: Arc::new(Mutex::new(Duration::ZERO)),
     };
 
     let udp = UdpSocket::bind(cfg.osc_addr).await?;
@@ -375,7 +383,16 @@ async fn osc_loop(sock: UdpSocket, sh: Shared) {
                     _ => None,
                 })
                 .collect();
-            sh.apply(|s| s.osc(&m.addr, &ints, at));
+            let delay = *sh.osc_delay.lock().unwrap();
+            if delay.is_zero() {
+                sh.apply(|s| s.osc(&m.addr, &ints, at));
+            } else {
+                let sh = sh.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(delay).await;
+                    sh.apply(|s| s.osc(&m.addr, &ints, at));
+                });
+            }
         }
     }
 }

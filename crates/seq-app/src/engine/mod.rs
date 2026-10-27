@@ -163,6 +163,9 @@ pub struct Engine {
     plugin_sent: HashMap<u64, String>,
     pending: Vec<Pending>,
     not_confirmed: NotConfirmed,
+    /// Triggers past `confirm_timeout`: their `connected` may still come (SPEC §7.5) and must not
+    /// count as a manual trigger. Kept until the lane triggers again, at most `LATE_LIMIT`.
+    late: Vec<Pending>,
     switch: Option<Switch>,
     deferred_start: Option<String>,
 
@@ -194,6 +197,9 @@ const MAX_UNDO: usize = 200;
 const RUNTIME_PERIOD: Duration = Duration::from_millis(33);
 /// Unanswered subscriptions are requested again after this long.
 const RESUBSCRIBE_AFTER: Duration = Duration::from_secs(1);
+/// How long a timed-out trigger's late `connected` still counts as ours (seen live: ~700 ms while
+/// Resolume was busy).
+const LATE_LIMIT: Duration = Duration::from_secs(5);
 
 impl Engine {
     pub fn new(
@@ -231,6 +237,7 @@ impl Engine {
             plugin_sent: HashMap::new(),
             pending: Vec::new(),
             not_confirmed: NotConfirmed::new(),
+            late: Vec::new(),
             switch: None,
             deferred_start: None,
             tempo: TempoEstimator::new(),
@@ -598,6 +605,21 @@ impl Engine {
                 true
             }
         });
+        // Our own trigger, confirmed after its timeout (Resolume was busy): clears the red mark,
+        // and is no manual override.
+        if confirmed.is_empty() {
+            if let Some(i) = self.late.iter().position(|p| p.clip_id == clip_id) {
+                let p = self.late.remove(i);
+                let latency = at.saturating_duration_since(p.sent);
+                log::info!(
+                    "trigger of clip {clip_id} (lane {}, step {}) confirmed late, after {:.0} ms",
+                    p.lane,
+                    p.step,
+                    latency.as_secs_f64() * 1000.0
+                );
+                confirmed.push((p.seq, p.lane, p.step, latency));
+            }
+        }
         for (seq, lane, step, latency) in &confirmed {
             if let Some(v) = self.not_confirmed.get_mut(&(*seq, *lane)) {
                 v.retain(|s| s != step);
@@ -648,7 +670,7 @@ impl Engine {
         }
 
         // Manual override: connected on an owned layer, not triggered by us just now.
-        if before != self.pending.len() {
+        if before != self.pending.len() || !confirmed.is_empty() {
             return;
         }
         let recent = self
@@ -975,6 +997,7 @@ impl Engine {
             // Re-trigger of a playing clip: Resolume reports no change; counts as confirmed.
             return;
         }
+        self.late.retain(|p| (p.seq, p.lane) != (seq, lane));
         self.pending.push(Pending {
             seq,
             lane,
@@ -1134,13 +1157,22 @@ impl Engine {
         let mut late = Vec::new();
         self.pending.retain(|p| {
             if now.saturating_duration_since(p.sent) > timeout {
-                late.push((p.seq, p.lane, p.step, p.clip_id));
+                late.push((p.seq, p.lane, p.step, p.clip_id, p.sent));
                 false
             } else {
                 true
             }
         });
-        for (seq, lane, step, clip_id) in late {
+        self.late
+            .retain(|p| now.saturating_duration_since(p.sent) < LATE_LIMIT);
+        for (seq, lane, step, clip_id, sent) in late {
+            self.late.push(Pending {
+                seq,
+                lane,
+                step,
+                clip_id,
+                sent,
+            });
             log::warn!("trigger of clip {clip_id} (lane {lane}, step {step}) not confirmed");
             self.not_confirmed
                 .entry((seq, lane))

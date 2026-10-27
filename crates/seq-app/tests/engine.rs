@@ -329,6 +329,49 @@ async fn manual_trigger_on_an_owned_layer_yields_the_lane() {
     h.app.shutdown().await;
 }
 
+/// Seen live in M12 Phase G: Resolume confirmed a trigger after ~700 ms. The step is "not
+/// confirmed" at 250 ms, but the late `connected` is still ours, not a manual trigger.
+#[tokio::test]
+async fn a_late_confirmation_does_not_yield_the_lane() {
+    let h = harness().await;
+    h.mock.set_osc_delay(Duration::from_millis(400));
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| {
+        r.running
+            .first()
+            .is_some_and(|s| s.lanes[0].not_confirmed == vec![0])
+    })
+    .await;
+    let r = h
+        .runtime(|r| {
+            r.last_confirm
+                .as_deref()
+                .is_some_and(|c| c.contains("after 4"))
+        })
+        .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let r = {
+        let now = h.app.outputs.runtime.borrow().clone();
+        assert_eq!(now.confirmations, r.confirmations);
+        now
+    };
+    assert_eq!(r.running[0].lanes[0].state, "playing", "{:?}", r.notices);
+    assert!(r.running[0].lanes[0].not_confirmed.is_empty());
+    assert!(
+        !r.notices.iter().any(|n| n.contains("yielded")),
+        "{:?}",
+        r.notices
+    );
+
+    // A real click on the layer still yields it.
+    h.mock.set_osc_delay(Duration::ZERO);
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    h.mock.manual_connect(2, 3);
+    h.runtime(|r| r.running[0].lanes[0].state == "yielded")
+        .await;
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn starting_a_sequence_of_another_deck_switches_first() {
     let h = harness().await;
