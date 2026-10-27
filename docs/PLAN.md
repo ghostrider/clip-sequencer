@@ -96,3 +96,14 @@ Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, c
       FBO, PNG preview); confirmed loading and rendering in Resolume.
 - [ ] Docs: plugin README, sequencer README (setup with the plugin instead of Blank).
 
+## M12 — Desktop shell (Tauri v2)  ⟵ in progress
+Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the open-source release in
+`docs/M11-open-source-release.md` (not the "M11" Sequence plugin above).
+- [x] Phase A decisions (recorded in the M12 doc)
+- [x] Phase B UI port selection and single instance
+- [ ] Phase C in-process runtime
+- [ ] Phase D Tauri shell
+- [ ] Phase D2 splash screen
+- [ ] Phase E log capture and Console tab
+- [ ] Phase F build and packaging (portable exe)
+- [ ] Phase G verification
