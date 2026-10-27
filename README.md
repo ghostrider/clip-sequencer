@@ -158,6 +158,9 @@ Sequences are saved automatically (about 1 s after an edit) to
 - Switching decks in Resolume by hand stops running sequences without clearing anything.
 - A sequence started from its `§` clip clears the SEQ layer when it finishes, so the next click
   starts it again.
+- Start a sequence from one place at a time. Starting it from the UI while its `§` clip is
+  connected restarts it from step 1 as a UI start: clearing the SEQ layer then no longer stops it,
+  and clicking the `§` clip does nothing until the layer is cleared (known limitation, SPEC §7.1).
 
 ## Development
 

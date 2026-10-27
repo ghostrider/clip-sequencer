@@ -189,6 +189,11 @@ automatically. Sequences are grouped by deck name.
   **not** affect it; they apply at the next start (UI shows "edited · applies at next start").
   The next pass of a repeating sequence is not a new start. Starting a running sequence again
   restarts it with a fresh snapshot (layers it no longer uses get its `after_last_pass`).
+  *Known limitation (not fixed for now):* starting the same sequence from both the UI and its `§`
+  clip leaves the two out of step. A UI start while the `§` clip is connected restarts the run as a
+  UI start: clearing the SEQ layer no longer stops it, and clicking the still-connected `§` clip
+  does nothing. Each second start also jumps the sequence back to step 1. Start a sequence from one
+  place at a time. (Possible fix: a start of a running sequence keeps the run and its `§` link.)
 - When a sequence started from its `§` clip **finishes by itself**, the sequencer clears the SEQ
   layer (if that `§` clip is still the connected one), so the next click on it starts it again.
 
