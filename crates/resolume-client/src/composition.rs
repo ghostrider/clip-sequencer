@@ -55,6 +55,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
             name: d.name.value.clone(),
             closed: d.closed,
             select_param: d.selected.id,
+            selected: d.selected.value,
         })
         .collect();
     let live_deck = raw

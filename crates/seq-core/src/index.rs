@@ -23,6 +23,9 @@ pub struct DeckInfo {
     pub closed: bool,
     /// Parameter id of the deck's `selected` flag (WS subscriptions).
     pub select_param: u64,
+    /// The live deck. Tells decks with the same name apart; `live_deck` only holds the name.
+    #[serde(default)]
+    pub selected: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

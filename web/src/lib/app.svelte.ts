@@ -9,13 +9,18 @@ import type {
 export const EIGHTHS_PER_BAR = 8;
 export const TICKS_PER_EIGHTH = 12;
 
+/** Identifies a deck tab: its position (deck names need not be unique), or the name of an orphaned deck. */
+export function deckKey(d: DeckView): string {
+  return d.index !== null ? `#${d.index}` : `name:${d.name}`;
+}
+
 class AppState {
   structure = $state<StructureState | null>(null);
   runtime = $state<RuntimeState | null>(null);
   connected = $state(false);
 
-  /** Deck tab being shown; `null` = follow the live deck. */
-  viewDeckName = $state<string | null>(null);
+  /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
+  viewDeckKey = $state<string | null>(null);
   selectedSeq = $state<Uuid | null>(null);
   selectedStep = $state<{ lane: number; index: number } | null>(null);
   /** Pixels per eighth in the lane grid. */
@@ -59,8 +64,13 @@ class AppState {
   }
 
   get viewDeck(): DeckView | null {
-    const name = this.viewDeckName ?? this.structure?.live_deck ?? null;
-    return this.decks.find((d) => d.name === name) ?? this.decks[0] ?? null;
+    const key = this.viewDeckKey;
+    return (
+      (key !== null ? this.decks.find((d) => deckKey(d) === key) : undefined) ??
+      this.decks.find((d) => d.live) ??
+      this.decks[0] ??
+      null
+    );
   }
 
   get selected(): SequenceView | null {

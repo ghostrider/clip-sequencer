@@ -87,6 +87,8 @@ export interface DeckView {
   index: number | null;
   live: boolean;
   orphaned: boolean;
+  /** Several Resolume decks have this name; they share one set of sequences. */
+  ambiguous: boolean;
   clips_source: 'live' | 'cached' | 'none';
   layers: LayerView[];
   sequences: SequenceView[];

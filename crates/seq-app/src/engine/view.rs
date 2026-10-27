@@ -36,6 +36,9 @@ pub struct DeckView {
     pub live: bool,
     /// The deck exists in the file but not in Resolume.
     pub orphaned: bool,
+    /// Several Resolume decks carry this name. Sequences are stored per deck name, so they all
+    /// share one set; the UI asks to rename them.
+    pub ambiguous: bool,
     /// Clip data: live, cached from the last time the deck was live, or none.
     pub clips_source: ClipsSource,
     pub layers: Vec<LayerView>,

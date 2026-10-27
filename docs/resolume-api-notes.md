@@ -139,6 +139,9 @@ lost: of ~350, about 100 got neither `parameter_subscribed` nor an error, and Re
 missing subscribes again 1 s later is answered normally. The sequencer re-sends unanswered subscriptions every
 second (`engine::RESUBSCRIBE_AFTER`).
 
+Deck names need not be unique: `show-b` has two decks named `opening`. The selected one is the deck
+whose `selected.value` is `true`.
+
 ### 5.4 Consequences for the design
 - Subscribe **by parameter id**, taken from the composition, and match updates by `id`.
 - Composition pushes are frequent and large: parse them off the engine task. Rebuild the clip

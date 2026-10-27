@@ -811,3 +811,44 @@ async fn seq_plugin_parameter_follows_the_clip_name() {
     wait_value("").await;
     h.app.shutdown().await;
 }
+
+#[tokio::test]
+async fn decks_with_the_same_name_are_flagged_and_only_the_selected_one_is_live() {
+    let h = harness().await;
+    let live = h
+        .structure(|s| s.live_deck.is_some())
+        .await
+        .live_deck
+        .unwrap();
+    h.mock.edit(|v| {
+        let decks = v["decks"].as_array_mut().unwrap();
+        let other = decks
+            .iter_mut()
+            .find(|d| d["selected"]["value"] != true)
+            .unwrap();
+        other["name"]["value"] = live.clone().into();
+    });
+    let s = h
+        .structure(|s| s.decks.iter().filter(|d| d.name == live).count() == 2)
+        .await;
+    let same: Vec<_> = s.decks.iter().filter(|d| d.name == live).collect();
+    assert!(same.iter().all(|d| d.ambiguous));
+    assert_eq!(same.iter().filter(|d| d.live).count(), 1);
+    let selected = h.mock.shared.state.lock().unwrap().comp["decks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|d| d["selected"]["value"] == true)
+        .unwrap()
+        + 1;
+    assert_eq!(same.iter().find(|d| d.live).unwrap().index, Some(selected));
+    // The other one must not show the live deck's clips through the per-name cache.
+    let other = same.iter().find(|d| !d.live).unwrap();
+    assert_eq!(other.clips_source, seq_app::engine::view::ClipsSource::None);
+    assert!(s
+        .decks
+        .iter()
+        .filter(|d| d.name != live)
+        .all(|d| !d.ambiguous));
+    h.app.shutdown().await;
+}

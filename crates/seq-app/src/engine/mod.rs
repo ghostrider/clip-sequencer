@@ -1208,6 +1208,7 @@ impl Engine {
         let resolume_decks: Vec<(String, usize)> = index
             .map(|i| i.decks.iter().map(|d| (d.name.clone(), d.index)).collect())
             .unwrap_or_default();
+        let live_index = index.and_then(|i| i.decks.iter().find(|d| d.selected).map(|d| d.index));
         let mut names: Vec<(String, Option<usize>)> = resolume_decks
             .iter()
             .map(|(n, i)| (n.clone(), Some(*i)))
@@ -1220,9 +1221,16 @@ impl Engine {
             }
         }
         for (name, deck_index) in names {
-            let live = index.and_then(|i| i.live_deck.as_deref()) == Some(name.as_str());
+            let ambiguous = resolume_decks.iter().filter(|(n, _)| *n == name).count() > 1;
+            let live = match live_index {
+                // Decks with the same name: only the selected one is live.
+                Some(li) => deck_index == Some(li),
+                None => index.and_then(|i| i.live_deck.as_deref()) == Some(name.as_str()),
+            };
             let deck_idx = if live {
                 index
+            } else if ambiguous {
+                None // the cache is per name: it may hold the other deck's clips
             } else {
                 self.deck_cache.get(&name)
             };
@@ -1262,6 +1270,7 @@ impl Engine {
                 .collect();
             decks.push(DeckView {
                 orphaned: deck_index.is_none(),
+                ambiguous,
                 index: deck_index,
                 live,
                 clips_source,

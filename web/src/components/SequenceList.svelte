@@ -7,7 +7,7 @@
   let renaming = $state<string | null>(null);
   let renameText = $state('');
   let confirmDelete = $state<SequenceView | null>(null);
-  let resolumeDecks = $derived(app.decks.filter((d) => !d.orphaned).map((d) => d.name));
+  let resolumeDecks = $derived([...new Set(app.decks.filter((d) => !d.orphaned).map((d) => d.name))]);
 
   function bars(v: SequenceView) {
     const b = v.pass_eighths / EIGHTHS_PER_BAR;
