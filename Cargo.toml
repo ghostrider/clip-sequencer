@@ -13,6 +13,14 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+authors = ["Ulrich Staudinger"]
+repository = "https://github.com/ghostrider/clip-sequencer"
+homepage = "https://ghostrider.github.io/clip-sequencer/"
+description = "Clip Sequencer for Resolume: plays multi-layer clip sequences in Resolume Arena, synced to MIDI clock"
+readme = "README.md"
+keywords = ["resolume", "vj", "sequencer", "midi-clock", "osc"]
+categories = ["multimedia::video"]
+publish = false
 
 [workspace.dependencies]
 seq-core = { path = "crates/seq-core" }

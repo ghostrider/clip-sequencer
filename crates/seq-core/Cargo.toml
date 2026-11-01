@@ -3,6 +3,11 @@ name = "seq-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+publish.workspace = true
 description = "Pure sequencer core: data model, file format, validation (no IO, no async, no clock)"
 
 [dependencies]
