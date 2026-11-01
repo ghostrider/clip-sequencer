@@ -1,0 +1,21 @@
+# cargo-about configuration (M11 Phase D). scripts/third-party-licenses.mjs runs
+# `cargo about generate --format json` and renders THIRD_PARTY_LICENSES.md from it.
+# Same license policy as deny.toml.
+targets = ["x86_64-pc-windows-msvc"]
+accepted = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+
+[private]
+ignore = true

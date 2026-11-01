@@ -26,5 +26,11 @@ if ($Fix) {
 }
 Invoke-Step 'clippy' @('clippy', '--workspace', '--all-targets', '--', '-D', 'warnings')
 Invoke-Step 'test' @('test', '--workspace')
+# License policy and advisories (deny.toml); CI runs the same check.
+if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
+    Invoke-Step 'deny' @('deny', 'check', 'licenses', 'bans', 'advisories', 'sources')
+} else {
+    Write-Host 'skipped: cargo deny (install: cargo install --locked cargo-deny)' -ForegroundColor Yellow
+}
 
 Write-Host 'All checks passed.' -ForegroundColor Green

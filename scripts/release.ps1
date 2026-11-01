@@ -3,6 +3,7 @@
 # release\clip-sequencer-<version>-windows-x64.zip (+ .sha256).
 # The binary embeds web\dist, so the UI must be built first. No installer (M12 decision: portable
 # only); the exe needs the WebView2 Runtime, which ships with Windows 11.
+# Needs cargo-about for the third-party notices: cargo install --locked cargo-about --features cli
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 
 $ErrorActionPreference = 'Stop'
@@ -31,10 +32,13 @@ Write-Host "==> $name.zip" -ForegroundColor Cyan
 $stage = Join-Path release $name
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage | Out-Null
-Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md $stage
-foreach ($f in 'LICENSE', 'THIRD_PARTY_LICENSES.txt', 'CHANGELOG.md') {
-    if (Test-Path $f) { Copy-Item $f $stage }
-}
+# Third-party notices (Rust crates via cargo-about, web/dist/third-party-licenses.json, fonts, FFGL deps)
+Write-Host '==> THIRD_PARTY_LICENSES.md' -ForegroundColor Cyan
+& node scripts\third-party-licenses.mjs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.md, OFL.txt $stage
+if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md $stage }
 $zip = Join-Path release "$name.zip"
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
