@@ -110,26 +110,48 @@ message, author data). Found and rewritten with `git filter-repo` in all history
 
 ## Phase D — License files and third-party notices
 
-- [ ] `LICENSE` in the repo root: standard MIT text, with the copyright line from Phase A.
-- [ ] `Cargo.toml`: `license = "MIT"`, `repository`, `description`, `authors`,
+- [x] `LICENSE` in the repo root: standard MIT text, with the copyright line from Phase A.
+- [x] `Cargo.toml`: `license = "MIT"`, `repository`, `description`, `authors`,
       `readme`, `keywords`, `categories` in `[workspace.package]`. All crates inherit them.
       Internal crates and tools get `publish = false`.
-- [ ] **Rust third-party notices:** add `cargo-about` with an `about.toml` and template that
+- [x] **Rust third-party notices:** add `cargo-about` with an `about.toml` and template that
       generates `THIRD_PARTY_LICENSES.md` (or `.html`) from the dependency tree.
-- [ ] **Web UI third-party notices:** add `rollup-plugin-license` (Vite) so the build emits
+- [x] **Web UI third-party notices:** add `rollup-plugin-license` (Vite) so the build emits
       the npm dependency licenses. Merge them into the same third-party file, or a second section of it.
-- [ ] **License policy in CI:** add `cargo-deny` with `deny.toml`. Allow MIT, Apache-2.0,
+- [x] **License policy in CI:** add `cargo-deny` with `deny.toml`. Allow MIT, Apache-2.0,
       BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0 (file-level). Deny GPL/AGPL/LGPL and unknown
       licenses. Also enable the advisories check. Report any dependency that fails.
-- [ ] **Fonts:** stop loading IBM Plex from Google Fonts. Bundle the woff2 files in
+- [x] **Fonts:** stop loading IBM Plex from Google Fonts. Bundle the woff2 files in
       `web/src/assets/fonts/` (the UI must work offline at venues). Add `OFL.txt` (SIL Open
       Font License 1.1) next to them, and list IBM Plex in the third-party notices.
-- [ ] **FFGL SDK and plugin dependencies:** record the license of the FFGL SDK (Resolume's `ffgl`
+- [x] **FFGL SDK and plugin dependencies:** record the license of the FFGL SDK (Resolume's `ffgl`
       repository) **[verify the exact license text from the SDK repo]** and of any other library the plugin
       links or vendors (e.g. GLEW, GLM). Add them to the third-party notices, and include their license texts in
       the release. If the SDK is vendored as a git submodule, pin it to a commit.
 - [ ] Optional: SPDX header `// SPDX-License-Identifier: MIT` at the top of source files.
       Ask Uli first.
+
+*(2026-11-01, done:*
+- *`LICENSE` (MIT, Ulrich Staudinger); `[workspace.package]` has authors, repository, homepage, description, readme,
+  keywords, categories and `publish = false` (nothing goes to crates.io), inherited by all crates; `web/package.json`
+  is `clip-sequencer-ui`, MIT.*
+- *Notices: `scripts/third-party-licenses.mjs` writes `THIRD_PARTY_LICENSES.md` (zip) and `.json` (Phase F dialog)
+  from `cargo about generate --format json` (`about.toml`: Windows x64 target, no dev/build dependencies, own crates
+  skipped) plus `web/dist/third-party-licenses.json` (`rollup-plugin-license` in `vite.config.ts`; it works with
+  Vite 8 / Rolldown for JS modules: svelte, clsx) plus fixed entries for IBM Plex, FFGL SDK, GLEW, stb. One file
+  instead of merging: 326 components, 155 distinct texts. It also notes the WebView2 Runtime (used from Windows, not
+  shipped: portable zip, no bootstrapper). `release.ps1` generates it; the generated files are git-ignored.*
+- *`deny.toml`: the allow-list above, Windows x64 target, all features; `cargo deny check licenses bans advisories
+  sources` passes (only duplicate-version warnings, normal for Tauri). No dependency fails. `check.ps1` runs it if
+  installed; CI (Phase I) will run `cargo-deny-action`.*
+- *Fonts: the UI already bundled IBM Plex through `@fontsource/ibm-plex-sans`/`-mono` (woff2 in `web/dist`, no Google
+  Fonts request), which replaces copying woff2 files into `web/src/assets/fonts/`. The splash page gets latin-subset
+  copies in `crates/seq-app/shell/fonts/` with `OFL.txt`; `OFL.txt` is also in the repo root. Only
+  `docs/ui/editor-mockup.html` (a design reference, not shipped or published) still links Google Fonts.*
+- *FFGL: SDK is BSD-3-Clause (Copyright 2023 FreeFrame, `external/ffgl/LICENSE.md`, verified), pinned submodule
+  `5b6e078`; the plugin also links GLEW 2.1.0 statically (`glew32s.lib` from the SDK: modified BSD + MIT) and uses
+  stb_image 2.30 / stb_truetype 1.26 (MIT or public domain). WinHTTP and OpenGL32 are Windows system DLLs.)*
+
 
 ## Phase E — Versioning and build info
 
