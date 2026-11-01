@@ -10,7 +10,7 @@
 #include "SeqViewRender.h"
 
 // SeqView ("1000A Sequence"): FFGL source that shows a sequence of the Resolume Clip Sequencer
-// (vj_stuff/resolume-sequencer, SPEC §12) on the `§` placeholder clips: name, lanes with clip thumbnails, the
+// (this repository, SPEC §12) on the `§` placeholder clips: name, lanes with clip thumbnails, the
 // playhead, bar.beat and pass while it runs. The sequencer sets the `Sequence` parameter by itself.
 //
 // Threading model:

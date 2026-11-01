@@ -23,7 +23,7 @@ static CFFGLPluginInfo PluginInfo(
 	0,                                                                       // Plugin minor version number
 	FF_SOURCE,                                                               // Plugin type
 	"Shows a sequence of the Resolume Clip Sequencer (placeholder for § clips)", // Description
-	"vj_stuff SeqView, " SQV_STR( SEQVIEW_BUILD_NUMBER ) " (" SEQVIEW_BUILD_DATE ")" // About
+	"Clip Sequencer SeqView, " SQV_STR( SEQVIEW_BUILD_NUMBER ) " (" SEQVIEW_BUILD_DATE ")" // About
 );
 
 static std::atomic< int > g_instances{ 0 };

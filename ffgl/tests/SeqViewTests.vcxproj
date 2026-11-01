@@ -29,8 +29,8 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SeqViewTests</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <FFGLRoot>$(MSBuildThisFileDirectory)..\..\..\external\ffgl\</FFGLRoot>
-    <StbRoot>$(MSBuildThisFileDirectory)..\..\..\third_party\stb\</StbRoot>
+    <FFGLRoot>$(MSBuildThisFileDirectory)..\..\external\ffgl\</FFGLRoot>
+    <StbRoot>$(MSBuildThisFileDirectory)..\..\third_party\stb\</StbRoot>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">

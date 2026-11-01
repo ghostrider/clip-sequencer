@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  SeqView FFGL source plugin (resolume-sequencer/ffgl, moved from vj_stuff/ffgl-plugins/seq_view; same layout as
-  the plugins there): lives outside the vj_stuff external/ffgl submodule and pulls the SDK sources in by relative path (same sources, glew.props, FFGLPlugins.def as the SDK's own
-  build/windows/*.vcxproj files).
+  SeqView FFGL source plugin (ffgl/): lives outside the FFGL SDK submodule (external/ffgl, pinned) and pulls the
+  SDK sources in by relative path (same sources, glew.props, FFGLPlugins.def as the SDK's own
+  build/windows/*.vcxproj files). stb headers: third_party/stb.
   Build: msbuild SeqView.vcxproj /p:Configuration=Release /p:Platform=x64
   Build + install in one step: build_seqview.ps1
 -->
@@ -22,8 +22,8 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SeqView</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <FFGLRoot>$(MSBuildThisFileDirectory)..\..\external\ffgl\</FFGLRoot>
-    <StbRoot>$(MSBuildThisFileDirectory)..\..\third_party\stb\</StbRoot>
+    <FFGLRoot>$(MSBuildThisFileDirectory)..\external\ffgl\</FFGLRoot>
+    <StbRoot>$(MSBuildThisFileDirectory)..\third_party\stb\</StbRoot>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">

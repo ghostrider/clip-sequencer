@@ -43,6 +43,8 @@ tools/resolume-probe/   Milestone 0: explores the live API, writes findings
 tools/mock-resolume/    fake REST/WS/OSC server for integration tests
 web/                    Svelte UI
 ffgl/                   "1000A Sequence" FFGL source plugin (C++/MSVC, own build: build_seqview.ps1, SPEC §12)
+external/ffgl/          FFGL SDK (git submodule, pinned commit)
+third_party/stb/        stb_image.h, stb_truetype.h (vendored; MIT / public domain)
 docs/                   SPEC.md, PLAN.md, resolume-api-notes.md, samples/
 docs/ui/                editor-mockup.html — the binding UI reference (layout, tokens, states)
 ```
@@ -59,8 +61,9 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - FFGL plugin (`ffgl/`, second build system: MSVC, not cargo): build + install
   `powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1` (Resolume closed); tests: build
   `ffgl\tests\SeqViewTests.vcxproj` (Release x64) and run `ffgl\tests\bin\Release\SeqViewTests.exe`.
-  It uses the FFGL SDK and stb from the parent `vj_stuff` repo (`../external/ffgl`, `../third_party/stb`).
-  Follow `../ffgl-plugins/AGENTS.md` for plugin work.
+  It uses the FFGL SDK as a pinned git submodule (`external/ffgl`; after cloning run
+  `git submodule update --init`) and the vendored stb headers in `third_party/stb`.
+  Follow `ffgl/AGENTS.md` for plugin work.
 - All checks (fmt, clippy, test): `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` (`-Fix` to format)
 - UI: `cd web && npm install && npm run build` (dev: `npm run dev`, proxies `/ws` and `/thumbs` to the
   app on :8090). Build the UI before `cargo build --release`: release binaries embed `web/dist`.
@@ -93,3 +96,8 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
   `RUST_LOG` filters as before. Use `log::` macros; never log from inside the logger's own send path.
 
 Run tests, clippy and fmt before declaring a milestone done.
+
+## Git
+- Commit messages in English; small commits, one per logical step.
+- Feature branches from AI sessions use the prefix `claude/`.
+- After cloning: `git submodule update --init` (FFGL SDK in `external/ffgl`).

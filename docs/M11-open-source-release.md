@@ -45,19 +45,33 @@ Done when: all eleven are answered and recorded at the bottom of this file under
 
 The sequencer currently lives in `vj_stuff/resolume-sequencer/` inside the `vj_stuff` repo.
 
-- [ ] Extract the subfolder **with its history** into a new local repo, using either
+*(2026-11-01: extracted into `ghostrider/clip-sequencer` (local clone, not pushed). One
+`git filter-repo --path resolume-sequencer/ --path ffgl-plugins/seq_view/ --path-rename resolume-sequencer/:
+--path-rename ffgl-plugins/seq_view/:ffgl/` on a fresh single-branch clone of `claude/resolume-sequencer-m3-m10`
+gave 45 commits, including the plugin's history from before its move. The FFGL SDK is now a submodule
+`external/ffgl` pinned to `5b6e078` (the commit `vj_stuff` uses), and `stb_image.h` / `stb_truetype.h` are vendored
+in `third_party/stb/`. The plugin rules from `vj_stuff/ffgl-plugins/AGENTS.md` are in `ffgl/AGENTS.md`.)*
+
+- [x] Extract the subfolder **with its history** into a new local repo, using either
       `git subtree split --prefix=resolume-sequencer -b sequencer-export` or
       `git filter-repo --subdirectory-filter resolume-sequencer` on a fresh clone.
       Never run filter-repo on the original `vj_stuff` checkout.
 - [ ] Verify that the new repo builds and all tests pass on its own (no paths into `../`).
-- [ ] `CLAUDE.md` in the new repo must not reference the parent `vj_stuff/CLAUDE.md`,
+      *(2026-11-01, Linux container: `npm ci`, `npm run build`, `npm run check` clean; `cargo fmt --check` and
+      `cargo clippy --workspace --all-targets --no-default-features -D warnings` clean; `cargo test --workspace
+      --no-default-features`: 77 passed, 1 failed (`preferences_switch_and_save_the_midi_clock_port`: the container
+      has no ALSA sequencer, so `/api/midi/ports` returns 500; not an extraction issue). Every SDK/stb path in both
+      `.vcxproj` files resolves. Three PNGs were Git LFS pointers (vj_stuff's `.gitattributes`); history was
+      rewritten to hold the real files. Open: on Windows, `scripts\check.ps1` (with the `desktop` feature),
+      `ffgl\build_seqview.ps1` and `ffgl\tests\SeqViewTests.exe` after `git submodule update --init`.)*
+- [x] `CLAUDE.md` in the new repo must not reference the parent `vj_stuff/CLAUDE.md`,
       personal paths, or other projects. Move anything general that it needs from the parent file
       into it.
-- [ ] If Phase A chose (a) for the FFGL plugin: import it into `ffgl/` with its history, the same way
+- [x] If Phase A chose (a) for the FFGL plugin: import it into `ffgl/` with its history, the same way
       (`git subtree split` / `git filter-repo --subdirectory-filter <plugin folder>` on a fresh clone of
       its repo, then `git subtree add --prefix=ffgl` or a merge with `--allow-unrelated-histories`).
       Uli's own plugin install script stays where it is; it isn't part of the release (see Phase G3).
-- [ ] Do **not** push yet (pushing happens in Phase H1).
+- [x] Do **not** push yet (pushing happens in Phase H1).
 
 ## Phase C — Scrub content and history
 
