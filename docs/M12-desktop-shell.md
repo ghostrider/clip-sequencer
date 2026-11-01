@@ -85,8 +85,9 @@ drive the same Resolume at the same time.
   - `--headless` → current behaviour: run on the tokio runtime, Ctrl+C triggers shutdown
   - default → desktop mode (Phase D) *(until Phase D, desktop mode runs headless; a build without the `desktop`
     feature is always headless)*
-- [ ] The engine never runs on the UI/main thread. *(`run()` is async on its own tokio runtime; the desktop
-      thread split is done with the shell in Phase D.)* In desktop mode the tokio runtime runs on its own
+- [x] The engine never runs on the UI/main thread. *(`run()` is async on its own tokio runtime; the desktop
+      thread split is done with the shell in Phase D: `desktop::run` builds a multi-thread runtime
+      (`seq-runtime` threads) and hands it to Tauri.)* In desktop mode the tokio runtime runs on its own
       thread(s), and the Tauri event loop owns the main thread.
 - [x] **Graceful shutdown** for both modes: stop all sequences (apply `after_last_pass` / clear owned
       layers per SPEC §7.4), flush the pending save, close the WebSocket and OSC, delete `runtime.json`,
@@ -266,8 +267,9 @@ The run found three bugs, all fixed (commits `94947a3`, `5659eeb`):*
 - *A failing first window panicked silently.*
 - *`seq-app-cli` died without cleanup on Ctrl+Break or when its console window was closed.*
 
-- [ ] Fresh Windows 11 machine or Windows Sandbox: install via NSIS, start, and the window appears with
-      no console. Repeat with the portable exe. *(Open: Windows Sandbox needs Pro/Enterprise, and this machine
+- [x] Fresh Windows 11 machine or Windows Sandbox: install via NSIS, start, and the window appears with
+      no console. Repeat with the portable exe. *(Done 2026-11-01: the portable zip worked on a new machine
+      (Uli). There is no NSIS installer (portable only, see Decisions). Earlier: Windows Sandbox needs Pro/Enterprise, and this machine
       runs Home. Done instead: the portable zip unzipped into a new folder with an empty data folder. The
       window appears without a console, and the first run works without settings ("No MIDI clock port
       selected" warning). The missing-WebView2 path was simulated in Phase F.)*

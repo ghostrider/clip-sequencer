@@ -14,31 +14,32 @@ action from Uli. Ask, don't guess.
 
 ## Phase A — Decisions and checks [Uli]
 
-- [ ] **Copyright holder** for the LICENSE line: real name (`Ulrich Staudinger`) or artist
+- [x] **Copyright holder** for the LICENSE line: real name (`Ulrich Staudinger`) or artist
       name (`Sun92`). Default: `Copyright (c) 2026 Ulrich Staudinger`.
-- [ ] **Project name.** Must not be "Resolume …". Pattern "<Name> for Resolume". Check
+- [x] **Project name.** Must not be "Resolume …". Pattern "<Name> for Resolume". Check
       that the name is free on GitHub (and crates.io, if publishing there later).
-- [ ] **GitHub owner/repo** (user account or org), e.g. `github.com/<owner>/<repo>`.
-- [ ] **Starting version:** default `0.1.0`.
-- [ ] **Binary distribution:** (a) free on GitHub Releases, (b) GitHub Releases are source-only and
+- [x] **GitHub owner/repo** (user account or org), e.g. `github.com/<owner>/<repo>`.
+- [x] **Starting version:** default `0.1.0`.
+- [x] **Binary distribution:** (a) free on GitHub Releases, (b) GitHub Releases are source-only and
       prebuilt binaries are sold through a shop, or (c) both. This decides what the release workflow
       attaches (Phase I). Default: (a).
-- [ ] **Release approval:** should a published release need a manual click from Uli (draft release plus
+- [x] **Release approval:** should a published release need a manual click from Uli (draft release plus
       a protected `release` environment)? Default: yes.
 
-- [ ] **Manual language:** English only, or English + German. Default: English only (German can follow later).
-- [ ] **Site address:** the default GitHub Pages URL `https://<owner>.github.io/<repo>/`, or a custom
+- [x] **Manual language:** English only, or English + German. Default: English only (German can follow later).
+- [x] **Site address:** the default GitHub Pages URL `https://<owner>.github.io/<repo>/`, or a custom
       domain (e.g. a subdomain of a domain Uli already owns). Default: the GitHub Pages URL.
 - [ ] **Public contact address** for the site and the manual (a project e-mail address, not a personal
       inbox). It's needed for the contact / legal notice page (Phase G2).
-- [ ] **FFGL plugin:** its name, what it does, and where its source currently lives (it was built in a
+- [x] **FFGL plugin:** its name, what it does, and where its source currently lives (it was built in a
       separate Claude Code session). Claude reads the plugin's source and README to fill in the details,
       and asks Uli only what it can't find there.
-- [ ] **FFGL plugin location:** (a) move it into this repo under `ffgl/`, with its history (monorepo, one
+- [x] **FFGL plugin location:** (a) move it into this repo under `ffgl/`, with its history (monorepo, one
       release, one version), or (b) keep it in its own repo, and the release workflow fetches a pinned
       version. Default: (a).
 
 Done when: all eleven are answered and recorded at the bottom of this file under "Decisions".
+*(2026-11-01: ten answered; the public contact address is still open and is needed before Phase G2.)*
 
 ## Phase B — Extract into its own repository
 
@@ -523,17 +524,42 @@ All workflows follow these rules:
 
 ## Decisions
 
-_(filled in during Phase A)_
+_(Phase A, 2026-11-01)_
 
-- Copyright holder:
-- Project name:
-- GitHub owner/repo:
-- Starting version:
-- Binary distribution: (a) / (b) / (c)
-- Release approval required: yes / no
-- Manual language:
-- Site address (GitHub Pages URL / custom domain):
-- Public contact address:
-- FFGL plugin (name, purpose, current source location):
-- FFGL plugin location: (a) monorepo `ffgl/` / (b) separate repo, pinned version
-- Resolume user plugin folder (verified):
+- Copyright holder: **Ulrich Staudinger**, i.e. `Copyright (c) 2026 Ulrich Staudinger` (same as the M12 splash).
+- Project name: **Clip Sequencer for Resolume** (short name "Clip Sequencer", already the M12 app name).
+  `clip-sequencer` is free on crates.io; no GitHub project of that name for Resolume was found.
+- GitHub owner/repo: **`ghostrider/clip-sequencer`** (Uli creates it in H1).
+- Starting version: **0.1.0**
+- Binary distribution: **(c) both**: the portable zip and `SHA256SUMS.txt` are free on GitHub Releases, and binaries
+  are also sold through a shop. Consequences: the landing page's contact / legal notice page must meet the Swiss
+  e-commerce information duties (G2); release notes and the landing page link to the shop as well (shop URL: open,
+  needed by G2/I2).
+- Release approval required: **yes** (draft release + protected `release` environment)
+- Manual language: **English only**
+- Site address: **GitHub Pages URL**, `https://ghostrider.github.io/clip-sequencer/` (base path `/clip-sequencer/`)
+- Public contact address: **open**. Uli creates a project address; needed before Phase G2.
+- FFGL plugin: **"1000A Sequence"** (`SeqView`, plugin ID `VJSQ`), an FFGL 2.1 source plugin that shows a sequence
+  (lanes, steps with thumbnails, playhead, pass counter) on the `§` placeholder clips of the SEQ layer. Source:
+  `ffgl/` in this repo (moved from `vj_stuff/ffgl-plugins/seq_view/` on 2026-10-27). It currently builds through
+  `SeqView.vcxproj` against `../../external/ffgl` and `../../third_party/stb` (to be vendored in Phase B) and uses
+  the DLL runtime (`/MD`; G3 switches to `/MT`).
+- FFGL plugin location: **(a) monorepo `ffgl/`**
+- Resolume user plugin folder (verified): _(open, Phase G3)_
+
+## Changes from M12 (2026-11-01)
+
+M12 decided **portable zip only, no NSIS installer** (see `docs/M12-desktop-shell.md`, Decisions). This overrides
+the installer items in this plan:
+- G3 "Release contents": the NSIS installer component "FFGL plugin for Resolume Arena" is dropped. The plugin is
+  installed from the app (File → Install FFGL plugin…) or `seq-app-cli --install-ffgl`, or by hand from the zip.
+  The NSIS uninstaller item under "Uninstall" is dropped too.
+- G2 manual "Installation": portable zip only (no installer vs. zip choice); WebView2 must be installed (it ships
+  with Windows 11).
+- E: exe metadata and the icon come from Tauri's bundler config, not `embed-resource`/`winres`.
+- I2 step 4: build with `scripts/release.ps1` logic (UI, then `cargo build --release -p seq-app`, giving
+  `seq-app.exe` and `seq-app-cli.exe`), not an installer. Assets: the zip (both exes, `ffgl/`, LICENSE,
+  THIRD_PARTY_LICENSES, OFL.txt, README, CHANGELOG) and `SHA256SUMS.txt`.
+- D: the notices also cover Tauri/wry and the Microsoft WebView2 runtime.
+- F: the desktop app uses the native Tauri menu; the HTML menu bar appears only in browser/headless mode.
+- `--install-ffgl` and other console-only flags live on `seq-app-cli.exe`.
