@@ -15,11 +15,9 @@ use serde_json::json;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-const TIME_TRAVEL: &str =
-    "Clip 07";
+const TIME_TRAVEL: &str = "Clip 07";
 const TWISTED: &str = "Clip 13";
-const LIQUID: &str =
-    "Clip 08";
+const LIQUID: &str = "Clip 08";
 const DECK1_FLUID: &str = "Clip 01";
 
 const SEQ_A: Uuid = Uuid::from_u128(0xA);

@@ -2,3 +2,22 @@
 /web/node_modules
 /web/dist
 /release
+
+# Local app data (default is %APPDATA%\resolume-sequencer; without APPDATA the app uses ./data)
+data/
+thumbs/
+logs/
+*.log
+runtime.json
+seq.toml
+# Show files: only test fixtures are tracked
+*.seq.json
+!crates/seq-core/tests/fixtures/*.seq.json
+
+# FFGL / MSVC build output
+*.dll
+*.pdb
+*.ilk
+*.exp
+.vs/
+x64/

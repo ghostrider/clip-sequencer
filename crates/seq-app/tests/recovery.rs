@@ -17,8 +17,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 const TWISTED: &str = "Clip 13";
-const LIQUID: &str =
-    "Clip 08";
+const LIQUID: &str = "Clip 08";
 const LOOP: Uuid = Uuid::from_u128(0x100);
 const OTHER: Uuid = Uuid::from_u128(0x200);
 

@@ -77,19 +77,35 @@ in `third_party/stb/`. The plugin rules from `vj_stuff/ffgl-plugins/AGENTS.md` a
 
 Scan the **working tree and the full git history** of the new repo.
 
-- [ ] `docs/samples/` (M0 probe output): replace real clip names, media file paths, user
+*(2026-11-01: done before the first push, reviewed by Uli. All 46 commits were scanned (every blob, every commit
+message, author data). Found and rewritten with `git filter-repo` in all history:*
+- *14 licensed Artlist stock clips (IDs, titles, creator names, also truncated forms in debug output) in the samples,
+  the `full.seq.json` fixture, tests, `examples/soak.rs` and the API notes → `Clip 01` … `Clip 14` (one-to-one, so
+  duplicates and lookups still hold); the library paths `Q:\video library\…` → `D:\media`.*
+- *`docs/samples/thumbnail-clip.png`, a frame of one of those clips → a generated 320x240 gradient.*
+- *a Windows user name in a temp path in `ws-05` → `C:/Users/user/…/probe/`.*
+- *the venue composition name → `show-b` (docs and one commit message).*
+- *the employment-check wording in this plan (Phase A and Decisions).*
+- *commit authors → `Ulrich Staudinger <275349+ghostrider@users.noreply.github.com>`; `Claude-Session` trailers
+  removed from commit messages.*
+- *Kept: Resolume's own effect, source and preset names in the samples (product content); generic paths like
+  `Q:\media\something else.mov` in unit tests.*
+- *No media, `.avc`, real show files, thumbnail cache, DLL/PDB, secrets, tokens or private IPs were ever committed;
+  the three PNGs that were LFS pointers are now normal files. No SDK files beyond the pinned submodule and stb.)*
+
+- [x] `docs/samples/` (M0 probe output): replace real clip names, media file paths, user
       names and machine names with neutral sample data. Keep the JSON structure identical
       so tests still pass.
-- [ ] No real show files (`*.seq.json`), thumbnail cache, `.avc` compositions, media clips
+- [x] No real show files (`*.seq.json`), thumbnail cache, `.avc` compositions, media clips
       or screenshots containing third-party footage.
-- [ ] The FFGL plugin source and history are included in the scan: no built DLLs, PDBs, local paths in
+- [x] The FFGL plugin source and history are included in the scan: no built DLLs, PDBs, local paths in
       CMake caches or build scripts, and no copies of SDK files whose license doesn't allow redistribution.
-- [ ] No secrets, tokens, private IPs or hostnames in configs, logs or tests.
-- [ ] Search history with `git log -p` / `git grep $(git rev-list --all)` for: `C:\\Users`,
+- [x] No secrets, tokens, private IPs or hostnames in configs, logs or tests.
+- [x] Search history with `git log -p` / `git grep $(git rev-list --all)` for: `C:\\Users`,
       `/Users/`, `.avc`, `.mov`, `.mp4`, `token`, `password`, `192.168.`. Report findings to Uli
       before rewriting any history.
-- [ ] If history has to be rewritten, do it with `git filter-repo` before the first push.
-- [ ] `.gitignore` covers `target/`, `web/node_modules/`, `web/dist/`, the thumbnail cache,
+- [x] If history has to be rewritten, do it with `git filter-repo` before the first push.
+- [x] `.gitignore` covers `target/`, `web/node_modules/`, `web/dist/`, the thumbnail cache,
       local `seq.toml`, `*.seq.json` outside fixtures, and logs.
 
 ## Phase D — License files and third-party notices

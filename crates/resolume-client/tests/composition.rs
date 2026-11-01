@@ -38,10 +38,7 @@ fn deck2_sample_structure() {
 
     let c = idx.clip_by_id(1792956592496).unwrap();
     assert_eq!((c.layer, c.column), (2, 1));
-    assert_eq!(
-        c.file_name(),
-        Some("Clip 13.mov")
-    );
+    assert_eq!(c.file_name(), Some("Clip 13.mov"));
     assert_eq!(c.connected_param, 1792956592480);
     assert!(!c.thumbnail.is_default);
 

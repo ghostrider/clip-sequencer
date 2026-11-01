@@ -20,8 +20,7 @@ use serde_json::json;
 
 const TT: &str = "Clip 07";
 const TW: &str = "Clip 13";
-const LQ: &str =
-    "Clip 08";
+const LQ: &str = "Clip 08";
 
 /// Keeps Windows from going to sleep while this process runs (a standby invalidates the run).
 #[cfg(windows)]
