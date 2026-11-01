@@ -96,6 +96,12 @@ Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, c
       FBO, PNG preview); confirmed loading and rendering in Resolume.
 - [ ] Docs: plugin README, sequencer README (setup with the plugin instead of Blank).
 
+## 1/16 grid  ✓ done 2026-11-01
+- [x] File format v2: step lengths in sixteenths (6 ticks); v1 files migrated on load (×2),
+      original kept as `<file>.v1.bak` on the first save (SPEC §3, §6).
+- [x] Editor: resize snaps to 1/8, Shift snaps to 1/16; sixteenth ruler ticks when zoomed in.
+- [x] Plugin protocol `SEQVIEW 2` (lengths in sixteenths); the plugin still reads `SEQVIEW 1`.
+
 ## M12 — Desktop shell (Tauri v2)  ✓ done 2026-11-01
 Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the open-source release in
 `docs/M11-open-source-release.md` (not the "M11" Sequence plugin above).

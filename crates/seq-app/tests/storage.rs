@@ -54,6 +54,39 @@ fn save_then_load_round_trips_and_leaves_no_temp_file() {
 }
 
 #[test]
+fn v1_file_is_migrated_on_load_and_backed_up_on_first_save() {
+    const V1: &str = include_str!("../../seq-core/tests/fixtures/spec-example-v1.seq.json");
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Storage::new(dir.path());
+    let path = storage.path_for("MyShow");
+    fs::write(&path, V1).unwrap();
+    let file = storage.load("MyShow").unwrap().into_file();
+    assert_eq!(file.version, 2);
+    assert_eq!(
+        file.decks["Act 1"].sequences[0].lanes[0].steps[0].length,
+        32
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        V1,
+        "load must not write"
+    );
+
+    storage.save(&file).unwrap();
+    let backup = dir.path().join("MyShow.seq.json.v1.bak");
+    assert_eq!(fs::read_to_string(&backup).unwrap(), V1);
+    assert_eq!(storage.load("MyShow").unwrap().into_file(), file);
+    // Later saves (over a v2 file) leave the backup alone.
+    storage.save(&renamed_first(file, "Other")).unwrap();
+    assert_eq!(fs::read_to_string(&backup).unwrap(), V1);
+}
+
+fn renamed_first(mut f: SeqFile, name: &str) -> SeqFile {
+    f.decks.get_mut("Act 1").unwrap().sequences[0].name = name.into();
+    f
+}
+
+#[test]
 fn invalid_file_on_disk_is_reported_and_left_untouched() {
     let dir = tempfile::tempdir().unwrap();
     let storage = Storage::new(dir.path());

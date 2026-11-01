@@ -2,7 +2,7 @@
 
 Plays multi-layer clip sequences in Resolume Arena, locked to the show's MIDI clock. Sequences are
 edited in a browser UI and started from the UI or from Resolume itself (a `§` placeholder clip).
-Clips are triggered over OSC on a 1/8-bar grid; Resolume's state is followed over its WebSocket.
+Clips are triggered over OSC on a 1/16-bar grid; Resolume's state is followed over its WebSocket.
 
 Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolume-api-notes.md`](docs/resolume-api-notes.md).
 
@@ -131,7 +131,7 @@ Useful options (`--help` lists all):
 - **Sequences:** `+ New`, right-click for rename / duplicate / delete. Sequences of decks that no
   longer exist are listed under their old deck name; move them with right-click.
 - **Editor:** drag clips from the browser onto a lane; drag a block's right edge to resize (1/8
-  bar steps); drag to reorder, Alt-drag to duplicate; `Del` removes, `R` inserts a rest,
+  bar steps, hold `Shift` for 1/16); drag to reorder, Alt-drag to duplicate; `Del` removes, `R` inserts a rest,
   `Space` starts/stops, `Esc` deselects, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, `Ctrl+wheel` zooms.
 - **Rests** clear the layer (it shows nothing; layers below show through). If the lane's clip
   lives on another layer (⚠ on the step) and is still playing, that layer is cleared too.

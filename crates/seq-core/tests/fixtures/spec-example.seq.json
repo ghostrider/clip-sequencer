@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -15,8 +15,8 @@
               "layer": "BG",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
-                { "clip": null, "length": 8 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
+                { "clip": null, "length": 16 }
               ]
             }
           ]

@@ -8,7 +8,7 @@ timings and samples are in `docs/resolume-api-notes.md` (cited below as *notes �
 
 A live tool and a playback engine for pre-composed clip sequences in Resolume Arena 7.26.
 
-- A **sequence** plays clips on several Resolume layers in parallel, on a 1/8-bar grid,
+- A **sequence** plays clips on several Resolume layers in parallel, on a 1/16-bar grid,
   locked to the show's MIDI clock.
 - Sequences are stored, edited in a browser UI, and started either from the UI or
   from inside Resolume (by triggering a placeholder clip).
@@ -36,8 +36,9 @@ compensates latency itself.
   Messages used: Timing Clock (0xF8). Start (0xFA), Stop (0xFC) and Continue (0xFB)
   are logged but **do not** affect running sequences (the Clock Shifter's resync
   button sends Start; it must not restart sequences).
-- **Grid:** 1/8 bar in 4/4 = one eighth note = **12 ticks**. All step lengths are
-  integers in eighths. Only 4/4 is supported.
+- **Grid:** 1/16 bar in 4/4 = one sixteenth note = **6 ticks**. All step lengths are
+  integers in sixteenths (file format v2, 2026-11-01; v1 counted eighths, see §6). The editor
+  snaps to eighths by default and to sixteenths with Shift (§9.3). Only 4/4 is supported.
 - **No quantization.** A sequence starts at the moment its start is processed. Its
   internal position counts ticks from that moment. Step boundaries fire exactly
   on the tick where they fall.
@@ -116,7 +117,7 @@ rename in Resolume to use it"; a lane on an ambiguous name is unresolved.
 - **Lane** — targets one layer (by name). Has its own steps and its own length. Lanes can be
   reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
-- **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
+- **Step** — a clip reference (or `null` = rest) and a length in sixteenths. A **rest clears the
   lane's layer** when it starts (silence). If the clip the lane triggered last lives on another
   layer (it plays there) and is still playing, that layer is cleared too: a rest stops what the
   lane started. The same applies to every clear of a lane (lane end `clear`, `after_last_pass`
@@ -139,7 +140,7 @@ automatically. Sequences are grouped by deck name.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -155,8 +156,8 @@ automatically. Sequences are grouped by deck name.
               "layer": "BG",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
-                { "clip": null, "length": 8 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
+                { "clip": null, "length": 16 }
               ]
             }
           ]
@@ -168,7 +169,10 @@ automatically. Sequences are grouped by deck name.
 ```
 
 - `repeat.mode`: `"once"` | `"count"` | `"infinite"`; `count` only with `"count"`.
-- `length`: integer, in eighths (8 = one bar), ≥ 1.
+- `length`: integer, in sixteenths (16 = one bar), ≥ 1.
+- **Version 1** (until 2026-11-01) had the same shape with `length` in eighths. It is still
+  read: lengths are doubled on load, so timing is unchanged. The first save writes version 2 and
+  keeps the original as `<file>.v1.bak` (older builds cannot read version 2).
 - Writes are atomic (write temp file, rename). Autosave after edits (debounced ~1 s).
 - If a deck name in the file no longer exists in Resolume, its sequences are listed in the
   UI as **orphaned**, with an action "move to deck …".
@@ -284,14 +288,15 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), state pill (`idle` / `playing` / `yielded`; yielded has a
     "Resume lane" action), delete lane.
-  - Ruler: bars numbered, eighth subdivisions; zoom with Ctrl+wheel.
+  - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
     not confirmed (red top edge).
   - Playhead with `bar.beat` label while running.
 - Interactions:
-  - Drag a clip from the browser onto a lane → appends or inserts a step (default length 8).
-  - Drag a block's right edge → resize, snapping to eighths (min 1).
+  - Drag a clip from the browser onto a lane → appends or inserts a step (default length 16 = one bar).
+  - Drag a block's right edge → resize, snapping to eighths (min 1/8); hold Shift to snap to
+    sixteenths (min 1/16).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence. Esc → deselect.
@@ -302,7 +307,7 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   as in Resolume), clip thumbnails with names; draggable onto lanes.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
-  in eighths with bars shown.
+  in sixteenths with bars shown.
 
 ### 9.5 Status bar
 Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,

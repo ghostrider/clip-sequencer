@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "composition": "dev",
   "decks": {
     "Act 1": {
@@ -16,7 +16,7 @@
               "end": "loop_to_end",
               "steps": [
                 { "clip": { "name": "Tunnel" }, "length": 0 },
-                { "clip": {}, "length": 8 }
+                { "clip": {}, "length": 16 }
               ]
             }
           ]

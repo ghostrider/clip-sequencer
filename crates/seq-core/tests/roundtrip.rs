@@ -6,6 +6,8 @@ use seq_core::{
 use serde_json::Value;
 
 const SPEC_EXAMPLE: &str = include_str!("fixtures/spec-example.seq.json");
+/// The same document in format version 1 (lengths in eighths).
+const SPEC_EXAMPLE_V1: &str = include_str!("fixtures/spec-example-v1.seq.json");
 const FULL: &str = include_str!("fixtures/full.seq.json");
 const INVALID: &str = include_str!("fixtures/invalid.seq.json");
 
@@ -35,7 +37,7 @@ fn full_fixture_round_trips() {
 #[test]
 fn spec_example_maps_to_model() {
     let file = from_json(SPEC_EXAMPLE).unwrap();
-    assert_eq!(file.version, 1);
+    assert_eq!(file.version, 2);
     assert_eq!(file.composition, "MyShow");
     let seq = &file.decks["Act 1"].sequences[0];
     assert_eq!(seq.id.to_string(), "6f1c2a9e-0d5b-4c1e-9a0f-2f7d4c1b8e11");
@@ -50,9 +52,18 @@ fn spec_example_maps_to_model() {
     assert_eq!(clip.id, Some(1712345));
     assert_eq!(clip.name.as_deref(), Some("Tunnel Red"));
     assert_eq!(clip.file.as_deref(), Some("tunnel_red.mov"));
-    assert_eq!(lane.steps[0].length, 16);
+    assert_eq!(lane.steps[0].length, 32);
     assert_eq!(lane.steps[1].clip, None);
-    assert_eq!(seq.pass_length(), 24);
+    assert_eq!(seq.pass_length(), 48);
+}
+
+#[test]
+fn v1_file_migrates_to_the_v2_document() {
+    // Lengths double (eighths -> sixteenths), everything else is unchanged.
+    assert_eq!(
+        from_json(SPEC_EXAMPLE_V1).unwrap(),
+        from_json(SPEC_EXAMPLE).unwrap()
+    );
 }
 
 #[test]

@@ -79,6 +79,9 @@ button, input, select { font: inherit; }
 .ticks { flex: 1 1 auto; display: flex; }
 .ticks > i { flex: 1 1 0; border-left: 1px solid #1E2024; margin-top: 16px; }
 .ticks > i:nth-child(odd) { border-left-color: #2C2F35; margin-top: 10px; }
+.ticks.fine > i { margin-top: 20px; }
+.ticks.fine > i:nth-child(odd) { border-left-color: #1E2024; margin-top: 16px; }
+.ticks.fine > i:nth-child(4n+1) { border-left-color: #2C2F35; margin-top: 10px; }
 .ticks > i:first-child { border-left-color: transparent; }
 .lane { height: var(--lane-h); border-bottom: 1px solid var(--line-soft); padding: 8px 0; display: flex; gap: 2px; }
 .step { min-width: 0; border: 1px solid #3A3D44; border-radius: 5px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; position: relative; cursor: grab; }

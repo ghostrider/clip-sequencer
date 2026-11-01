@@ -59,7 +59,8 @@ export interface ResolutionView {
 
 export interface SequenceView {
   sequence: Sequence;
-  pass_eighths: number;
+  /** Length of one pass in sixteenths. */
+  pass_sixteenths: number;
   binding: { column: number; clip_id: number } | null;
   resolution: ResolutionView | null;
   mosaic_key: string;

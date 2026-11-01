@@ -106,7 +106,7 @@
         {/if}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
-        <span class="meta">Length (1/8 bar)</span>
+        <span class="meta">Length (1/16 bar)</span>
         <div class="stepper">
           <button class="icon-btn" aria-label="Shorter" disabled={step.length <= 1} onclick={() => setLength(step.length - 1)}>−</button>
           <output class="mono">{step.length} · {formatLength(step.length)}</output>

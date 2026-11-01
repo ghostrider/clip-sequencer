@@ -687,7 +687,7 @@ async fn ui_server_protocol_thumbnails_and_push() {
     let t = view("name=Loop".into()).await;
     assert!(
         t.starts_with(
-            "SEQVIEW 1
+            "SEQVIEW 2
 status ok
 rev "
         ),
@@ -699,9 +699,9 @@ rev "
 layout
 name Loop
 deck 2132323
-pass 2
+pass 4
 lane ok loop_to_end L2
-step clip 1 1792956592496 "
+step clip 2 1792956592496 "
         ),
         "{t}"
     );
@@ -768,7 +768,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             index: 0,
             step: Step {
                 clip: Some(clip(TWISTED)),
-                length: 1,
+                length: 2,
             },
         },
         EditOp::InsertStep {
@@ -777,7 +777,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             index: 1,
             step: Step {
                 clip: None,
-                length: 1,
+                length: 2,
             },
         },
     ] {
