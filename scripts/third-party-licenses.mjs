@@ -8,7 +8,8 @@
 // Usage: node scripts/third-party-licenses.mjs [--out-dir <dir>]   (default: repository root)
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,14 +29,17 @@ if (!version) fail('no version in [workspace.package] of Cargo.toml');
 // --- Rust crates -------------------------------------------------------------------------------
 let about;
 try {
-  about = JSON.parse(
-    execFileSync('cargo', ['about', 'generate', '--format', 'json'], {
-      cwd: root,
-      encoding: 'utf8',
-      maxBuffer: 256 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'inherit'],
-    }),
-  );
+  // Written to a file (-o), not piped: cargo-about refuses a redirected stdout under PowerShell.
+  const out = join(tmpdir(), `cargo-about-${process.pid}.json`);
+  execFileSync('cargo', ['about', 'generate', '--format', 'json', '-o', out], {
+    cwd: root,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+  try {
+    about = JSON.parse(readFileSync(out, 'utf8'));
+  } finally {
+    rmSync(out, { force: true });
+  }
 } catch (e) {
   fail(`cargo about failed (${e.message}). Install it: cargo install --locked cargo-about --features cli`);
 }
