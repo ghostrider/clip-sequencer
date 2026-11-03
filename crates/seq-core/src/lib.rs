@@ -15,9 +15,9 @@ pub mod resolve;
 pub mod scheduler;
 pub mod validate;
 
-pub use file::{from_json, to_json, LoadError, FORMAT_VERSION};
+pub use file::{from_json, to_json, LoadError, FORMAT_VERSION, OLDEST_VERSION};
 pub use model::{
-    AfterLastPass, ClipRef, Deck, Lane, LaneEnd, Repeat, SeqFile, Sequence, Start, Step,
+    AfterLastPass, ClipRef, Deck, Lane, LaneEnd, LaneMode, Repeat, SeqFile, Sequence, Start, Step,
     EIGHTHS_PER_BAR, TICKS_PER_EIGHTH,
 };
 pub use validate::{validate, ValidationError, ValidationErrorKind};

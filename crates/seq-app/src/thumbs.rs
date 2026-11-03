@@ -138,7 +138,8 @@ where
         let mut cells = Vec::new();
         for (si, step) in lane.steps.iter().enumerate() {
             let r = res.and_then(|l| l.steps.get(si));
-            let cell = match (step.clip.is_some(), r.and_then(|r| r.clip_id)) {
+            let empty_slot = r.is_some_and(|r| r.state == "empty");
+            let cell = match (!step.is_rest() && !empty_slot, r.and_then(|r| r.clip_id)) {
                 (false, _) => Cell::Rest,
                 (true, Some(id)) => match thumb(id)
                     .await

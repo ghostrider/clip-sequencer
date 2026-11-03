@@ -3,7 +3,9 @@
 
 use std::time::Duration;
 
-use crate::composition::{parse_composition, CompositionSnapshot, ParseError};
+use seq_core::index::{ClipInfo, ClipState};
+
+use crate::composition::{parse_clip, parse_composition, CompositionSnapshot, ParseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RestError {
@@ -95,6 +97,22 @@ impl RestClient {
 
     pub async fn composition(&self) -> Result<CompositionSnapshot, RestError> {
         Ok(parse_composition(&self.composition_text().await?)?)
+    }
+
+    /// One slot by position, `GET /composition/layers/{L}/clips/{C}` (1-based, notes §14). Used
+    /// to read a slot lane's slot just before its step (SPEC §4.5): drags and drops in Resolume's
+    /// UI are often not pushed. Not valid during a deck switch (notes §4).
+    pub async fn clip_at(
+        &self,
+        layer: usize,
+        column: usize,
+    ) -> Result<(ClipInfo, Option<ClipState>), RestError> {
+        let text = self
+            .get(&format!("/composition/layers/{layer}/clips/{column}"))
+            .await?
+            .text()
+            .await?;
+        Ok(parse_clip(&text, layer, column)?)
     }
 
     pub async fn thumbnail(&self, clip_id: u64) -> Result<ThumbnailData, RestError> {

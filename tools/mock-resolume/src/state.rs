@@ -160,6 +160,65 @@ impl State {
         changes
     }
 
+    /// One slot's JSON by 1-based position (`GET /composition/layers/{L}/clips/{C}`).
+    pub fn clip_at(&self, layer: usize, column: usize) -> Option<&Value> {
+        self.comp["layers"].get(layer.checked_sub(1)?)?["clips"].get(column.checked_sub(1)?)
+    }
+
+    /// A drag in Resolume's UI from one slot onto another of the same layer: the two grid cells
+    /// trade places, ids and parameters included. A playing clip that is moved stops. Resolume
+    /// sends no composition push for this (notes §14); only the stopped clip's `connected`
+    /// update goes out.
+    pub fn swap_slots(&mut self, layer: usize, a: usize, b: usize) -> Changes {
+        let mut changes = Changes::default();
+        let Some(clips) = self.comp["layers"]
+            .get_mut(layer.wrapping_sub(1))
+            .and_then(|l| l.get_mut("clips"))
+            .and_then(Value::as_array_mut)
+        else {
+            return Changes::not_found();
+        };
+        if a == 0 || b == 0 || a > clips.len() || b > clips.len() {
+            return Changes::not_found();
+        }
+        clips.swap(a - 1, b - 1);
+        for i in [a - 1, b - 1] {
+            if is_connected(&clips[i]) {
+                set_connected(&mut clips[i], "Disconnected", 1);
+                changes.params.extend(clips[i]["connected"]["id"].as_u64());
+            }
+        }
+        changes
+    }
+
+    /// A media file dropped from Resolume's browser onto a slot: the slot keeps its id and
+    /// gets the new media; if it was playing it stops and the new media does not start.
+    /// No composition push (notes §14).
+    pub fn replace_media(
+        &mut self,
+        layer: usize,
+        column: usize,
+        name: &str,
+        path: &str,
+    ) -> Changes {
+        let mut changes = Changes::default();
+        let Some(clip) = self.comp["layers"]
+            .get_mut(layer.wrapping_sub(1))
+            .and_then(|l| l.get_mut("clips"))
+            .and_then(|c| c.get_mut(column.wrapping_sub(1)))
+        else {
+            return Changes::not_found();
+        };
+        let was_empty = clip["connected"]["value"] == "Empty";
+        if is_connected(clip) || was_empty {
+            set_connected(clip, "Disconnected", 1);
+            changes.params.extend(clip["connected"]["id"].as_u64());
+        }
+        clip["name"]["value"] = name.into();
+        clip["video"] = json!({"fileinfo": {"path": path, "exists": true}, "description": name});
+        changes
+    }
+
     pub fn clear_layer(&mut self, layer: usize) -> Changes {
         let mut changes = Changes {
             push: true,

@@ -10,7 +10,7 @@ use uuid::Uuid;
 const E: u64 = 12; // ticks per eighth
 const BAR: u64 = 96;
 
-use StepTarget::{Clip, Rest, Unresolved};
+use StepTarget::{Clip, Rest, Slot, Unresolved};
 
 fn lane(layer: u64, end: LaneEnd, steps: &[(u64, StepTarget)]) -> RunLane {
     RunLane {
@@ -667,17 +667,21 @@ fn run_spec_from_sequence_and_resolution() {
         lanes: vec![
             Lane {
                 layer: "BG".into(),
+                mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::Clear,
                 steps: vec![
                     Step {
+                        column: None,
                         clip: named("A"),
                         length: 8,
                     },
                     Step {
+                        column: None,
                         clip: None,
                         length: 2,
                     },
                     Step {
+                        column: None,
                         clip: named("Missing"),
                         length: 1,
                     },
@@ -685,8 +689,10 @@ fn run_spec_from_sequence_and_resolution() {
             },
             Lane {
                 layer: "Nope".into(),
+                mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::Hold,
                 steps: vec![Step {
+                    column: None,
                     clip: named("A"),
                     length: 4,
                 }],
@@ -715,4 +721,104 @@ fn run_spec_from_sequence_and_resolution() {
     assert_eq!(rs.lanes[1].layer_id, None);
     assert_eq!(rs.pass_ticks(), 132);
     assert_eq!(rs.passes(), Some(2));
+}
+
+/// (tick, column) of every slot trigger.
+fn slot_triggers(log: &[(u64, Action)]) -> Vec<(u64, u32)> {
+    log.iter()
+        .filter_map(|(t, a)| match a {
+            Action::TriggerSlot { column, .. } => Some((*t, *column)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn slot_steps_trigger_their_column_each_pass() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Clear,
+        vec![lane(
+            7,
+            LaneEnd::LoopToEnd,
+            &[(8, Slot(3)), (8, Rest), (8, Slot(1))],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui).unwrap();
+    let log = run(&mut s, start, 6 * BAR);
+    assert_eq!(
+        slot_triggers(&log),
+        [(0, 3), (2 * BAR, 1), (3 * BAR, 3), (5 * BAR, 1)]
+    );
+    assert!(log.iter().any(|(_, a)| matches!(
+        a,
+        Action::TriggerSlot {
+            layer_id: 7,
+            lane: 0,
+            step: 2,
+            ..
+        }
+    )));
+    assert_eq!(clears(&log), [(BAR, 7), (4 * BAR, 7), (6 * BAR, 7)]);
+}
+
+#[test]
+fn slot_lookahead_reports_each_upcoming_step_once() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Clear,
+        vec![
+            lane(7, LaneEnd::LoopToEnd, &[(8, Slot(3)), (8, Slot(4))]),
+            lane(8, LaneEnd::Hold, &[(8, Clip(5))]),
+        ],
+    );
+    s.start(sp, Origin::Ui).unwrap();
+    let ahead = 8;
+    let mut seen = Vec::new();
+    for t in 1..=4 * BAR {
+        for u in s.slot_steps_ahead(ahead) {
+            assert_eq!((u.seq, u.lane, u.layer_id), (seq(1), 0, 7));
+            seen.push((t + ahead, u.step, u.column));
+        }
+        s.on_tick();
+    }
+    // The lookahead before tick `t` runs at position `t - 1`, so a step starting at tick `x` is
+    // announced once, before tick `x - ahead + 1` (recorded above as `x + 1`).
+    let expected: Vec<_> = [(BAR, 1, 4), (2 * BAR, 0, 3), (3 * BAR, 1, 4)]
+        .into_iter()
+        .map(|(at, step, col)| (at + 1, step, col))
+        .collect();
+    assert_eq!(seen, expected);
+    // The run has ended: nothing ahead.
+    assert!(s.slot_steps_ahead(ahead).is_empty());
+}
+
+#[test]
+fn slot_lookahead_skips_lanes_that_will_not_trigger() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![lane(7, LaneEnd::LoopToEnd, &[(8, Slot(1)), (8, Slot(2))])],
+    );
+    s.start(sp, Origin::Ui).unwrap();
+    for _ in 0..BAR - 4 {
+        s.on_tick();
+    }
+    assert_eq!(s.slot_steps_ahead(4).len(), 1);
+    s.yield_layer(7);
+    assert!(s.slot_steps_ahead(4).is_empty());
+    s.resume_lane(seq(1), 0);
+    assert_eq!(s.slot_steps_ahead(4)[0].column, 2);
+    // Infinite repeat: the wrap to the next pass is announced too.
+    for _ in 0..BAR {
+        s.on_tick();
+    }
+    let up = s.slot_steps_ahead(4);
+    assert_eq!((up[0].step, up[0].column), (0, 1));
 }

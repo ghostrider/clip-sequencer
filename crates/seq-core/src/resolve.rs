@@ -14,13 +14,15 @@
 //! so the UI can warn; it is still resolved, deterministically.
 
 use crate::index::{ClipInfo, CompositionIndex, LayerLookup};
-use crate::model::{ClipRef, Lane, Sequence, Step};
+use crate::model::{ClipRef, Lane, LaneMode, Sequence, Step};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolvedBy {
     Id,
     Name,
     File,
+    /// Slot lane: whatever is in the slot (SPEC §4.5).
+    Slot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,12 +60,31 @@ pub enum StepResolution {
     Unresolved {
         methods: Methods,
     },
+    /// Slot lane step (SPEC §4.5): what the slot holds in this index snapshot. `clip` is `None`
+    /// when the slot is empty, beyond the last column or the lane's layer is not found; the step
+    /// then plays as a rest. At runtime the slot is read again when the step starts.
+    Slot {
+        column: u32,
+        clip: Option<ResolvedClip>,
+    },
 }
 
 impl StepResolution {
+    /// The clip a clip step resolved to. Slot steps: see [`StepResolution::current_clip`].
     pub fn clip(&self) -> Option<&ResolvedClip> {
         match self {
             Self::Resolved { clip, .. } => Some(clip),
+            _ => None,
+        }
+    }
+
+    /// The clip this step would play now: the resolved clip, or the slot's content.
+    pub fn current_clip(&self) -> Option<&ResolvedClip> {
+        match self {
+            Self::Resolved { clip, .. }
+            | Self::Slot {
+                clip: Some(clip), ..
+            } => Some(clip),
             _ => None,
         }
     }
@@ -99,7 +120,8 @@ pub struct SequenceResolution {
 }
 
 impl SequenceResolution {
-    /// Every lane has its layer and every non-rest step has a clip.
+    /// Every lane has its layer and every non-rest clip step has a clip (slot steps never count
+    /// as unresolved: an empty slot is a rest).
     pub fn is_complete(&self) -> bool {
         self.lanes.iter().all(|l| {
             l.layer_index().is_some()
@@ -134,9 +156,76 @@ pub fn resolve_lane(lane: &Lane, index: &CompositionIndex) -> LaneResolution {
         steps: lane
             .steps
             .iter()
-            .map(|s| resolve_step(s, lane_layer, index))
+            .map(|s| match lane.mode {
+                LaneMode::Clip => resolve_step(s, lane_layer, index),
+                LaneMode::Slot => resolve_slot_step(s, lane_layer, index),
+            })
             .collect(),
     }
+}
+
+/// A slot lane step: the content of (`lane_layer`, column) in `index`, if any.
+pub fn resolve_slot_step(
+    step: &Step,
+    lane_layer: Option<usize>,
+    index: &CompositionIndex,
+) -> StepResolution {
+    let Some(column) = step.column else {
+        return StepResolution::Rest;
+    };
+    let clip = lane_layer.and_then(|layer| slot_clip(index, layer, column));
+    StepResolution::Slot { column, clip }
+}
+
+/// The filled slot at (`layer`, `column`), as a [`ResolvedClip`].
+pub fn slot_clip(index: &CompositionIndex, layer: usize, column: u32) -> Option<ResolvedClip> {
+    let c = index.clip_at(layer, column as usize).filter(|c| !c.empty)?;
+    Some(ResolvedClip {
+        clip_id: c.id,
+        layer: c.layer,
+        column: c.column,
+        by: ResolvedBy::Slot,
+        on_lane_layer: true,
+        ambiguous: false,
+    })
+}
+
+/// A lane's steps converted to `mode` (SPEC §9.3), lengths kept:
+/// - clip → slot: the column of each resolved clip (on whatever layer it was found); unresolved
+///   steps become rests.
+/// - slot → clip: the clip currently in each slot of the lane's layer; empty slots become rests.
+///
+/// Without an index (deck never seen live) every step becomes a rest.
+pub fn convert_steps(lane: &Lane, mode: LaneMode, index: Option<&CompositionIndex>) -> Vec<Step> {
+    if lane.mode == mode {
+        return lane.steps.clone();
+    }
+    let lane_layer = index.and_then(|i| match i.layer_by_name(&lane.layer) {
+        LayerLookup::Found(l) => Some(l.index),
+        _ => None,
+    });
+    lane.steps
+        .iter()
+        .map(|s| match mode {
+            LaneMode::Slot => {
+                let column = index
+                    .and_then(|i| resolve_step(s, lane_layer, i).clip().copied())
+                    .map(|c| c.column as u32);
+                Step::slot(column, s.length)
+            }
+            LaneMode::Clip => {
+                let clip = index
+                    .zip(lane_layer)
+                    .zip(s.column)
+                    .and_then(|((i, l), col)| {
+                        i.clip_at(l, col as usize)
+                            .filter(|c| !c.empty)
+                            .map(clip_ref_for)
+                    });
+                Step::clip(clip, s.length)
+            }
+        })
+        .collect()
 }
 
 pub fn resolve_step(
@@ -280,7 +369,7 @@ pub fn clip_ref_for(clip: &ClipInfo) -> ClipRef {
 mod tests {
     use super::*;
     use crate::index::test_support::Builder;
-    use crate::model::{AfterLastPass, LaneEnd, Repeat, Start};
+    use crate::model::{AfterLastPass, LaneEnd, LaneMode, Repeat, Start};
     use uuid::Uuid;
 
     fn r(id: Option<u64>, name: Option<&str>, file: Option<&str>) -> ClipRef {
@@ -401,8 +490,10 @@ mod tests {
             .build();
         let lane = Lane {
             layer: "BG".into(),
+            mode: crate::model::LaneMode::Clip,
             end: LaneEnd::Hold,
             steps: vec![Step {
+                column: None,
                 clip: Some(r(Some(10), Some("Tunnel"), Some("tunnel.mov"))),
                 length: 8,
             }],
@@ -544,8 +635,10 @@ mod tests {
             .build();
         let lane = |layer: &str| Lane {
             layer: layer.into(),
+            mode: crate::model::LaneMode::Clip,
             end: LaneEnd::Hold,
             steps: vec![Step {
+                column: None,
                 clip: Some(r(Some(1), Some("A"), None)),
                 length: 8,
             }],
@@ -570,6 +663,7 @@ mod tests {
             after_last_pass: AfterLastPass::Clear,
             lanes: vec![Lane {
                 layer: "BG".into(),
+                mode: crate::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
                 steps,
             }],
@@ -580,14 +674,17 @@ mod tests {
     fn sequence_resolution_and_completeness() {
         let seq = sequence(vec![
             Step {
+                column: None,
                 clip: Some(r(Some(10), None, None)),
                 length: 8,
             },
             Step {
+                column: None,
                 clip: None,
                 length: 8,
             },
             Step {
+                column: None,
                 clip: Some(r(None, Some("Missing"), None)),
                 length: 8,
             },
@@ -604,6 +701,7 @@ mod tests {
         ));
         assert!(!res.is_complete());
         let ok = sequence(vec![Step {
+            column: None,
             clip: Some(r(None, Some("Smoke"), None)),
             length: 8,
         }]);
@@ -614,18 +712,22 @@ mod tests {
     fn refresh_ids_updates_name_and_file_matches_only() {
         let mut seq = sequence(vec![
             Step {
+                column: None,
                 clip: Some(r(Some(10), Some("Tunnel"), None)),
                 length: 8,
             },
             Step {
+                column: None,
                 clip: Some(r(Some(999), Some("Smoke"), None)),
                 length: 8,
             },
             Step {
+                column: None,
                 clip: Some(r(None, None, Some("strobe.mov"))),
                 length: 8,
             },
             Step {
+                column: None,
                 clip: None,
                 length: 8,
             },
@@ -659,5 +761,106 @@ mod tests {
             clip_ref_for(idx.clip_by_id(21).unwrap()),
             r(Some(21), Some("Gen"), None)
         );
+    }
+
+    fn slot_lane(layer: &str, columns: &[Option<u32>]) -> Lane {
+        Lane {
+            layer: layer.into(),
+            mode: LaneMode::Slot,
+            end: LaneEnd::Hold,
+            steps: columns.iter().map(|&c| Step::slot(c, 8)).collect(),
+        }
+    }
+
+    #[test]
+    fn slot_steps_resolve_to_the_slot_content() {
+        // BG: [Tunnel, empty, Smoke]; column 4 does not exist.
+        let res = resolve_lane(
+            &slot_lane("BG", &[Some(1), Some(2), Some(3), Some(4), None]),
+            &base(),
+        );
+        let current: Vec<_> = res
+            .steps
+            .iter()
+            .map(|s| s.current_clip().map(|c| c.clip_id))
+            .collect();
+        assert_eq!(current, [Some(10), None, Some(11), None, None]);
+        assert!(matches!(
+            res.steps[1],
+            StepResolution::Slot {
+                column: 2,
+                clip: None
+            }
+        ));
+        assert_eq!(res.steps[4], StepResolution::Rest);
+        assert!(res.steps.iter().all(|s| s.clip().is_none()));
+        assert_eq!(res.steps[0].current_clip().unwrap().by, ResolvedBy::Slot);
+        // Empty slots are rests, not unresolved.
+        let seq = Sequence {
+            lanes: vec![slot_lane("BG", &[Some(2)])],
+            ..sequence(Vec::new())
+        };
+        assert!(resolve_sequence(&seq, &base()).is_complete());
+        // Missing layer: no slot content, the lane is unresolved as usual.
+        let res = resolve_lane(&slot_lane("Nope", &[Some(1)]), &base());
+        assert_eq!(res.layer, LayerResolution::Missing);
+        assert!(matches!(
+            res.steps[0],
+            StepResolution::Slot {
+                column: 1,
+                clip: None
+            }
+        ));
+    }
+
+    #[test]
+    fn convert_clip_lane_to_slots_and_back() {
+        let idx = base();
+        let clip_lane = Lane {
+            layer: "BG".into(),
+            mode: LaneMode::Clip,
+            end: LaneEnd::Hold,
+            steps: vec![
+                Step::clip(Some(r(None, Some("Smoke"), None)), 8),
+                Step::clip(None, 4),
+                Step::clip(Some(r(None, Some("Missing"), None)), 2),
+                // On another layer: keeps its column number.
+                Step::clip(Some(r(None, Some("Strobe"), None)), 1),
+            ],
+        };
+        let slots = convert_steps(&clip_lane, LaneMode::Slot, Some(&idx));
+        assert_eq!(
+            slots,
+            [
+                Step::slot(Some(3), 8),
+                Step::slot(None, 4),
+                Step::slot(None, 2),
+                Step::slot(Some(2), 1)
+            ]
+        );
+        let slot_lane = Lane {
+            steps: slots,
+            mode: LaneMode::Slot,
+            ..clip_lane.clone()
+        };
+        let back = convert_steps(&slot_lane, LaneMode::Clip, Some(&idx));
+        assert_eq!(
+            back,
+            [
+                Step::clip(Some(r(Some(11), Some("Smoke"), Some("smoke.mov"))), 8),
+                Step::clip(None, 4),
+                Step::clip(None, 2),
+                // BG column 2 is empty.
+                Step::clip(None, 1)
+            ]
+        );
+        // Same mode: unchanged. No index: rests with the same lengths.
+        assert_eq!(
+            convert_steps(&clip_lane, LaneMode::Clip, Some(&idx)),
+            clip_lane.steps
+        );
+        assert!(convert_steps(&clip_lane, LaneMode::Slot, None)
+            .iter()
+            .all(Step::is_rest));
     }
 }

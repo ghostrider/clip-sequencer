@@ -44,6 +44,51 @@ pub fn parse_composition_value(
     Ok(build(raw))
 }
 
+/// One slot from `GET /composition/layers/{L}/clips/{C}` (notes §14), placed at `layer`/`column`
+/// (1-based, the request's position). Returns its connection state with it.
+pub fn parse_clip(
+    json: &str,
+    layer: usize,
+    column: usize,
+) -> Result<(ClipInfo, Option<ClipState>), ParseError> {
+    let raw: RawClip = serde_json::from_str(json)?;
+    Ok(clip_info(raw, layer, column))
+}
+
+fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<ClipState>) {
+    let state = ClipState::from_resolume(&clip.connected.value);
+    let (file_path, sequence_param) = match clip.video {
+        Some(v) => (
+            v.fileinfo.and_then(|f| f.path).filter(|p| !p.is_empty()),
+            v.sourceparams
+                .and_then(|mut ps| ps.remove(SEQUENCE_PARAM))
+                .filter(|p| p.valuetype == "ParamString" && p.id != 0)
+                .map(|p| TextParam {
+                    id: p.id,
+                    value: p.value.as_str().unwrap_or_default().to_owned(),
+                }),
+        ),
+        None => (None, None),
+    };
+    let thumbnail = clip.thumbnail.unwrap_or_default();
+    let info = ClipInfo {
+        id: clip.id,
+        layer,
+        column,
+        name: clip.name.value,
+        file_path,
+        empty: state == Some(ClipState::Empty),
+        thumbnail: Thumbnail {
+            last_update: thumbnail.last_update,
+            is_default: thumbnail.is_default,
+        },
+        connected_param: clip.connected.id,
+        name_param: clip.name.id,
+        sequence_param,
+    };
+    (info, state)
+}
+
 fn build(raw: RawComposition) -> CompositionSnapshot {
     let decks: Vec<DeckInfo> = raw
         .decks
@@ -86,39 +131,11 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
             name_param: layer.name.id,
         });
         for (ci, clip) in layer.clips.into_iter().enumerate() {
-            let state = ClipState::from_resolume(&clip.connected.value);
+            let (info, state) = clip_info(clip, layer_index, ci + 1);
             if let Some(s) = state {
-                states.insert(clip.id, s);
+                states.insert(info.id, s);
             }
-            let (file_path, sequence_param) = match clip.video {
-                Some(v) => (
-                    v.fileinfo.and_then(|f| f.path).filter(|p| !p.is_empty()),
-                    v.sourceparams
-                        .and_then(|mut ps| ps.remove(SEQUENCE_PARAM))
-                        .filter(|p| p.valuetype == "ParamString" && p.id != 0)
-                        .map(|p| TextParam {
-                            id: p.id,
-                            value: p.value.as_str().unwrap_or_default().to_owned(),
-                        }),
-                ),
-                None => (None, None),
-            };
-            let thumbnail = clip.thumbnail.unwrap_or_default();
-            clips.push(ClipInfo {
-                id: clip.id,
-                layer: layer_index,
-                column: ci + 1,
-                name: clip.name.value,
-                file_path,
-                empty: state == Some(ClipState::Empty),
-                thumbnail: Thumbnail {
-                    last_update: thumbnail.last_update,
-                    is_default: thumbnail.is_default,
-                },
-                connected_param: clip.connected.id,
-                name_param: clip.name.id,
-                sequence_param,
-            });
+            clips.push(info);
         }
     }
 

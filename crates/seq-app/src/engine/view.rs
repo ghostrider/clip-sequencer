@@ -109,7 +109,8 @@ pub struct LaneResolutionView {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StepResolutionView {
-    /// `rest`, `ok` or `unresolved`.
+    /// `rest`, `ok` or `unresolved`; slot lane steps (SPEC §4.5): `slot` (the slot holds
+    /// `clip_id`) or `empty` (plays as a rest).
     pub state: &'static str,
     pub clip_id: Option<u64>,
     pub by: Option<&'static str>,
@@ -169,10 +170,19 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
                             ResolvedBy::Id => "id",
                             ResolvedBy::Name => "name",
                             ResolvedBy::File => "file",
+                            ResolvedBy::Slot => "slot",
                         }),
                         ambiguous: clip.ambiguous,
                         other_layer: !clip.on_lane_layer,
                         methods: (*methods).into(),
+                    },
+                    StepResolution::Slot { clip, .. } => StepResolutionView {
+                        state: if clip.is_some() { "slot" } else { "empty" },
+                        clip_id: clip.map(|c| c.clip_id),
+                        by: clip.map(|_| "slot"),
+                        ambiguous: false,
+                        other_layer: false,
+                        methods: MethodsView::default(),
                     },
                     StepResolution::Unresolved { methods } => StepResolutionView {
                         state: "unresolved",
