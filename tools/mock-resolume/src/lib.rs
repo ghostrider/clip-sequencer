@@ -166,6 +166,18 @@ impl Mock {
         self.shared.state.lock().unwrap().live_deck()
     }
 
+    /// A drag in Resolume's UI from slot `a` onto slot `b` of a layer (cells swap, no push;
+    /// notes §14).
+    pub fn swap_slots_silently(&self, layer: usize, a: usize, b: usize) {
+        self.shared.apply(|s| s.swap_slots(layer, a, b));
+    }
+
+    /// A media file dropped onto a slot in Resolume's UI (no push; notes §14).
+    pub fn replace_media_silently(&self, layer: usize, column: usize, name: &str, path: &str) {
+        self.shared
+            .apply(|s| s.replace_media(layer, column, name, path));
+    }
+
     /// Mutates the composition JSON directly (e.g. rename a layer for a test) and pushes it.
     pub fn edit(&self, f: impl FnOnce(&mut Value)) {
         self.shared.apply(|s| {
@@ -208,6 +220,10 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
         .route("/api/v1/product", get(product))
         .route("/api/v1/composition", get(composition))
         .route("/api/v1/composition/decks/{n}/select", post(select_deck))
+        .route(
+            "/api/v1/composition/layers/{layer}/clips/{column}",
+            get(clip_at),
+        )
         .route(
             "/api/v1/composition/clips/by-id/{id}/thumbnail",
             get(thumbnail_get).post(thumbnail_post),
@@ -255,6 +271,16 @@ async fn product() -> impl IntoResponse {
 async fn composition(AxState(sh): AxState<Shared>) -> Response {
     let text = sh.state.lock().unwrap().comp.to_string();
     ([(header::CONTENT_TYPE, "application/json")], text).into_response()
+}
+
+async fn clip_at(
+    AxState(sh): AxState<Shared>,
+    Path((layer, column)): Path<(usize, usize)>,
+) -> Response {
+    match sh.state.lock().unwrap().clip_at(layer, column) {
+        Some(c) => ([(header::CONTENT_TYPE, "application/json")], c.to_string()).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn select_deck(AxState(sh): AxState<Shared>, Path(n): Path<usize>) -> StatusCode {

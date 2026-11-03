@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -17,6 +17,16 @@
               "steps": [
                 { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
                 { "clip": null, "length": 8 }
+              ]
+            },
+            {
+              "layer": "FG",
+              "mode": "slot",
+              "end": "loop_to_end",
+              "steps": [
+                { "column": 1, "length": 8 },
+                { "column": 2, "length": 8 },
+                { "column": null, "length": 8 }
               ]
             }
           ]

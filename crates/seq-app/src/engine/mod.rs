@@ -14,7 +14,7 @@ use resolume_client::composition::CompositionSnapshot;
 use resolume_client::osc::OscSender;
 use resolume_client::ws::{ParamMsg, WsCommand, WsEvent};
 use seq_core::edit::EditOp;
-use seq_core::index::{ClipState, CompositionIndex, LayerLookup};
+use seq_core::index::{ClipInfo, ClipState, CompositionIndex, LayerLookup};
 use seq_core::resolve::{refresh_ids, resolve_sequence, SequenceResolution};
 use seq_core::scheduler::{
     bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode,
@@ -79,7 +79,26 @@ pub enum Aux {
     },
     Saved,
     SaveFailed(String),
+    /// A slot read just before a slot lane step (SPEC §4.5). `None`: the request failed.
+    SlotRead {
+        request: SlotRequest,
+        result: Option<(ClipInfo, Option<ClipState>)>,
+    },
 }
+
+/// Read one slot over REST (`GET /composition/layers/{layer}/clips/{column}`, notes §14); the
+/// worker answers with [`Aux::SlotRead`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SlotRequest {
+    /// 1-based position at the time of the request.
+    pub layer: usize,
+    pub column: usize,
+    pub layer_id: u64,
+    pub sent: Instant,
+}
+
+/// How long before a slot lane step its slot is read (SPEC §4.5).
+const SLOT_LOOKAHEAD: Duration = Duration::from_millis(150);
 
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -138,6 +157,10 @@ pub struct Engine {
     aux_tx: mpsc::UnboundedSender<Aux>,
 
     scheduler: Scheduler,
+    /// Slot reads for upcoming slot lane steps (SPEC §4.5); `None` in tests without a worker.
+    slot_reads: Option<mpsc::UnboundedSender<SlotRequest>>,
+    /// When the last composition push was applied: slot reads sent before it are stale.
+    composition_at: Instant,
     index: Option<CompositionIndex>,
     states: HashMap<u64, ClipState>,
     deck_cache: HashMap<String, CompositionIndex>,
@@ -220,6 +243,8 @@ impl Engine {
             storage,
             aux_tx,
             scheduler: Scheduler::new(),
+            slot_reads: None,
+            composition_at: Instant::now(),
             index: None,
             states: HashMap::new(),
             deck_cache: HashMap::new(),
@@ -267,6 +292,11 @@ impl Engine {
         self.clock_port = port;
     }
 
+    /// Where slot reads for upcoming slot lane steps go (SPEC §4.5). See [`spawn_slot_reader`].
+    pub fn set_slot_reader(&mut self, tx: mpsc::UnboundedSender<SlotRequest>) {
+        self.slot_reads = Some(tx);
+    }
+
     fn notice(&mut self, text: impl Into<String>) {
         let text = text.into();
         log::info!("{text}");
@@ -290,6 +320,7 @@ impl Engine {
                     self.clock_running = true;
                     self.notice("clock running");
                 }
+                self.request_upcoming_slots(at);
                 let actions = self.scheduler.on_tick();
                 self.execute(actions);
                 if !self.snapshots.is_empty() {
@@ -388,6 +419,7 @@ impl Engine {
     }
 
     fn on_composition(&mut self, snap: CompositionSnapshot) {
+        self.composition_at = Instant::now();
         let CompositionSnapshot { index, states } = snap;
         let old_live = self.index.as_ref().and_then(|i| i.live_deck.clone());
         let new_live = index.live_deck.clone();
@@ -785,7 +817,14 @@ impl Engine {
             self.notice("sequence file not loaded; edit ignored");
             return;
         };
-        match seq_core::edit::apply(model, op) {
+        // Lane mode changes convert steps against the clips of the sequence's deck (SPEC §9.3).
+        let index = match op {
+            EditOp::SetLaneMode { seq, .. } => model
+                .find_sequence(*seq)
+                .and_then(|(deck, _)| self.deck_index(deck)),
+            _ => None,
+        };
+        match seq_core::edit::apply_with(model, op, index) {
             Ok(new) => {
                 let old = self.model.take().expect("checked");
                 self.undo.push(old);
@@ -800,6 +839,14 @@ impl Engine {
                 self.structure_dirty = true; // re-send the unchanged model
             }
         }
+    }
+
+    /// Clips of a deck: the live index, or the last one seen for a deck that is not live.
+    fn deck_index(&self, deck: &str) -> Option<&CompositionIndex> {
+        self.index
+            .as_ref()
+            .filter(|i| i.live_deck.as_deref() == Some(deck))
+            .or_else(|| self.deck_cache.get(deck))
     }
 
     fn set_model(&mut self, file: SeqFile) {
@@ -941,6 +988,13 @@ impl Engine {
                     clip_id,
                     ..
                 } => self.trigger(seq, lane, step, clip_id),
+                Action::TriggerSlot {
+                    seq,
+                    lane,
+                    step,
+                    column,
+                    layer_id,
+                } => self.trigger_slot(seq, lane, step, column, layer_id),
                 Action::Clear {
                     seq,
                     lane,
@@ -984,6 +1038,47 @@ impl Engine {
                 .push(step);
             return;
         };
+        self.send_trigger(seq, lane, step, clip_id, layer, column, layer_id);
+    }
+
+    /// Slot lane step (SPEC §4.5): trigger the slot by position, or clear the lane's layer when
+    /// the slot is empty or beyond the last column. The slot's content comes from the index,
+    /// which the slot read before this step has brought up to date (if it arrived in time).
+    fn trigger_slot(&mut self, seq: Uuid, lane: usize, step: usize, column: u32, layer_id: u64) {
+        let Some(index) = &self.index else { return };
+        let Some(layer) = index
+            .layers
+            .iter()
+            .find(|l| l.id == layer_id)
+            .map(|l| l.index)
+        else {
+            return;
+        };
+        match seq_core::resolve::slot_clip(index, layer, column) {
+            Some(c) => self.send_trigger(
+                seq,
+                lane,
+                step,
+                c.clip_id,
+                layer,
+                column as usize,
+                Some(layer_id),
+            ),
+            None => self.clear_lane(seq, lane, layer_id),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn send_trigger(
+        &mut self,
+        seq: Uuid,
+        lane: usize,
+        step: usize,
+        clip_id: u64,
+        layer: usize,
+        column: usize,
+        layer_id: Option<u64>,
+    ) {
         let t0 = Instant::now();
         match self.osc.connect_clip(layer, column) {
             Ok(addr) => self.osc_sent(addr, t0.elapsed()),
@@ -1131,7 +1226,98 @@ impl Engine {
                 self.notice(format!("autosave failed: {e}"));
                 self.save_error = Some(e);
             }
+            Aux::SlotRead { request, result } => self.on_slot_read(request, result),
         }
+    }
+
+    // ---- slot lanes (SPEC §4.5) ----
+
+    /// Asks for a read of every slot whose step starts ~150 ms from now. Called before each
+    /// tick is applied; each upcoming step is reported once by the scheduler.
+    fn request_upcoming_slots(&mut self, now: Instant) {
+        let (Some(tx), Some(index)) = (&self.slot_reads, &self.index) else {
+            return;
+        };
+        let tick = self
+            .tempo
+            .bpm()
+            .filter(|b| *b > 0.0)
+            .map_or(Duration::from_millis(20), |bpm| {
+                Duration::from_secs_f64(60.0 / bpm / 24.0)
+            });
+        let ahead = (SLOT_LOOKAHEAD.as_secs_f64() / tick.as_secs_f64()).round() as u64;
+        for up in self.scheduler.slot_steps_ahead(ahead.clamp(1, 96)) {
+            let Some(layer) = index.layers.iter().find(|l| l.id == up.layer_id) else {
+                continue;
+            };
+            let _ = tx.send(SlotRequest {
+                layer: layer.index,
+                column: up.column as usize,
+                layer_id: up.layer_id,
+                sent: now,
+            });
+        }
+    }
+
+    /// Applies a slot read to the index. Resolume moves grid cells by swapping them (notes §2.1,
+    /// §14), so a different id in the slot means that cell and the one the index had there
+    /// traded places. A composition push newer than the request wins.
+    fn on_slot_read(&mut self, req: SlotRequest, result: Option<(ClipInfo, Option<ClipState>)>) {
+        let Some((info, state)) = result else { return };
+        if req.sent < self.composition_at {
+            return;
+        }
+        let Some(index) = &self.index else { return };
+        if index.layer_by_index(req.layer).map(|l| l.id) != Some(req.layer_id) {
+            return; // layers moved since the request
+        }
+        if let Some(st) = state {
+            self.states.insert(info.id, st);
+        }
+        let mut clips = index.clips().to_vec();
+        let Some(here) = clips
+            .iter()
+            .position(|c| c.layer == req.layer && c.column == req.column)
+        else {
+            return; // column not in the index; the next push brings it
+        };
+        if clips[here] == info {
+            return;
+        }
+        if clips[here].id != info.id {
+            if let Some(there) = clips.iter().position(|c| c.id == info.id) {
+                let (layer, column) = (clips[there].layer, clips[there].column);
+                clips[here].layer = layer;
+                clips[here].column = column;
+                clips.swap_remove(there);
+            } else {
+                clips.swap_remove(here);
+            }
+        } else {
+            clips.swap_remove(here);
+        }
+        log::debug!(
+            "slot {}/{} now holds clip {} {:?}",
+            req.layer,
+            req.column,
+            info.id,
+            info.name
+        );
+        clips.push(info);
+        let index = self.index.take().expect("checked");
+        let new = CompositionIndex::new(
+            index.composition,
+            index.decks,
+            index.live_deck,
+            index.layers,
+            index.columns,
+            clips,
+        );
+        if let Some(deck) = &new.live_deck {
+            self.deck_cache.insert(deck.clone(), new.clone());
+        }
+        self.index = Some(new);
+        self.structure_dirty = true;
     }
 
     // ---- timer ----
@@ -1474,13 +1660,43 @@ fn mosaic_key(s: &Sequence, index: Option<&CompositionIndex>) -> String {
         let res = resolve_sequence(s, index);
         for lane in &res.lanes {
             for step in &lane.steps {
-                if let Some(c) = step.clip().and_then(|c| index.clip_by_id(c.clip_id)) {
+                if let Some(c) = step
+                    .current_clip()
+                    .and_then(|c| index.clip_by_id(c.clip_id))
+                {
+                    c.id.hash(&mut h);
                     c.thumbnail.last_update.hash(&mut h);
                 }
             }
         }
     }
     format!("{:016x}", h.finish())
+}
+
+/// Worker for [`SlotRequest`]s: each read runs as its own task so a slow one never delays the
+/// next; results come back to the engine as [`Aux::SlotRead`].
+pub fn spawn_slot_reader(
+    rest: resolume_client::rest::RestClient,
+    aux: mpsc::UnboundedSender<Aux>,
+) -> mpsc::UnboundedSender<SlotRequest> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<SlotRequest>();
+    tokio::spawn(async move {
+        while let Some(request) = rx.recv().await {
+            let rest = rest.clone();
+            let aux = aux.clone();
+            tokio::spawn(async move {
+                let result = match rest.clip_at(request.layer, request.column).await {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        log::debug!("slot read {}/{}: {e}", request.layer, request.column);
+                        None
+                    }
+                };
+                let _ = aux.send(Aux::SlotRead { request, result });
+            });
+        }
+    });
+    tx
 }
 
 /// Inputs of the engine task.
