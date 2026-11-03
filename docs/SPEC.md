@@ -319,13 +319,21 @@ last WebSocket confirmation, yield and error notices.
   and immediately on structural changes. Includes connection status, decks, live deck,
   sequences (from file), runtime state (running, pass, position, lane states, confirmations).
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
-  `edit` operations, `push_thumbnail`). Edits are sent as operations, the engine applies them
-  to the stored model, saves, and echoes the new state.
+  `edit` operations, `push_thumbnail`, and for the browser UI's File menu `reload_composition`,
+  `save_now`). Edits are sent as operations, the engine applies them to the stored model, saves,
+  and echoes the new state.
 - UI → desktop shell: `{"cmd": "shell", "action": "quit" | "zoom_in" | "zoom_out" | "zoom_reset"}`.
   Keys typed into the web content never reach the native menu's shortcuts (WebView2 handles input in
   its own process), so in the desktop app the UI sends Ctrl+Q and Ctrl+= / + / - / 0 this way; the
   server forwards them to the shell. Without a shell (browser) they are ignored and the UI leaves
-  these keys to the browser.
+  these keys to the browser, except `quit`: in the headless app it stops the app like Ctrl+C (the
+  browser UI's File → Quit server, after a confirmation).
+- Menus (M11 Phase F): the desktop app has the native menu (File / View / Help); the browser UI has
+  an HTML menu bar with the same items where they make sense in a browser (no Open data folder; View
+  zooms the page). Help → Keyboard shortcuts, Licenses and About are dialogs in the page in both
+  (the native menu opens them through `window.__seqOpenDialog`); the shortcut list has one source,
+  `web/src/lib/shortcuts.ts`. Licenses come from `GET /api/licenses` (MIT text plus the third-party
+  notices embedded at build time).
 - UI → desktop shell also: `"open_logs"` (Console tab, opens `<data-dir>/logs`).
 - Console tab (M12 Phase E):
   - UI → engine: `{"cmd": "log_subscribe"}` when the Console tab opens, `{"cmd": "log_unsubscribe"}` when it

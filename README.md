@@ -61,7 +61,7 @@ Double-click **`seq-app.exe`**.
 Menu:
 - **File:** Reload composition, Save now, Open data folder, Preferences…, Quit (Ctrl+Q).
 - **View:** zoom (Ctrl+= / Ctrl+- / Ctrl+0) and Toggle Console.
-- **Help:** Keyboard shortcuts.
+- **Help:** Keyboard shortcuts, User manual, Report an issue (both open in the browser), Licenses, About.
 
 Closing the window while a sequence runs asks first. Then the sequences end as configured (layers
 cleared or held) before the app exits. The window size and position are remembered. Starting
@@ -79,7 +79,8 @@ release\seq-app-cli.exe --midi-port "Clock Shifter Out"
 
 It prints the startup steps and then the UI address, normally **http://127.0.0.1:8090**; open it in
 a browser. Ctrl+C (or closing the console window) stops the sequencer: running sequences end as
-configured, then it exits.
+configured, then it exits. In the browser the UI has a menu bar (File, View, Help; Alt or F10 opens it), and
+**File → Quit server…** stops the sequencer the same way.
 
 ### UI port
 

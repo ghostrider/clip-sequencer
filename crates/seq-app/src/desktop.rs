@@ -630,6 +630,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
     let help = SubmenuBuilder::new(app, "Help")
         .item(&item("shortcuts", "Keyboard shortcuts")?)
+        .item(&item("manual", "User manual")?)
+        .item(&item("issue", "Report an issue")?)
+        .separator()
+        .item(&item("licenses", "Licenses")?)
+        .item(&item("about", "About Clip Sequencer")?)
         .build()?;
     MenuBuilder::new(app).items(&[&file, &view, &help]).build()
 }
@@ -667,13 +672,13 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
                 let _ = window.eval("window.__seqToggleConsole && window.__seqToggleConsole()");
             }
         }
-        "shortcuts" => {
-            app.dialog()
-                .message(SHORTCUTS)
-                .title("Keyboard shortcuts")
-                .kind(MessageDialogKind::Info)
-                .show(|_| {});
-        }
+        // Help (M11 Phase F): the dialogs live in the page (one shortcut list: web/src/lib/shortcuts.ts).
+        "shortcuts" | "licenses" | "about" => page_dialog(app, event.id().as_ref()),
+        "manual" => open_link(app, &format!("{}manual/", site_url())),
+        "issue" => open_link(
+            app,
+            concat!(env!("CARGO_PKG_REPOSITORY"), "/issues/new/choose"),
+        ),
         _ => {}
     }
 }
@@ -703,18 +708,31 @@ fn zoom(app: &AppHandle, step: Option<f64>) {
     }
 }
 
-/// The shortcuts of SPEC §9.3, plus the window's own.
-const SHORTCUTS: &str = "\
-Space\tstart / stop the selected sequence
-Del\tremove the selected step
-R\tinsert a rest after the selected step
-Esc\tdeselect
-Ctrl+Z\tundo
-Ctrl+Shift+Z\tredo
-Alt+drag\tduplicate a step
-Ctrl+wheel\tzoom the lane grid
+/// Opens one of the page's Help dialogs (`about`, `licenses`, `shortcuts`); the page has no IPC, so the
+/// menu calls the hook it exposes (web/src/lib/app.svelte.ts).
+fn page_dialog(app: &AppHandle, name: &str) {
+    if let Some(window) = app.get_webview_window(MAIN) {
+        let _ = window.set_focus();
+        let _ = window.eval(format!(
+            "window.__seqOpenDialog && window.__seqOpenDialog({})",
+            serde_json::Value::from(name)
+        ));
+    }
+}
 
-Ctrl+1 / Ctrl+2\tSequencer / Console tab
-Ctrl+,\tPreferences
-Ctrl+= / Ctrl+- / Ctrl+0\tzoom the window
-Ctrl+Q\tquit";
+/// The project site with a trailing slash (Cargo `homepage`); the manual is under `manual/`.
+fn site_url() -> String {
+    let home = env!("CARGO_PKG_HOMEPAGE");
+    if home.ends_with('/') {
+        home.to_owned()
+    } else {
+        format!("{home}/")
+    }
+}
+
+/// A web link from the menu, in the system browser (never inside the app window).
+fn open_link(app: &AppHandle, url: &str) {
+    if let Err(e) = app.opener().open_url(url, None::<&str>) {
+        log::warn!("could not open {url}: {e}");
+    }
+}

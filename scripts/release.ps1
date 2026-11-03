@@ -17,6 +17,12 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 Pop-Location
 
+# Third-party notices (Rust crates via cargo-about, web/dist/third-party-licenses.json from the UI build,
+# fonts, FFGL deps). Before cargo build: the binary embeds THIRD_PARTY_LICENSES.json (License dialog).
+Write-Host '==> THIRD_PARTY_LICENSES.md' -ForegroundColor Cyan
+& node scripts\third-party-licenses.mjs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 Write-Host '==> cargo build --release' -ForegroundColor Cyan
 & cargo build --release -p seq-app
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -33,11 +39,6 @@ Write-Host "==> $name.zip" -ForegroundColor Cyan
 $stage = Join-Path release $name
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage | Out-Null
-# Third-party notices (Rust crates via cargo-about, web/dist/third-party-licenses.json, fonts, FFGL deps)
-Write-Host '==> THIRD_PARTY_LICENSES.md' -ForegroundColor Cyan
-& node scripts\third-party-licenses.mjs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.md, OFL.txt $stage
 if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md $stage }
 $zip = Join-Path release "$name.zip"
