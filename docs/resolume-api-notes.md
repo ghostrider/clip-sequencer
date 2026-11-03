@@ -249,3 +249,34 @@ source and the "1000A Shake" effect (`ffgl-plugins/shake`), 5 s timeline transpo
 | Position update rate | ~100 `parameter_update`s per second for one playing clip. | ✅ |
 | Effect params in the composition JSON | `clip.video.effects[]`: `{"id", "name": "1000A Shake", "display_name", "bypassed", "mixer", "params": {<display name>: param}}`. An FFGL `FF_TYPE_EVENT` param is `{"id", "valuetype": "ParamEvent"}` (no value); a boolean is `ParamBoolean` with `value`. Logical path: `/composition/layers/{L}/clips/{C}/video/effects/1000ashake/effect/trigger`. | ✅ |
 | Press a `ParamEvent` over the WebSocket | `set` with `value: true`, then `false` **100 ms later**: the effect fires (seen on output). `true` and `false` sent back to back: accepted (`parameter_set` + `parameter_update` each) but the effect does **not** fire. | ✅ |
+
+## 14. Slot content changes from Resolume's own UI (probed for M13, 2026-11-03, Arena 7.28.1)
+
+Manual actions by Uli on layer `TEST` (deck "1000A Text3D", composition `dev`) while
+`resolume-probe session` logged the WebSocket with the `connect` and `transport/position` params of
+columns 1–6 subscribed. Log (filtered: no thumbnail updates, position only at jumps, first 100 s): `docs/samples/m13-slot-probe.jsonl`; layer `TEST` before/after: `docs/samples/m13-test-layer-before-after.json`.
+(At ~106 s and after, other changes, then a composition load, appear in the log. They are not part of this probe.)
+
+| Action (mouse in Resolume) | Ids | WebSocket | Status |
+|---|---|---|---|
+| A: drag the **playing** clip from col 1 to an empty col 2 | cells swap: the clip's id moves to col 2, the empty slot's id moves to col 1 (as with REST, §2.1) | the moved clip goes `Disconnected` (moving a playing clip stops it); subscribed params report their new path; composition push after ~60 ms | ✅ |
+| B: drag a stopped clip from col 2 onto an occupied col 6 | **swap**, both ids move with their content | **no composition push** and no `connect` update; only updates of params that change anyway (a running `transport/position`) show the new path | ✅ |
+| C: drop a media file onto the **playing** col 6 | slot **keeps its id**, gets the new media | `Disconnected`, position to 0: the old clip stops and the new media does **not** play (Uli saw the same). **No composition push** | ✅ |
+| D: drop a media file onto a stopped col 4 | slot keeps its id, gets the new media | `Previewing` then `Disconnected` within ~150 ms; composition push after ~70 ms | ✅ |
+| E: click col 3, then col 6 | – | `Connected` as usual, composition push ~50 ms later | ✅ |
+
+| Endpoint (read-only) | Result | Status |
+|---|---|---|
+| `GET /composition/layers/{L}` (1-based) | `200`, the layer with all its clips, 159 KB, ~3 ms | ✅ |
+| `GET /composition/layers/by-id/{id}` | `404` | ✅ |
+| `GET /composition/layers/{L}/clips/{C}` | `200`, one clip (id, name, `connected`, `video.fileinfo`), 4.6 KB, ~11 ms | ✅ |
+
+Consequences for slot lanes (SPEC §4.5):
+- The composition index can be **stale** after UI drags and drops (B, C: no push), so it cannot be
+  trusted for what a slot holds at step time.
+- The trigger itself does not need it: OSC addresses are layer/column positions (§6), so
+  `/composition/layers/{L}/clips/{C}/connect` always hits what is in the slot now.
+- A dropped file stops the playing clip in that slot (C). The lane stays silent until its next
+  step. This is not a connect, so it does not look like a manual override (SPEC §7.3).
+- Not probed: dragging a **stopped** clip into an empty slot, and dropping a file into an
+  **empty** slot (push or not).
