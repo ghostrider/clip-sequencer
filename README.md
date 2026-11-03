@@ -1,22 +1,52 @@
-# Resolume Clip Sequencer
+# Clip Sequencer for Resolume
 
-Plays multi-layer clip sequences in Resolume Arena, locked to the show's MIDI clock. Sequences are
-edited in a browser UI and started from the UI or from Resolume itself (a `§` placeholder clip).
-Clips are triggered over OSC on a 1/16-bar grid; Resolume's state is followed over its WebSocket.
+**[Website](https://ghostrider.github.io/clip-sequencer/) · [User manual](https://ghostrider.github.io/clip-sequencer/manual/) ·
+[Download](https://github.com/ghostrider/clip-sequencer/releases/latest) · [Changelog](CHANGELOG.md)**
 
-Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolume-api-notes.md`](docs/resolume-api-notes.md).
+Plays multi-layer clip sequences in Resolume Arena, locked to the show's MIDI clock. You build sequences
+(clips and rests on lanes, one lane per layer, on a 1/16-bar grid) in the app and start them from the app or from
+Resolume itself by clicking a `§` placeholder clip. Clips are triggered over OSC exactly on the tick, and the
+app follows Resolume over its WebSocket and REST API.
+
+![Clip Sequencer: sequence list, lane editor and clip browser](docs/images/screenshot.png)
+
+*Using the app? Read the [user manual](https://ghostrider.github.io/clip-sequencer/manual/). This README is for
+getting started and for building from source.*
+
+## Features
+
+- Lanes per Resolume layer with clips and rests on a 1/8 or 1/16-bar grid; repeat once, ×N or endlessly.
+- Locked to an incoming MIDI clock; triggers are confirmed over Resolume's WebSocket.
+- Start and stop from the app or from Resolume (`§ <name>` clips on a `SEQ` layer); manual clip clicks
+  take over a lane until you resume it.
+- Works per deck, follows renames, re-finds clips by id, name or file.
+- Desktop app (one window, splash, live Console tab) and a headless mode with the UI in a browser.
+- Optional FFGL source plugin "1000A Sequence" ([`ffgl/`](ffgl/README.md)) that shows the sequence timeline
+  on the `§` clip in Resolume.
 
 ## Requirements
 
-- Windows 10/11, on the same machine as Resolume.
-- Resolume Arena 7.26 or newer (tested with 7.28.1).
-- The **MIDI Clock Shifter** (`../midi-clock-shifter`) running, providing its `Clock Shifter Out`
-  virtual port. Resolume and the sequencer both follow that same (shifted) clock.
-- The desktop app (`seq-app.exe`) needs the **Microsoft Edge WebView2 Runtime**. It ships with
-  Windows 11. On Windows 10 without it, the app says so and offers the
+- Windows 10 or 11, on the same machine as Resolume.
+- Resolume Arena 7.26 or newer (tested with 7.28), with the webserver and OSC input enabled (see below).
+- A MIDI clock on a MIDI input port, e.g. from a virtual MIDI port such as loopMIDI, a DAW, a hardware
+  clock, or a separate clock app. On Windows the app can't create virtual ports itself; it connects to an
+  existing port by name.
+- The desktop app (`seq-app.exe`) needs the **Microsoft Edge WebView2 Runtime**. It ships with Windows 11. On
+  Windows 10 without it, the app says so and offers the
   [download page](https://developer.microsoft.com/microsoft-edge/webview2/) ("Evergreen" runtime).
   `seq-app-cli.exe` doesn't need it.
-- To build: Rust (stable) and Node.js 20+.
+
+## Install
+
+1. Download `clip-sequencer-<version>-windows-x64.zip` from the
+   [latest release](https://github.com/ghostrider/clip-sequencer/releases/latest).
+2. Optional: check it against `SHA256SUMS.txt` from the same release:
+   `Get-FileHash clip-sequencer-<version>-windows-x64.zip -Algorithm SHA256`.
+3. Unzip it anywhere (nothing is installed) and double-click `seq-app.exe`.
+
+The executables are not code-signed, so Windows SmartScreen may warn the first time ("Windows protected your
+PC"). Click **More info → Run anyway**. Settings and sequences live in `%APPDATA%\resolume-sequencer`, not in
+the unzipped folder, so a new version can be unzipped next to the old one.
 
 ## Resolume setup (once per composition)
 
@@ -29,29 +59,16 @@ Full concept: [`docs/SPEC.md`](docs/SPEC.md). Resolume API facts: [`docs/resolum
    `Layer #`, so they can't be used until renamed (double-click the layer name, or right-click →
    Rename). Renames are picked up live.
 5. **Starting from Resolume (optional):** add a layer named `SEQ`. For each sequence, put a clip
-   with the *Blank* source on it and name it `§ <sequence name>` (e.g. `§ Drop A`). Clicking the
-   clip starts the sequence of that name in the live deck; disconnecting it (or clearing the
-   layer) stops it. Set the SEQ layer's opacity to 0 if the placeholders should never be visible.
-
-## Build
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\release.ps1
-```
-
-This builds the UI (`web/`) and the release binaries. It puts them in `release\`, together with the
-portable zip `clip-sequencer-<version>-windows-x64.zip` and its `.sha256`:
-
-- `seq-app.exe` is the desktop app: a native window, no console.
-- `seq-app-cli.exe` is the console program: headless, `--validate`, `--list-midi-ports`, `--clock-debug`.
-
-Both contain the UI. Nothing needs installing: unzip anywhere and run.
+   with the *Blank* source (or the "1000A Sequence" plugin) on it and name it `§ <sequence name>`
+   (e.g. `§ Drop A`). Clicking the clip starts the sequence of that name in the live deck; disconnecting it
+   (or clearing the layer) stops it. Set the SEQ layer's opacity to 0 if the placeholders should never be
+   visible.
 
 ## Run
 
 ### Desktop app
 
-Double-click **`seq-app.exe`**.
+Double-click **`seq-app.exe`** (in the unzipped folder, or `release\` after building).
 - A splash screen shows the startup steps. A missing Resolume or MIDI port only gives a warning; the
   sequencer keeps retrying in the background.
 - Then the window opens with the UI.
@@ -68,13 +85,13 @@ cleared or held) before the app exits. The window size and position are remember
 `seq-app.exe` a second time doesn't start a second sequencer: it offers to bring the running one to
 the front.
 
-The same options as below work on the command line (e.g. `seq-app.exe --midi-port "Clock Shifter Out"`
+The same options as below work on the command line (e.g. `seq-app.exe --midi-port "loopMIDI Port"`
 overrides the saved port for that run). `--no-splash` opens the window without the splash.
 
 ### Headless (console, UI in a browser)
 
 ```powershell
-release\seq-app-cli.exe --midi-port "Clock Shifter Out"
+seq-app-cli.exe --midi-port "loopMIDI Port"
 ```
 
 It prints the startup steps and then the UI address, normally **http://127.0.0.1:8090**; open it in
@@ -118,7 +135,7 @@ Useful options (`--help` lists all):
 
 ### Before a show
 
-1. Start Resolume (composition open), then the Clock Shifter, then `seq-app`.
+1. Start Resolume (composition open), then your MIDI clock source, then `seq-app`.
 2. Check the chips in the UI's top bar: **CLOCK** shows the BPM and "locked", **REST**, **WS**,
    **OSC** are green.
 3. Make every deck you will use live once: its clips are then cached, so its sequences show and
@@ -152,9 +169,9 @@ Sequences are saved automatically (about 1 s after an edit) to
 ## Behaviour worth knowing
 
 - No clock → sequences freeze in place (top bar shows "no clock") and continue when it returns.
-  MIDI Start (e.g. the Clock Shifter's resync) does not restart sequences.
+  MIDI Start (e.g. a clock source's resync) does not restart sequences.
 - If Resolume quits, triggers are not confirmed (red top edge on steps); when it comes back the
-  sequencer reconnects by itself. A port that disappears (Clock Shifter restarted) is reconnected
+  sequencer reconnects by itself. A port that disappears (clock source restarted) is reconnected
   automatically too.
 - Switching decks in Resolume by hand stops running sequences without clearing anything.
 - A sequence started from its `§` clip clears the SEQ layer when it finishes, so the next click
@@ -163,25 +180,56 @@ Sequences are saved automatically (about 1 s after an edit) to
   connected restarts it from step 1 as a UI start: clearing the SEQ layer then no longer stops it,
   and clicking the `§` clip does nothing until the layer is cleared (known limitation, SPEC §7.1).
 
-## Development
+## Security
 
-See [`CLAUDE.md`](CLAUDE.md) for the layout and commands. In short:
+The UI server listens on `127.0.0.1` only, so the UI and its API are reachable from this computer and nowhere
+else; there is no option to open it to the network. It has no login: anything running on the machine can use
+it, like Resolume's own webserver. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Building from source
+
+Needs Windows, [Rust](https://rustup.rs/) (stable, MSVC toolchain), Node.js 20.19+ or 22.12+, and for the
+third-party notices of a release `cargo-about` (`cargo install --locked cargo-about --features cli`).
+The FFGL plugin needs Visual Studio 2022 (C++ desktop workload).
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\check.ps1      # fmt, clippy, tests
+git clone --recurse-submodules https://github.com/ghostrider/clip-sequencer
+cd clip-sequencer
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+```
+
+`release.ps1` builds the UI (`web/`), the third-party notices and the release binaries. It puts
+`seq-app.exe` (desktop app, no console) and `seq-app-cli.exe` (console: headless, `--validate`,
+`--list-midi-ports`, `--clock-debug`) in `release\`, together with the portable zip and its `.sha256`.
+Both executables contain the UI.
+
+Development (checks, mock Resolume, hot reload, test clock):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check.ps1      # versions, fmt, clippy, tests, cargo deny
 cargo run -p mock-resolume -- --rest-port 8080 --osc-port 7000   # fake Resolume
-cd web; npm run dev                                              # UI with hot reload (app on :8090)
+cd web; npm install; npm run dev                                 # UI with hot reload (app on :8090)
 $env:SEQ_DEV_URL='http://localhost:5173'; cargo run -p seq-app   # desktop window on the hot-reload UI
 cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128   # test clock
 cargo run --release -p seq-app --example soak -- "Default App Loopback (B)" 120          # long-run test
+powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1  # FFGL plugin: build + install
 ```
 
-The desktop shell (Tauri v2) is built by plain `cargo build`. The Tauri CLI (`cargo tauri dev` /
-`cargo tauri build`) isn't needed: there is no installer to bundle, and the window loads the UI
-from the app's own server.
-- **Debug builds:** they read `web/dist` from disk, so `npm run build` is enough to see UI changes
-  after a reload.
-- **Hot reload:** `SEQ_DEV_URL` (debug builds only) points the window at the Vite dev server instead.
-  Vite proxies `/ws`, `/api` and `/thumbs` to the app; set `SEQ_APP` for Vite if the app isn't on :8090.
-- **Release builds** embed `web/dist`.
-- **WebView2 DevTools:** set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`.
+The desktop shell (Tauri v2) is built by plain `cargo build`; the Tauri CLI isn't needed. Debug builds read
+`web/dist` from disk (so `npm run build` and a reload show UI changes); release builds embed it.
+`SEQ_DEV_URL` (debug builds only) points the window at the Vite dev server. For WebView2 DevTools set
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`.
+
+Design and internals: [`docs/SPEC.md`](docs/SPEC.md) (concept and behaviour),
+[`docs/resolume-api-notes.md`](docs/resolume-api-notes.md) (what the Resolume API really does),
+[`CLAUDE.md`](CLAUDE.md) (layout and commands). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT, see [LICENSE](LICENSE). Copyright (c) 2026 Ulrich Staudinger.
+Third-party components and their licenses are listed in the app (Help → Licenses) and in
+`THIRD_PARTY_LICENSES.md` in the release zip; the IBM Plex fonts are under the SIL Open Font License
+([OFL.txt](OFL.txt)).
+
+Provided as is, without warranty of any kind. Not affiliated with or endorsed by Resolume BV. Resolume is a
+trademark of Resolume BV.
