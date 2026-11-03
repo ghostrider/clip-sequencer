@@ -1527,6 +1527,7 @@ impl Engine {
                 layers: deck_idx
                     .map(|i| layer_views(i, &self.cfg.seq_layer))
                     .unwrap_or_default(),
+                columns: deck_idx.map_or(0, |i| i.columns.len()),
                 sequences,
                 unmatched_seq_clips,
                 name,
