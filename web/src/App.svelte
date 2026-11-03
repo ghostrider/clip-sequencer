@@ -60,7 +60,7 @@
       app.edit({ op: 'remove_step', seq: view.sequence.id, lane: sel.lane, index: sel.index });
       app.selectedStep = null;
     } else if (e.key.toLowerCase() === 'r') {
-      app.edit({ op: 'insert_step', seq: view.sequence.id, lane: sel.lane, index: sel.index + 1, step: { clip: null, length: 8 } });
+      app.edit({ op: 'insert_step', seq: view.sequence.id, lane: sel.lane, index: sel.index + 1, step: { clip: null, length: 16 } });
       app.selectedStep = { lane: sel.lane, index: sel.index + 1 };
     }
   }
