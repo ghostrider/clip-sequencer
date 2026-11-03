@@ -155,10 +155,10 @@ message, author data). Found and rewritten with `git filter-repo` in all history
 
 ## Phase E — Versioning and build info
 
-- [ ] **Single version source:** `version` lives only in `[workspace.package]`. All crates use
+- [x] **Single version source:** `version` lives only in `[workspace.package]`. All crates use
       `version.workspace = true`. `web/package.json` gets the same version, synced by a small
       script or checked in CI.
-- [ ] **Build info** embedded at compile time via `build.rs` (or `vergen`):
+- [x] **Build info** embedded at compile time via `build.rs` (or `vergen`):
   - `version` (semver from Cargo)
   - `build_number`: the git commit count (`git rev-list --count HEAD`). It's identical in local
     builds, CI and the release workflow, and reproducible from any checkout (CI must check out with
@@ -167,20 +167,39 @@ message, author data). Found and rewritten with `git filter-repo` in all history
   - `git_commit`: short hash, with `-dirty` if the tree has changes
   - `build_date`: UTC, ISO 8601
   - `target`: e.g. `x86_64-pc-windows-msvc`
-- [ ] Expose the build info:
-  - [ ] `seq-app --version` prints `<name> 0.1.0 (build 42, abc1234, 2026-10-27)`
-  - [ ] the first log line at startup
-  - [ ] `GET /api/version` returns JSON with all fields
+- [x] Expose the build info:
+  - [x] `seq-app --version` prints `<name> 0.1.0 (build 42, abc1234, 2026-10-27)`
+  - [x] the first log line at startup
+  - [x] `GET /api/version` returns JSON with all fields
   - [ ] the About screen (Phase F)
-- [ ] **Windows exe metadata:** embed version info (FileVersion, ProductVersion,
+- [x] **Windows exe metadata:** embed version info (FileVersion, ProductVersion,
       CompanyName = copyright holder, LegalCopyright, ProductName) and an app icon via
       `embed-resource` or `winres`. **[Uli]** provides the icon, or Claude makes a simple
       placeholder `.ico`.
-- [ ] **FFGL plugin version:** the plugin gets the same version as the app (monorepo) or its own pinned
+- [x] **FFGL plugin version:** the plugin gets the same version as the app (monorepo) or its own pinned
       version (separate repo). It's embedded in the DLL's Windows version resource (FileVersion, ProductVersion,
       LegalCopyright), and, where the FFGL API allows it, in the plugin's info/about fields shown in Resolume.
       The app must be able to read the version of an installed DLL (needed for "Plugin deployment", Phase G3).
-- [ ] Release tags follow `vMAJOR.MINOR.PATCH`. CI fails if the tag doesn't match the Cargo version.
+- [x] Release tags follow `vMAJOR.MINOR.PATCH`. CI fails if the tag doesn't match the Cargo version.
+
+*(2026-11-03, done; the About screen follows in Phase F:*
+- *Version only in `[workspace.package]`; `scripts/check-version.mjs` checks the crates (`version.workspace`),
+  `web/package.json`, `package-lock.json` and that `tauri.conf.json` sets none; `--tag [vX.Y.Z]` (or
+  `GITHUB_REF_NAME`) also checks the release tag. `check.ps1` runs it; `release.yml` will run it with `--tag` (I2).*
+- *`build.rs` (no `vergen`): build number = `git rev-list --count HEAD` (0 without git), commit (+`-dirty`),
+  UTC build date (ISO 8601, `SOURCE_DATE_EPOCH` honoured), target, and `SEQ_LONG_VERSION`. `--version` prints
+  `seq-app-cli 0.1.0 (build 52, 931e56d, 2026-11-03)` (clap uses the binary's name); the first log line adds target
+  and build time; `/api/version` has `build`, `commit`, `build_date`, `target`; the engine test checks them.*
+- *Exe metadata: Tauri's build step writes ProductName, CompanyName (`publisher`), LegalCopyright, FileVersion /
+  ProductVersion (Cargo version) and the placeholder `§` icon; no `embed-resource`/`winres`. The build number is
+  not put into the fourth FileVersion field (that would need a `TAURI_CONFIG` override; not required).
+  **To verify on Windows:** the properties of `seq-app.exe` and `seq-app-cli.exe`.*
+- *FFGL: `SeqView.vcxproj` reads the version from `Cargo.toml` and build number / commit / date from git (the
+  per-machine `build_number.txt` is gone); `SeqView.rc` gives the DLL a VERSIONINFO (FileVersion
+  `0.1.0.<build>`), which G3 reads; About text and the Build parameter show the long version. The FFGL plugin
+  major/minor integers stay 1.0 (changing them might affect how Resolume matches the plugin; untested).
+  **To verify on Windows:** `ffgl\build_seqview.ps1`, DLL properties, the About/Build text in Resolume.)*
+
 
 ## Phase F — UI: menu bar, About, License, shortcuts
 
