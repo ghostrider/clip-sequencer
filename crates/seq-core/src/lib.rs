@@ -18,6 +18,6 @@ pub mod validate;
 pub use file::{from_json, to_json, LoadError, FORMAT_VERSION, OLDEST_VERSION};
 pub use model::{
     AfterLastPass, ClipRef, Deck, Lane, LaneEnd, LaneMode, Repeat, SeqFile, Sequence, Start, Step,
-    EIGHTHS_PER_BAR, TICKS_PER_EIGHTH,
+    SIXTEENTHS_PER_BAR, TICKS_PER_SIXTEENTH,
 };
 pub use validate::{validate, ValidationError, ValidationErrorKind};

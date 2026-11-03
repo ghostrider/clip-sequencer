@@ -71,7 +71,7 @@ impl fmt::Display for ValidationErrorKind {
             ),
             Self::NoLanes => write!(f, "sequence has no lanes"),
             Self::EmptyLayer => write!(f, "layer name is empty"),
-            Self::ZeroLength => write!(f, "step length must be at least 1 eighth"),
+            Self::ZeroLength => write!(f, "step length must be at least 1 sixteenth"),
             Self::EmptyClipRef => write!(f, "clip has no id, name or file; use null for a rest"),
             Self::ZeroColumn => write!(f, "column numbers start at 1"),
             Self::StepModeMismatch => {
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(errs.len(), 1);
         assert_eq!(
             errs[0].to_string(),
-            r#"decks["Act 1"].sequences[0] "Drop A".lanes[0].steps[0].length: step length must be at least 1 eighth"#
+            r#"decks["Act 1"].sequences[0] "Drop A".lanes[0].steps[0].length: step length must be at least 1 sixteenth"#
         );
     }
 
