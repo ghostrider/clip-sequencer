@@ -207,6 +207,17 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
     }
 }
 
+/// Version of a clip's thumbnail for the cache and the UI: Resolume's `last_update` plus a
+/// fingerprint of the content. Media dropped onto a slot keeps the slot's id and, as seen in the
+/// M13 probe (notes §14), its `last_update`, so the marker alone would keep the old picture.
+pub fn thumb_version(c: &seq_core::index::ClipInfo) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    c.file_path.hash(&mut h);
+    c.name.hash(&mut h);
+    format!("{}x{:08x}", c.thumbnail.last_update, h.finish() as u32)
+}
+
 pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> {
     index
         .layers
@@ -226,7 +237,7 @@ pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> 
                     column: c.column,
                     name: c.name.clone(),
                     file: c.file_name().map(str::to_owned),
-                    thumb: (!c.thumbnail.is_default).then(|| c.thumbnail.last_update.clone()),
+                    thumb: (!c.thumbnail.is_default).then(|| thumb_version(c)),
                 })
                 .collect(),
         })

@@ -110,19 +110,21 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
       not possible on Home, the portable zip was tested from a new folder instead; fresh-machine check
       passed 2026-11-01)
 
-## M13 — Slot lanes (positional sequencing, SPEC §4.5)
+## M13 — Slot lanes (positional sequencing, SPEC §4.5)  ✓ done 2026-11-03 (live check pending)
 - [x] M13a probe (2026-11-03): UI drag/drop and the playing-slot case, `GET /layers/{L}` and
       `/layers/{L}/clips/{C}`. Recorded in `resolume-api-notes.md` §14, SPEC §4.5 adjusted.
-- [ ] `seq-core` model: lane `mode`, slot steps with `column`; file format version 2 with v1 → v2
+- [x] `seq-core` model: lane `mode`, slot steps with `column`; file format version 2 with v1 → v2
       migration and refusal of unknown higher versions; validation; round-trip + migration tests.
-- [ ] New media dropped onto the playing slot: no yield, no re-trigger; played at its next step (SPEC §4.5).
-- [ ] Scheduler: `StepTarget::Slot { column }` in the run snapshot; engine triggers the slot by position at send
+- [x] New media dropped onto the playing slot: no yield, no re-trigger; played at its next step (SPEC §4.5).
+- [x] Scheduler: `StepTarget::Slot { column }` in the run snapshot; engine triggers the slot by position at send
       time; empty/out of range → clear. Pre-step slot fetch task (SPEC §4.5) feeding the engine by message. Tests incl.
       content swapped between passes, columns inserted while running, empty slot = rest.
-- [ ] Edit operations: set lane mode with step conversion (both directions), set step column; undo.
-- [ ] UI: mode switch in the lane header, `col N` blocks with live slot thumbnails, empty-slot state,
+- [x] Edit operations: set lane mode with step conversion (both directions), set step column; undo.
+- [x] UI: mode switch in the lane header, `col N` blocks with live slot thumbnails, empty-slot state,
       browser drop onto slot lanes, inspector column stepper,
       column-number overlay (top left) on every clip browser thumbnail.
-- [ ] Sequence mosaic, `/plugin/v1/view.txt` and the FFGL view show the current slot contents.
-- [ ] Mock-resolume: content change in a slot (open/clear by id) for an integration test; live check
-      in Resolume: swap clips in slots while a slot sequence runs.
+- [x] Sequence mosaic, `/plugin/v1/view.txt` and the FFGL view show the current slot contents.
+- [x] Mock-resolume: slot GET route, silent slot swap and media drop; engine tests for both cases.
+- [ ] Live check in Resolume (Uli): swap clips in slots and drop media onto the playing slot while a
+      slot sequence runs; also whether the slot's thumbnail updates after a media drop (Resolume kept
+      its `last_update`, notes §14; the UI keys thumbnails by content as well).
