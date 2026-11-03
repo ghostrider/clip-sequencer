@@ -289,7 +289,7 @@ but not this tool. It's published, together with a small project site, on GitHub
 (configuration in H6, deployment in I5).
 
 ### Structure and tooling
-- [ ] Sources live in `site/`, separate from the developer docs in `docs/`:
+- [x] Sources live in `site/`, separate from the developer docs in `docs/`:
   ```
   site/
     landing/        hand-written static landing page (index.html, CSS, images)
@@ -297,57 +297,57 @@ but not this tool. It's published, together with a small project site, on GitHub
     shared/         tokens.css and the self-hosted fonts, copied from web/ at build time
     build.ps1       assembles landing + manual into site/dist/ (manual under /manual/)
   ```
-- [ ] Tool: **mdBook** for the manual (Rust ecosystem, search built in, works offline as static
+- [x] Tool: **mdBook** for the manual (Rust ecosystem, search built in, works offline as static
       files), plus a hand-written landing page. The landing page uses the app's design tokens, so
       the site and the app look like one product.
-- [ ] Base path: the site is served under `/<repo>/` on the default GitHub Pages URL. Set
+- [x] Base path: the site is served under `/<repo>/` on the default GitHub Pages URL. Set
       `site-url` in `book.toml` accordingly, and use only relative links in the landing page. If a custom
       domain is chosen in Phase A, the base path is `/`.
-- [ ] **No external requests:** no Google Fonts, no CDN, no analytics, no cookies, no embedded videos from
+- [x] **No external requests:** no Google Fonts, no CDN, no analytics, no cookies, no embedded videos from
       third-party hosts. Fonts are self-hosted. (That keeps the site free of tracking and cookie-banner
       obligations under Swiss and EU data-protection law.)
 
 ### Manual content (`site/manual/src/`)
 Write it in the Phase A language. Every page is task-oriented: what you want to do, then the steps.
-- [ ] **Introduction:** what the sequencer does, how it fits next to Resolume and the MIDI clock, requirements.
-- [ ] **Installation:** installer vs. portable zip, WebView2 (after M12), the SmartScreen warning, checksum
+- [x] **Introduction:** what the sequencer does, how it fits next to Resolume and the MIDI clock, requirements.
+- [x] **Installation:** installer vs. portable zip, WebView2 (after M12), the SmartScreen warning, checksum
       verification, updating to a new version, uninstalling (and where the data stays).
 - [ ] **Setting up Resolume:** enable the webserver and OSC input (with the exact preference paths), MIDI clock
       sync, Beat Snap **off** for clip triggers, recommended clip transport mode (BPM sync), creating the `SEQ`
       layer with `§ <name>` placeholder clips and an invisible source.
-- [ ] **Setting up the clock:** any MIDI clock source works; selecting the input port; using a virtual MIDI
+- [x] **Setting up the clock:** any MIDI clock source works; selecting the input port; using a virtual MIDI
       port (e.g. loopMIDI); a note on the separate Clock Shifter for projector latency.
-- [ ] **Quick start:** a step-by-step tutorial, from an empty sequence to a 2-lane, 4-bar sequence started from
+- [x] **Quick start:** a step-by-step tutorial, from an empty sequence to a 2-lane, 4-bar sequence started from
       Resolume, with a screenshot per step.
-- [ ] **The interface:** top bar (deck tabs and LIVE, connection chips, Stop all), sequence list, editor (lanes,
+- [x] **The interface:** top bar (deck tabs and LIVE, connection chips, Stop all), sequence list, editor (lanes,
       steps, rests, the 1/8-bar grid, Repeat, lane end behaviour), clip browser, step inspector, status bar,
       Console tab (after M12), menus.
-- [ ] **Working with decks:** sequences belong to one deck; viewing vs. starting; the deck switch on start and its
+- [x] **Working with decks:** sequences belong to one deck; viewing vs. starting; the deck switch on start and its
       confirmation.
-- [ ] **Playing live:** starting and stopping (UI and SEQ clips), edits apply at the next start, manual override and
+- [x] **Playing live:** starting and stopping (UI and SEQ clips), edits apply at the next start, manual override and
       "Resume lane", Stop all, what happens on clock loss.
-- [ ] **Files and data:** the `.seq.json` file next to the composition, backups, moving a show to another machine,
+- [x] **Files and data:** the `.seq.json` file next to the composition, backups, moving a show to another machine,
       orphaned sequences after a deck rename, how clips are re-found after renames (ID → name → file) and what
       red steps mean.
-- [ ] **Thumbnails:** where they come from, cached thumbnails for inactive decks, "Push thumbnail to Resolume".
-- [ ] **Settings reference:** all CLI flags and `seq.toml` keys with defaults, UI port fallback and `--strict-port`,
+- [x] **Thumbnails:** where they come from, cached thumbnails for inactive decks, "Push thumbnail to Resolume".
+- [x] **Settings reference:** all CLI flags and `seq.toml` keys with defaults, UI port fallback and `--strict-port`,
       `--headless`, bind address and its security note.
-- [ ] **Keyboard shortcuts:** generated from, or checked against, the in-app shortcuts dialog (Phase F), so they never diverge.
-- [ ] **Troubleshooting:** no clock / clock not locked; Resolume not reachable; triggers "not confirmed"; red
+- [x] **Keyboard shortcuts:** generated from, or checked against, the in-app shortcuts dialog (Phase F), so they never diverge.
+- [x] **Troubleshooting:** no clock / clock not locked; Resolume not reachable; triggers "not confirmed"; red
       (unresolved) steps; port in use / app already running; SmartScreen; where the logs are and what to attach to a
       bug report.
-- [ ] **FAQ** and **Glossary** (sequence, lane, step, pass, deck, LIVE, yield, SEQ clip).
-- [ ] **About:** version history (links to the changelog), license and third-party notices, the Resolume trademark
+- [x] **FAQ** and **Glossary** (sequence, lane, step, pass, deck, LIVE, yield, SEQ clip).
+- [x] **About:** version history (links to the changelog), license and third-party notices, the Resolume trademark
       disclaimer, how to report bugs.
 
 ### Screenshots
-- [ ] Screenshots show **neutral demo content only** (generated colour clips, no third-party footage, no real show
+- [x] Screenshots show **neutral demo content only** (generated colour clips, no third-party footage, no real show
       names). Use `tools/mock-resolume` with a demo composition.
 - [ ] Optional, ask Uli: a script (Playwright) that starts the app against the mock and regenerates all manual
       screenshots, so they stay current after UI changes.
 
 ### Landing page (`site/landing/`)
-- [ ] One page: name and one-line pitch; a hero screenshot (or a short looping GIF/WebM, self-hosted); 4–6 key
+- [x] One page: name and one-line pitch; a hero screenshot (or a short looping GIF/WebM, self-hosted); 4–6 key
       features; requirements; a **Download** button (latest GitHub Release, or the shop link, per the Phase A
       distribution decision); links to the manual, the source on GitHub, the changelog and issues; the license line
       and the Resolume disclaimer in the footer.
@@ -355,18 +355,38 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
       Phase A. If binaries are sold (distribution (b) or (c)), this page must also meet the Swiss e-commerce
       information duties (clear identity and a contact address, Art. 3 para. 1 lit. s UWG). **[Uli]** reviews the
       wording; this isn't legal advice.
-- [ ] A short **Privacy** note: the site uses no cookies or tracking; GitHub hosts it (link to GitHub's privacy
+- [x] A short **Privacy** note: the site uses no cookies or tracking; GitHub hosts it (link to GitHub's privacy
       statement).
-- [ ] Works at phone width, passes basic accessibility checks (contrast, alt text, keyboard), and has a favicon and
+- [x] Works at phone width, passes basic accessibility checks (contrast, alt text, keyboard), and has a favicon and
       Open Graph tags (title, description, preview image) for link previews.
 
 ### Versioning
 - [ ] The published manual always matches the **latest release**, not `main`. It's deployed by the release
       process (I5), so unreleased features never show up in the public manual.
-- [ ] Each manual page footer shows "Manual for version x.y.z". The version is injected at build time from
+- [x] Each manual page footer shows "Manual for version x.y.z". The version is injected at build time from
       `[workspace.package].version`.
-- [ ] Changes to user-facing behaviour must update the manual in the same PR (add this to `CONTRIBUTING.md` and
+- [x] Changes to user-facing behaviour must update the manual in the same PR (add this to `CONTRIBUTING.md` and
       the PR template checklist).
+
+*(2026-11-03, done except the four open items:*
+- *`site/`: `manual/` (mdBook 0.5, 16 chapters + generated shortcuts page), `landing/` (index, contact, privacy,
+  style), `shared/` (generated: tokens, IBM Plex, icons), `build.mjs` instead of `build.ps1`: one Node script for
+  Windows and the Linux runner (Node is needed for the UI anyway). It generates the shortcuts page from
+  `web/src/lib/shortcuts.json` (now the app's single list), runs mdbook (warnings fail), injects "Manual for
+  version x.y.z", fills `{{…}}` from `site/site.json`, and fails on broken internal links, missing CSS `url()`s
+  and anything loaded from another host. `--release` fails without `contactEmail`.*
+- *Checked in Chromium, served under `/clip-sequencer/` like GitHub Pages: no failed or external requests, IBM
+  Plex loads, search works, no horizontal scroll at 390 px, one h1 per page, alt texts, skip link first in tab
+  order; text contrast ≥ 6.8:1 (WCAG AA) for every colour pair used.*
+- *Screenshots: 14 in `site/manual/src/images/`, from the demo show (`docs/samples/demo-*`, generated thumbnails),
+  no running state (no MIDI clock in the build container).*
+- *Open:* **Setting up Resolume:** *the exact preference path for MIDI clock sync and a recommended clip transport
+  mode are not in the manual; Uli to confirm (the chapter says "MIDI clock sync in Resolume's MIDI settings").*
+  **Contact page:** *needs `contactEmail` in `site/site.json` and Uli's review of the wording (and a postal address
+  if the Swiss rules require one); the shop button appears once `shopUrl` is set.* **Latest release only:** *with
+  the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` exists (it made the screenshots); keep or drop
+  per Uli. The "Installing the FFGL plugin" chapter follows with G3.)*
+
 
 ## Phase G3 — FFGL plugin in the release
 

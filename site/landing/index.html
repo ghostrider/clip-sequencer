@@ -1,1 +1,91 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><link rel="stylesheet" href="shared/tokens.css"></head><body><a href="manual/">Manual</a> {{VERSION}} <a href="{{CONTACT_HREF}}">c</a></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clip Sequencer for Resolume</title>
+  <meta name="description" content="Play multi-layer clip sequences in Resolume Arena, locked to your show's MIDI clock. Free and open source (MIT), for Windows.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Clip Sequencer for Resolume">
+  <meta property="og:description" content="Play multi-layer clip sequences in Resolume Arena, locked to your show's MIDI clock.">
+  <meta property="og:url" content="{{BASE_URL}}">
+  <meta property="og:image" content="{{BASE_URL}}shared/screenshot.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="shared/favicon.png">
+  <link rel="stylesheet" href="shared/fonts.css">
+  <link rel="stylesheet" href="shared/tokens.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site">
+  <div class="wrap">
+    <a class="logo" href="./" aria-label="Clip Sequencer, home">§ SEQ</a>
+    <nav class="top" aria-label="Main">
+      <a href="manual/">Manual</a>
+      <a href="{{REPO}}/releases/latest">Download</a>
+      <a href="{{REPO}}">Source</a>
+      <a href="{{REPO}}/blob/main/CHANGELOG.md">Changelog</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <div class="hero">
+    <h1>Clip Sequencer <span>for Resolume</span></h1>
+    <p class="lead">Play multi-layer clip sequences in Resolume Arena, locked to your show's MIDI clock. Build them on a
+      1/16-bar grid, start them from the app or by clicking a clip in Resolume.</p>
+    <div class="actions">
+      <a class="button primary" href="{{REPO}}/releases/latest">Download for Windows</a>
+      {{#SHOP}}<a class="button" href="{{SHOP_URL}}">Buy a ready-made build</a>{{/SHOP}}
+      <a class="button" href="manual/">Read the manual</a>
+      <span class="version">Version {{VERSION}} · free, open source (MIT)</span>
+    </div>
+    <figure class="shot">
+      <img src="shared/screenshot.png" width="1440" height="820"
+        alt="The sequencer window: a list of sequences on the left, a lane editor with clips on three layers in the middle, and the clip browser with thumbnails on the right.">
+    </figure>
+  </div>
+
+  <section aria-labelledby="features">
+    <h2 id="features">What it does</h2>
+    <ul class="features">
+      <li><h3>Lanes per layer</h3><p>Clips and rests on several Resolume layers at once, on a 1/8 or 1/16-bar grid.
+        Repeat once, ×N or endlessly.</p></li>
+      <li><h3>On the clock</h3><p>Follows your MIDI clock and triggers every clip exactly on its tick over OSC;
+        Resolume confirms each one.</p></li>
+      <li><h3>Start from Resolume</h3><p>Click a <code>§</code> placeholder clip on a SEQ layer, from the mouse, a
+        controller or the dashboard, and its sequence starts.</p></li>
+      <li><h3>Live-friendly</h3><p>Click a clip by hand and that layer is yours until you hand it back. Clock lost?
+        Sequences wait and continue.</p></li>
+      <li><h3>Survives your edits</h3><p>Clips are found again by ID, name or file after you move or rename them;
+        sequences are kept per deck.</p></li>
+      <li><h3>Timeline in Resolume</h3><p>The optional FFGL plugin "1000A Sequence" shows a sequence's lanes and
+        playhead right on its clip.</p></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="requirements">
+    <h2 id="requirements">Requirements</h2>
+    <ul class="plain">
+      <li>Windows 10 or 11, on the same computer as Resolume.</li>
+      <li>Resolume Arena 7.26 or newer, with the webserver and OSC input switched on.</li>
+      <li>A MIDI clock on a MIDI input (for example a virtual MIDI port).</li>
+      <li>The Microsoft Edge WebView2 Runtime (part of Windows 11).</li>
+    </ul>
+    <p><a href="manual/installation.html">Installation</a> · <a href="manual/quick-start.html">Quick start</a> ·
+      <a href="manual/troubleshooting.html">Troubleshooting</a> · <a href="{{REPO}}/issues/new/choose">Report an issue</a></p>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>Clip Sequencer for Resolume · Copyright (c) 2026 {{OWNER}} · Released under the
+      <a href="{{REPO}}/blob/main/LICENSE">MIT License</a> · Provided as is, without warranty of any kind.</p>
+    <p>Not affiliated with or endorsed by Resolume BV. Resolume is a trademark of Resolume BV.</p>
+    <p><a href="contact.html">Contact and legal notice</a> · <a href="privacy.html">Privacy</a> ·
+      <a href="{{REPO}}">Source on GitHub</a></p>
+  </div>
+</footer>
+</body>
+</html>

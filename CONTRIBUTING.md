@@ -74,7 +74,7 @@ commands (test clock, soak test, headless runs).
 - Tests for new behaviour and for bug fixes (a test that fails without the fix).
 - `scripts\check.ps1` passes (CI runs the same checks).
 - Add a line under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
-- **Changes to user-facing behaviour update the user manual in the same PR** (`site/manual/`, once it exists),
+- **Changes to user-facing behaviour update the user manual in the same PR** (`site/manual/src/`; build and check the site with `node site/build.mjs`),
   so the manual never describes an older app.
 - Screenshots in docs show neutral demo content only (the demo composition), never real show footage.
 - PRs are squash-merged.
