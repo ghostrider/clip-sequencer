@@ -61,11 +61,18 @@ pub fn main(exe: Exe) -> ExitCode {
     }
     // Console commands log to stderr only; the sequencer also to daily files (Console tab, M12 E).
     let runs = config.validate.is_none() && !config.list_midi_ports && !config.clock_debug;
+    // Before anything opens files there: the default data folder was renamed.
+    let migration = if runs {
+        crate::config::migrate_data_dir(&mut config)
+    } else {
+        crate::config::DataDirMigration::None
+    };
     crate::logging::init(crate::logging::LogConfig {
         stderr: config.headless || !runs || cfg!(debug_assertions),
         dir: runs.then(|| config.data_dir().join("logs")),
     });
     crate::logging::log_panics();
+    migration.log();
     if runs {
         log::info!(
             "{} {} (build {}, {})",
