@@ -9,6 +9,10 @@
   import SwitchModal from './components/SwitchModal.svelte';
   import Console from './components/Console.svelte';
   import PreferencesDialog from './components/PreferencesDialog.svelte';
+  import MenuBar from './components/MenuBar.svelte';
+  import AboutDialog from './components/AboutDialog.svelte';
+  import LicensesDialog from './components/LicensesDialog.svelte';
+  import ShortcutsDialog from './components/ShortcutsDialog.svelte';
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -32,10 +36,11 @@
       app.prefsOpen = true;
       return;
     }
-    if (app.prefsOpen) return; // the dialog handles its own keys
+    if (app.prefsOpen || app.dialog) return; // dialogs handle their own keys
     if (app.tab !== 'sequencer') return; // editor shortcuts only in the editor
     const t = e.target as HTMLElement;
     if (t.closest('input, select, textarea, [contenteditable]')) return;
+    if (t.closest('[role="menubar"]')) return; // Space/Enter/arrows belong to the menu bar
     const view = app.selected;
     const deck = app.viewDeck;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -69,6 +74,9 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="app">
+  {#if !app.desktop}
+    <MenuBar />
+  {/if}
   <TopBar />
   {#if !app.connected}
     <div class="banner">Not connected to the sequencer app · retrying…</div>
@@ -88,3 +96,6 @@
 </div>
 <SwitchModal />
 <PreferencesDialog />
+{#if app.dialog === 'about'}<AboutDialog />{/if}
+{#if app.dialog === 'licenses'}<LicensesDialog />{/if}
+{#if app.dialog === 'shortcuts'}<ShortcutsDialog />{/if}

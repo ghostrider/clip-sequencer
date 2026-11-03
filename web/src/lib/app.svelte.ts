@@ -6,6 +6,27 @@ import type {
   SequenceView, StructureState, Uuid, VersionInfo,
 } from './types';
 
+export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit';
+
+const ZOOM_KEY = 'seq.uiZoom';
+function loadUiZoom(): number {
+  try {
+    const z = Number(localStorage.getItem(ZOOM_KEY));
+    return z >= 0.5 && z <= 2 ? z : 1;
+  } catch {
+    return 1;
+  }
+}
+/** CSS zoom on the root (browser UI); remembered per browser. */
+function applyUiZoom(z: number) {
+  document.documentElement.style.zoom = z === 1 ? '' : String(z);
+  try {
+    localStorage.setItem(ZOOM_KEY, String(z));
+  } catch {
+    /* private mode: not remembered */
+  }
+}
+
 /** Records the Console tab keeps (the app's ring buffer holds as many). */
 export const LOG_LIMIT = 5000;
 
@@ -36,6 +57,10 @@ class AppState {
   errorsSeen = $state(0);
   /** Preferences dialog (MIDI clock input). */
   prefsOpen = $state(false);
+  /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
+  dialog = $state<InfoDialog | null>(null);
+  /** Browser UI only: page zoom set from the View menu (the desktop app zooms its window). */
+  uiZoom = $state(loadUiZoom());
 
   /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
   viewDeckKey = $state<string | null>(null);
@@ -62,6 +87,8 @@ class AppState {
         .then((v: VersionInfo) => {
           this.version = v;
           this.desktop = v.desktop === true;
+          // The browser UI's zoom from an earlier visit; the desktop window (same origin) zooms itself.
+          document.documentElement.style.zoom = !this.desktop && this.uiZoom !== 1 ? String(this.uiZoom) : '';
         })
         .catch(() => {});
       if (this.tab === 'console') this.send({ cmd: 'log_subscribe' });
@@ -88,6 +115,28 @@ class AppState {
 
   edit(op: EditOp) {
     this.send({ cmd: 'edit', op });
+  }
+
+  // ---- menus (M11 Phase F) ----
+
+  openDialog(d: InfoDialog) {
+    this.prefsOpen = false;
+    this.dialog = d;
+  }
+
+  /** Project links, from Cargo metadata via `/api/version` (fallbacks until it has loaded). */
+  get links() {
+    const repo = this.version?.repository ?? 'https://github.com/ghostrider/clip-sequencer';
+    const home = this.version?.homepage ?? 'https://ghostrider.github.io/clip-sequencer/';
+    const site = home.endsWith('/') ? home : `${home}/`;
+    return { repo, site, manual: `${site}manual/`, issues: `${repo}/issues/new/choose` };
+  }
+
+  /** View menu of the browser UI: `step` in 10 % steps, `null` resets. */
+  zoomUi(step: number | null) {
+    const z = step === null ? 1 : Math.round((this.uiZoom + step) * 10) / 10;
+    this.uiZoom = Math.min(2, Math.max(0.5, z));
+    applyUiZoom(this.uiZoom);
   }
 
   // ---- console ----
@@ -241,3 +290,6 @@ export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
 
 // The desktop shell's File > Preferences menu item calls this.
 (window as unknown as { __seqOpenPrefs: () => void }).__seqOpenPrefs = () => (app.prefsOpen = true);
+
+// The desktop shell's Help menu items (About, Licenses, Keyboard shortcuts) call this.
+(window as unknown as { __seqOpenDialog: (d: InfoDialog) => void }).__seqOpenDialog = (d) => app.openDialog(d);

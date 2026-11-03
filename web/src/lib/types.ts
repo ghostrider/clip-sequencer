@@ -171,6 +171,8 @@ export type Command =
   | { cmd: 'edit'; op: EditOp }
   | { cmd: 'undo' }
   | { cmd: 'redo' }
+  | { cmd: 'reload_composition' }
+  | { cmd: 'save_now' }
   | { cmd: 'push_thumbnail'; seq: Uuid }
   | { cmd: 'shell'; action: ShellAction }
   | { cmd: 'log_subscribe' }
@@ -205,6 +207,38 @@ export interface VersionInfo {
   build_date: string;
   /** Target triple, e.g. `x86_64-pc-windows-msvc`. */
   target: string;
+  /** `Copyright (c) 2026 …` (same as LICENSE). */
+  copyright: string;
+  /** GitHub repository URL (Cargo `repository`). */
+  repository: string;
+  /** Project site URL (Cargo `homepage`); the manual is under `manual/`. */
+  homepage: string;
   ui_port: number;
   desktop: boolean;
+}
+
+/** One third-party component in the notices (`THIRD_PARTY_LICENSES.json`, scripts/third-party-licenses.mjs). */
+export interface NoticePackage {
+  name: string;
+  version: string;
+  license: string;
+  part: string;
+  url: string;
+  /** Indexes into `Notices.texts`. */
+  texts: number[];
+}
+
+export interface Notices {
+  /** Set when the notices were not generated for this build (dev builds). */
+  placeholder?: boolean;
+  note?: string;
+  packages: NoticePackage[];
+  texts: string[];
+}
+
+/** `GET /api/licenses`. */
+export interface LicensesInfo {
+  /** The project's MIT license text. */
+  license: string;
+  notices: Notices;
 }
