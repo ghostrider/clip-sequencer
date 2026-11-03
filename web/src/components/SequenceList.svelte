@@ -110,7 +110,7 @@
             {#if running}<span class="run-badge">RUN</span>{/if}
           </div>
           <div class="meta">
-            {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} bars · {repeatLabel(v.sequence.repeat)}
+            {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} {bars(v) === '1' ? 'bar' : 'bars'} · {repeatLabel(v.sequence.repeat)}
           </div>
           <div class="bind" class:bad={b.bad}>{b.text}</div>
         </div>

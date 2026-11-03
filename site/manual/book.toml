@@ -1,0 +1,27 @@
+# User manual (mdBook). Build the whole site with `node site/build.mjs` (it prepares the fonts, the
+# shortcuts page and the version footer); `mdbook serve site/manual` works after one build.
+[book]
+title = "Clip Sequencer for Resolume: User manual"
+authors = ["Ulrich Staudinger"]
+language = "en"
+src = "src"
+
+[output.html]
+site-url = "/clip-sequencer/manual/"
+default-theme = "navy"
+preferred-dark-theme = "navy"
+smart-punctuation = true
+definition-lists = true
+additional-css = ["theme/seq.css"]
+git-repository-url = "https://github.com/ghostrider/clip-sequencer"
+git-repository-icon = "fab-github"
+no-section-label = true
+# Plain file names: theme/fonts/fonts.css refers to the font files by name (hashing would rename them).
+hash-files = false
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+enable = true
+limit-results = 20
