@@ -78,9 +78,15 @@ fn default_data_dir() -> PathBuf {
 pub enum DataDirMigration {
     /// Nothing to do: no old folder, or `--data-dir` was given.
     None,
-    Moved { from: PathBuf, to: PathBuf },
+    Moved {
+        from: PathBuf,
+        to: PathBuf,
+    },
     /// Both folders exist; the new one is used and the old one left alone.
-    BothExist { old: PathBuf, new: PathBuf },
+    BothExist {
+        old: PathBuf,
+        new: PathBuf,
+    },
     /// The rename failed (e.g. an older build still runs from the old folder); this run keeps
     /// using the old folder.
     Failed {
@@ -182,16 +188,25 @@ mod tests {
 
         std::fs::create_dir_all(old.join("logs")).unwrap();
         std::fs::write(old.join("dev.seq.json"), "{}").unwrap();
-        assert!(matches!(migrate_dir(&old, &new), DataDirMigration::Moved { .. }));
+        assert!(matches!(
+            migrate_dir(&old, &new),
+            DataDirMigration::Moved { .. }
+        ));
         assert!(!old.exists());
-        assert_eq!(std::fs::read_to_string(new.join("dev.seq.json")).unwrap(), "{}");
+        assert_eq!(
+            std::fs::read_to_string(new.join("dev.seq.json")).unwrap(),
+            "{}"
+        );
         assert!(new.join("logs").is_dir());
 
         // Second start: nothing left to move.
         assert!(matches!(migrate_dir(&old, &new), DataDirMigration::None));
         // An old folder reappearing next to the new one is left alone.
         std::fs::create_dir_all(&old).unwrap();
-        assert!(matches!(migrate_dir(&old, &new), DataDirMigration::BothExist { .. }));
+        assert!(matches!(
+            migrate_dir(&old, &new),
+            DataDirMigration::BothExist { .. }
+        ));
         assert!(new.join("dev.seq.json").exists());
     }
 
