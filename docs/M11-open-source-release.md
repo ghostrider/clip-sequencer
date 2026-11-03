@@ -206,23 +206,42 @@ message, author data). Found and rewritten with `git filter-repo` in all history
 Use only the existing design tokens (`web/src/tokens.css`). Every item opens an existing
 function or a static info dialog. No new behaviour.
 
-- [ ] **Menu bar** at the top of the app, above or merged into the top bar, keyboard-accessible
+- [x] **Menu bar** at the top of the app, above or merged into the top bar, keyboard-accessible
       (Alt or F10 focuses it; arrow keys move; Esc closes):
   - **File:** Reload composition · Save now · Open data folder (only if this is trivial
     via the server; otherwise leave it out) · Quit server (with confirmation)
   - **View:** Zoom in · Zoom out · Reset zoom
   - **Help:** Keyboard shortcuts · User manual (opens the manual on the project site, Phase G2,
     in the system browser) · Report an issue (GitHub issues/new) · Licenses · About
-- [ ] **About dialog:** app name and icon; version, build number, commit, build date (from
+- [x] **About dialog:** app name and icon; version, build number, commit, build date (from
       `/api/version`); `Copyright (c) 2026 <holder>`; "Released under the MIT License"
       linking to the License dialog; GitHub repository link; the disclaimer *"Not affiliated with or
       endorsed by Resolume BV. Resolume is a trademark of Resolume BV."*; *"Provided as is,
       without warranty of any kind."*; links to the project site and the user manual.
-- [ ] **License dialog:** the project's MIT text first, then the third-party notices,
+- [x] **License dialog:** the project's MIT text first, then the third-party notices,
       grouped per package (name, version, license, collapsible full text). Data is served by the app
       from the generated file embedded at build time.
-- [ ] **Keyboard shortcuts dialog:** a list of the shortcuts that already exist (SPEC §9.3).
-- [ ] Each dialog closes with Esc and the close button, traps focus, and returns focus to its menu item.
+- [x] **Keyboard shortcuts dialog:** a list of the shortcuts that already exist (SPEC §9.3).
+- [x] Each dialog closes with Esc and the close button, traps focus, and returns focus to its menu item.
+
+*(2026-11-03, done:*
+- *Menu bar: per the M12 decision the desktop app keeps its native menu (Help now also has User manual, Report an
+  issue, Licenses, About); `web/src/components/MenuBar.svelte` is shown only in browser/headless mode. File:
+  Reload composition, Save now, Preferences…, Quit server… (confirmation; the headless app stops like Ctrl+C).
+  "Open data folder" is left out in the browser: the server would have to open Explorer for a browser that may not
+  sit at that machine. View: page zoom (CSS zoom, remembered per browser), Toggle Console. Help as in the plan.
+  Alt alone or F10 enters the bar; arrows, Home/End, Enter/Space, Esc, Tab follow the ARIA menubar pattern.*
+- *About / Licenses / Keyboard shortcuts are page dialogs in both modes (the native menu opens them through
+  `window.__seqOpenDialog`). Licenses: `GET /api/licenses` = the MIT text + `THIRD_PARTY_LICENSES.json` embedded
+  at build time (placeholder note in dev builds; `release.ps1` now generates the notices before `cargo build`).
+  Shortcuts: one list, `web/src/lib/shortcuts.ts` (the copy in `desktop.rs` is gone).*
+- *Shared `Dialog.svelte`: Esc and ✕ close, Tab is trapped, focus returns to the opener (the menu-bar item).
+  Editor keys (Space, Del, R, …) no longer act inside dialogs or on the menu bar.*
+- *Verified in Chromium against `mock-resolume` + headless `seq-app-cli` (14 checks: keyboard model, dialog
+  contents, focus trap/return, filter and expanding in Licenses, zoom persistence, Quit server Cancel/Quit).
+  **To verify on Windows:** the native Help items in `seq-app.exe` (dialogs open in the window, links in the
+  system browser).)*
+
 
 ## Phase G — Repository documents and security defaults
 
