@@ -68,11 +68,11 @@ pub fn main(exe: Exe) -> ExitCode {
     crate::logging::log_panics();
     if runs {
         log::info!(
-            "{} {} (build {}, {})",
+            "{} {} {}, built {}",
             crate::APP_NAME,
-            crate::VERSION,
-            crate::BUILD_NUMBER,
-            crate::GIT_COMMIT
+            crate::LONG_VERSION,
+            crate::TARGET,
+            crate::BUILD_DATE
         );
     }
 

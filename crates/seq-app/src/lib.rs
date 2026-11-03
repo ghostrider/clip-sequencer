@@ -30,6 +30,12 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const BUILD_NUMBER: &str = env!("SEQ_BUILD_NUMBER");
 /// Short commit hash, `-dirty` with uncommitted changes (build.rs).
 pub const GIT_COMMIT: &str = env!("SEQ_GIT_COMMIT");
+/// UTC build time, ISO 8601 (build.rs; `SOURCE_DATE_EPOCH` if set).
+pub const BUILD_DATE: &str = env!("SEQ_BUILD_DATE");
+/// Target triple of this build, e.g. `x86_64-pc-windows-msvc`.
+pub const TARGET: &str = env!("SEQ_TARGET");
+/// `0.1.0 (build 42, abc1234, 2026-11-03)`: `--version`, the first log line, error dialogs.
+pub const LONG_VERSION: &str = env!("SEQ_LONG_VERSION");
 /// Copyright line (M12 Phase A; same as the LICENSE of the open-source release).
 /// Source: `bundle.copyright` in `tauri.conf.json` (also the exe's LegalCopyright; build.rs).
 pub const COPYRIGHT: &str = env!("SEQ_COPYRIGHT");

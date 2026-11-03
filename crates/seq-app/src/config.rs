@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Debug, Clone, Parser)]
-#[command(name = "seq-app", about = "Resolume clip sequencer", version)]
+#[command(name = "seq-app", about = "Resolume clip sequencer", version = crate::LONG_VERSION)]
 pub struct Config {
     /// MIDI input port carrying the clock (substring of the port name).
     #[arg(long)]

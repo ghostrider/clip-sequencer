@@ -90,6 +90,8 @@ async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
         "version": crate::VERSION,
         "build": crate::BUILD_NUMBER,
         "commit": crate::GIT_COMMIT,
+        "build_date": crate::BUILD_DATE,
+        "target": crate::TARGET,
         "ui_port": ctx.ui_port,
         "desktop": ctx.shell.is_some(),
     }))

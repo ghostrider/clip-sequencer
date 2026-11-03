@@ -955,6 +955,26 @@ async fn api_version_and_runtime_file_name_the_actual_ui_port() {
     assert_eq!(v["app"], seq_app::APP_ID);
     assert_eq!(v["name"], seq_app::APP_NAME);
     assert_eq!(v["version"], seq_app::VERSION);
+    // Build info (M11 Phase E): the same values as `--version` and the first log line.
+    assert_eq!(v["build"], seq_app::BUILD_NUMBER);
+    assert_eq!(v["commit"], seq_app::GIT_COMMIT);
+    assert_eq!(v["target"], seq_app::TARGET);
+    let date = v["build_date"].as_str().unwrap();
+    assert!(
+        date.len() == 20 && date.ends_with('Z') && date.as_bytes()[10] == b'T',
+        "{date}"
+    );
+    assert!(
+        seq_app::LONG_VERSION.starts_with(&format!(
+            "{} (build {}, {}, {})",
+            seq_app::VERSION,
+            seq_app::BUILD_NUMBER,
+            seq_app::GIT_COMMIT,
+            &date[..10]
+        )),
+        "{}",
+        seq_app::LONG_VERSION
+    );
     assert_eq!(v["ui_port"], ui.port());
     assert_eq!(v["desktop"], false);
     let runtime = dir.path().join("runtime.json");

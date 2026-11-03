@@ -25,8 +25,9 @@ New-Item -ItemType Directory -Force release | Out-Null
 Copy-Item target\release\seq-app.exe release\seq-app.exe -Force
 Copy-Item target\release\seq-app-cli.exe release\seq-app-cli.exe -Force
 
-# The version the binary reports ("seq-app-cli 0.1.0"); [workspace.package] is its only source.
-$version = ((& release\seq-app-cli.exe --version) -split ' ')[-1]
+# The version the binary reports ("seq-app 0.1.0 (build 42, abc1234, 2026-11-03)"); [workspace.package] is its
+# only source. Second word = the semver.
+$version = ((& release\seq-app-cli.exe --version) -split ' ')[1]
 $name = "clip-sequencer-$version-windows-x64"
 Write-Host "==> $name.zip" -ForegroundColor Cyan
 $stage = Join-Path release $name

@@ -34,7 +34,7 @@ use crate::engine::view::RuntimeState;
 use crate::engine::EngineCommand;
 use crate::runner::{self, StartError, StartupStep};
 use crate::server::ShellAction;
-use crate::{APP_NAME, BUILD_NUMBER, COPYRIGHT, GIT_COMMIT, VERSION};
+use crate::{APP_NAME, BUILD_NUMBER, COPYRIGHT, GIT_COMMIT, LONG_VERSION, VERSION};
 
 const MAIN: &str = "main";
 const SPLASH: &str = "splash";
@@ -520,9 +520,7 @@ fn focus_process_window(_pid: u32) -> bool {
 fn fatal(app: &AppHandle, message: String, retryable: bool) {
     log::error!("{message}");
     if let Some(splash) = app.get_webview_window(SPLASH) {
-        let details = format!(
-            "{APP_NAME} {VERSION} (build {BUILD_NUMBER}, {GIT_COMMIT}) could not start:\n{message}"
-        );
+        let details = format!("{APP_NAME} {LONG_VERSION} could not start:\n{message}");
         let _ = splash.set_always_on_top(false);
         let _ = splash.eval(format!(
             "window.splash && splash.error({}, {}, {retryable})",

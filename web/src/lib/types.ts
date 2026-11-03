@@ -201,6 +201,10 @@ export interface VersionInfo {
   version: string;
   build: string;
   commit: string;
+  /** UTC build time, ISO 8601. */
+  build_date: string;
+  /** Target triple, e.g. `x86_64-pc-windows-msvc`. */
+  target: string;
   ui_port: number;
   desktop: boolean;
 }
