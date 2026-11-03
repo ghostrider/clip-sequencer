@@ -12,12 +12,12 @@
 //! whatever is in that slot when the step starts.
 //!
 //! Timing: a start emits its first steps immediately (position 0). Each [`Scheduler::on_tick`]
-//! advances every running sequence by one tick (24 PPQN, 12 ticks per eighth) and emits what
+//! advances every running sequence by one tick (24 PPQN, 6 ticks per sixteenth) and emits what
 //! falls on that tick.
 
 use uuid::Uuid;
 
-use crate::model::{AfterLastPass, LaneEnd, Repeat, Sequence, TICKS_PER_EIGHTH};
+use crate::model::{AfterLastPass, LaneEnd, Repeat, Sequence, TICKS_PER_SIXTEENTH};
 use crate::resolve::{LayerResolution, SequenceResolution, StepResolution};
 
 /// Ticks per beat (quarter note) and per bar in 4/4.
@@ -98,7 +98,7 @@ impl RunSpec {
                     .iter()
                     .zip(&res.steps)
                     .map(|(step, sr)| RunStep {
-                        ticks: u64::from(step.length) * u64::from(TICKS_PER_EIGHTH),
+                        ticks: u64::from(step.length) * u64::from(TICKS_PER_SIXTEENTH),
                         target: match sr {
                             StepResolution::Rest => StepTarget::Rest,
                             StepResolution::Resolved { clip, .. } => StepTarget::Clip(clip.clip_id),

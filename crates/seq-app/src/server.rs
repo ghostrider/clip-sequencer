@@ -492,13 +492,21 @@ async fn seq_thumb(State(ctx): State<ServerCtx>, Path(file): Path<String>) -> Re
 struct PluginViewQuery {
     name: Option<String>,
     rev: Option<String>,
+    /// Response format: 2 = lengths in sixteenths; missing or 1 = eighths (older plugins).
+    format: Option<u32>,
 }
 
 async fn plugin_view(State(ctx): State<ServerCtx>, Query(q): Query<PluginViewQuery>) -> Response {
     let text = {
         let s = ctx.structure.borrow();
         let r = ctx.runtime.borrow();
-        crate::plugin_view::view_text(&s, &r, q.name.as_deref().unwrap_or(""), q.rev.as_deref())
+        crate::plugin_view::view_text(
+            &s,
+            &r,
+            q.name.as_deref().unwrap_or(""),
+            q.rev.as_deref(),
+            crate::plugin_view::Format::from_query(q.format),
+        )
     };
     (
         [

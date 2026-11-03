@@ -1500,7 +1500,7 @@ impl Engine {
                         .iter()
                         .map(|s| SequenceView {
                             sequence: s.clone(),
-                            pass_eighths: s.pass_length(),
+                            pass_sixteenths: s.pass_length(),
                             binding: seq_clips.iter().find(|(n, _, _)| *n == s.name).map(
                                 |(_, column, clip_id)| Binding {
                                     column: *column,
