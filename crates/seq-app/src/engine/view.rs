@@ -42,6 +42,9 @@ pub struct DeckView {
     /// Clip data: live, cached from the last time the deck was live, or none.
     pub clips_source: ClipsSource,
     pub layers: Vec<LayerView>,
+    /// Number of columns in the deck's clip data (0 without clip data); slot lane steps pick a
+    /// column up to this (SPEC §4.5).
+    pub columns: usize,
     pub sequences: Vec<SequenceView>,
     /// `§` clips on the SEQ layer whose name matches no sequence of this deck.
     pub unmatched_seq_clips: Vec<String>,
