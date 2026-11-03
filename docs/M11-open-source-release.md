@@ -245,27 +245,42 @@ function or a static info dialog. No new behaviour.
 
 ## Phase G — Repository documents and security defaults
 
-- [ ] `README.md` (aimed at developers and first-time visitors on GitHub; end users are pointed to the
+- [x] `README.md` (aimed at developers and first-time visitors on GitHub; end users are pointed to the
       project site and manual from Phase G2, which the README links prominently at the top):
-  - [ ] what it does (2–3 sentences) and a screenshot (with neutral demo content, no third-party footage)
-  - [ ] requirements: Windows 10/11, Resolume Arena 7.26+ with the webserver and OSC input enabled,
+  - [x] what it does (2–3 sentences) and a screenshot (with neutral demo content, no third-party footage)
+  - [x] requirements: Windows 10/11, Resolume Arena 7.26+ with the webserver and OSC input enabled,
         a MIDI clock source (e.g. a virtual MIDI port)
-  - [ ] install (download the release zip), run, CLI flags / `seq.toml`, the SEQ-layer convention,
+  - [x] install (download the release zip), run, CLI flags / `seq.toml`, the SEQ-layer convention,
         where data, cache and logs live
-  - [ ] SmartScreen note: the exe is unsigned, so Windows may warn ("More info → Run anyway")
-  - [ ] building from source
-  - [ ] the Resolume trademark disclaimer and a license section
-- [ ] `CHANGELOG.md` in the Keep a Changelog format; first entry `0.1.0` summarises the current feature set.
-- [ ] `CONTRIBUTING.md`: build/test commands, code style (fmt, clippy), PR expectations, and
+  - [x] SmartScreen note: the exe is unsigned, so Windows may warn ("More info → Run anyway")
+  - [x] building from source
+  - [x] the Resolume trademark disclaimer and a license section
+- [x] `CHANGELOG.md` in the Keep a Changelog format; first entry `0.1.0` summarises the current feature set.
+- [x] `CONTRIBUTING.md`: build/test commands, code style (fmt, clippy), PR expectations, and
       that the sequence file format changes only with a version bump and a migration.
-- [ ] `SECURITY.md`: how to report issues privately (GitHub private vulnerability reporting).
-- [ ] **Security default:** the UI server binds to `127.0.0.1` by default. Binding to other
+- [x] `SECURITY.md`: how to report issues privately (GitHub private vulnerability reporting).
+- [x] **Security default:** the UI server binds to `127.0.0.1` by default. Binding to other
       interfaces requires an explicit flag (`--ui-bind 0.0.0.0`) and logs a warning. If the app
       currently binds to all interfaces, this change is part of M11. Document it in the README.
-- [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` (asks for app version/build, Resolume version,
+- [x] `.github/ISSUE_TEMPLATE/bug_report.yml` (asks for app version/build, Resolume version,
       Windows version, MIDI clock source, a log excerpt) and `feature_request.yml`.
-- [ ] `.github/pull_request_template.md` (short checklist: tests, clippy, changelog entry, manual updated if user-facing behaviour changed).
+- [x] `.github/pull_request_template.md` (short checklist: tests, clippy, changelog entry, manual updated if user-facing behaviour changed).
 - [ ] Optional: `.editorconfig`; `CODE_OF_CONDUCT.md` (Contributor Covenant). Ask Uli.
+
+*(2026-11-03, done; the optional `.editorconfig` / `CODE_OF_CONDUCT.md` are waiting for Uli:*
+- *README: site / manual / download / changelog links on top; screenshot `docs/images/screenshot.png` of the
+  neutral demo (`docs/samples/demo-composition.json` + `demo.seq.json` in `mock-resolume`, generated abstract
+  thumbnails); features; requirements with any MIDI clock source (no reference to the separate Clock Shifter
+  project); install from the zip with checksum and SmartScreen notes; Resolume setup incl. the SEQ layer; run,
+  options, UI port, logs, data folder (kept from before); security; building from source; license and
+  disclaimer. `seq.toml` is not implemented (`config.rs`), so the README documents CLI flags only.*
+- *Security default: the UI server binds to `127.0.0.1` and there is no option to bind elsewhere (stricter than
+  the plan's opt-in flag; no `--ui-bind` was added, since that would be a new feature nobody needs yet).
+  Documented in README and SECURITY.md.*
+- *CHANGELOG (0.1.0 "Unreleased" until the release sets the date; `[Unreleased]` above it), CONTRIBUTING,
+  SECURITY, issue forms (bug report with version/build, program, Resolume, Windows, clock source, log;
+  feature request; `config.yml` links to the manual and private reporting) and the PR template.)*
+
 
 ## Phase G2 — End-user manual and project site (GitHub Pages)
 
