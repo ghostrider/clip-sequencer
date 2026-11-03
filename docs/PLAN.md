@@ -118,7 +118,8 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [x] New media dropped onto the playing slot: no yield, no re-trigger; played at its next step (SPEC §4.5).
 - [x] Scheduler: `StepTarget::Slot { column }` in the run snapshot; engine triggers the slot by position at send
       time; empty/out of range → clear. Pre-step slot fetch task (SPEC §4.5) feeding the engine by message. Tests incl.
-      content swapped between passes, columns inserted while running, empty slot = rest.
+      content swapped while running (silent swap) and empty slot = rest. (Not tested separately: columns
+      inserted while running; that is a pushed structural change, handled like any composition push.)
 - [x] Edit operations: set lane mode with step conversion (both directions), set step column; undo.
 - [x] UI: mode switch in the lane header, `col N` blocks with live slot thumbnails, empty-slot state,
       browser drop onto slot lanes, inspector column stepper,
