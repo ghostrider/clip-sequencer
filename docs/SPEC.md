@@ -108,12 +108,50 @@ them as "Layer 1", "Layer 2", …), so they cannot be told apart. Lanes require 
 layer when layers are inserted or reordered). The UI shows such layers as "Layer N · unnamed,
 rename in Resolume to use it"; a lane on an ambiguous name is unresolved.
 
+### 4.5 Slot lanes (positional sequencing, M13, decided 2026-11-03)
+A lane is in one of two modes, set per lane:
+- **`clip`** (default, everything above): a step references a clip by identity (§4.3) and follows
+  it when it is moved.
+- **`slot`**: a step references a **column number** on the lane's layer. Whatever clip sits in
+  that slot when the step starts is triggered. The sequence keeps its rhythm; the content is
+  changed live by dragging other clips or media into those slots in Resolume (like a drum
+  pattern playing notes whose samples are swapped on the pads).
+
+Rules for slot lanes:
+- The column is a plain 1-based index into the deck's columns, deliberately **not** stable:
+  inserting or removing columns shifts what plays ("column 3" is always the third column). This is
+  the one exception to "indices are never stored" (§4.2).
+- The slot is always on the **lane's own layer**. Layer lookup by name is unchanged (§4.4).
+- The slot is read **when the step starts**; the running sequence's snapshot (§7.1) holds the
+  column, not a clip. The trigger is sent to the slot's position
+  (`/composition/layers/{L}/clips/{column}/connect`, `L` from the current index), so it always plays
+  what is in the slot now.
+- The composition index can be stale after drags and drops in Resolume's UI (no push, *notes §14*).
+  So a background task fetches the slot (`GET /composition/layers/{L}/clips/{column}`, ~11 ms) about
+  150 ms before each slot step starts and reports it to the engine by message (id, empty or not,
+  name, file). The engine uses the newest report it has at step start and the index if none
+  arrived; it never waits for it. The same reports refresh the UI's slot thumbnails.
+- An **empty slot**, or a column beyond the deck's column count, acts as a **rest**: it clears the
+  lane's layer (unlike an unresolved clip step, which triggers nothing). There is no
+  "unresolved" state for slot steps.
+- A slot step whose slot holds the clip that is already playing re-triggers it, as with clip steps.
+- Confirmation (§7.5) and manual-override detection (§7.3) work on the slot's clip id at
+  trigger time.
+- **Content changed in the playing slot** (new media dropped onto it): Resolume stops the playing
+  clip and does not start the new media (*notes §14*), so the layer goes dark. The sequencer does
+  not react: the lane is not yielded, keeps its timing and does not re-trigger. The new content
+  plays when a step for that slot starts next, as the sequence says.
+- Dragging the playing clip to another slot also stops it in Resolume (*notes §14*); the lane
+  carries on the same way.
+- Open (not probed): whether moving a stopped clip into, or dropping a file into, an **empty** slot
+  produces a push. The pre-step fetch covers both.
+
 ## 5. Concepts
 
 - **Composition** — the open `.avc`. Sequences are stored per composition.
 - **Deck** — every sequence belongs to exactly one deck. Sequences never use clips from another deck.
 - **Sequence** — name, deck, repeat setting, end action, one or more lanes.
-- **Lane** — targets one layer (by name). Has its own steps and its own length. Lanes can be
+- **Lane** — targets one layer (by name), in `clip` or `slot` mode (§4.5). Has its own steps and its own length. Lanes can be
   reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
 - **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
@@ -158,6 +196,16 @@ automatically. Sequences are grouped by deck name.
                 { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
                 { "clip": null, "length": 8 }
               ]
+            },
+            {
+              "layer": "FG",
+              "mode": "slot",
+              "end": "loop_to_end",
+              "steps": [
+                { "column": 1, "length": 8 },
+                { "column": 2, "length": 8 },
+                { "column": null, "length": 8 }
+              ]
             }
           ]
         }
@@ -169,6 +217,12 @@ automatically. Sequences are grouped by deck name.
 
 - `repeat.mode`: `"once"` | `"count"` | `"infinite"`; `count` only with `"count"`.
 - `length`: integer, in eighths (8 = one bar), ≥ 1.
+- `mode` (lane, version 2): `"clip"` (default when omitted) | `"slot"` (§4.5). Steps of a clip
+  lane have `clip` (object or `null` = rest); steps of a slot lane have `column` (integer ≥ 1,
+  or `null` = rest). The other field is not allowed.
+- **Version 2** (M13) adds `mode` and `column`. A version 1 file is migrated on load (all lanes
+  `clip`, nothing else changes) and saved as version 2. A file with a higher version than the app
+  knows is refused, not overwritten.
 - Writes are atomic (write temp file, rename). Autosave after edits (debounced ~1 s).
 - If a deck name in the file no longer exists in Resolume, its sequences are listed in the
   UI as **orphaned**, with an action "move to deck …".
@@ -296,13 +350,23 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence. Esc → deselect.
   - Undo/redo (Ctrl+Z / Ctrl+Shift+Z) for all edits in the session.
+- Slot lanes (§4.5):
+  - Lane header: mode switch `Clip` / `Slot`. Switching converts the steps (undoable):
+    clip → slot uses each resolved clip's column (unresolved → rest); slot → clip uses the clip
+    currently in each slot (empty → rest).
+  - Step blocks show `col N` and the **current** thumbnail of that slot, updated live when the slot's
+    content changes in Resolume. An empty slot is drawn like a rest, labelled `col N · empty`.
+  - Dropping a clip from the browser onto a slot lane inserts a step with that clip's column.
 
 ### 9.4 Right: clip browser + step inspector
 - Clip browser for the selected deck tab: search field, one row per layer (top layer first,
-  as in Resolume), clip thumbnails with names; draggable onto lanes.
+  as in Resolume), clip thumbnails with names; draggable onto lanes. Each thumbnail shows its
+  **column number** (1-based, the number a slot lane uses, §4.5) as a small overlay in its top-left
+  corner, in every lane mode.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
-  in eighths with bars shown.
+  in eighths with bars shown. For a slot step instead: column stepper (1 … column count) and the
+  clip currently in that slot (or "empty → rest").
 
 ### 9.5 Status bar
 Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,
