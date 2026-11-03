@@ -1,0 +1,36 @@
+// Windows version resource of SeqView.dll (M11 Phase E). The values come from BuildInfo.h, which the
+// GenerateBuildInfo target in SeqView.vcxproj writes from [workspace.package] in ../Cargo.toml and git, so the
+// DLL carries the same version and build number as the app. The app reads it to compare an installed plugin
+// with the bundled one (M11 Phase G3).
+#include <windows.h>
+#include "BuildInfo.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION SEQVIEW_VERSION_MAJOR, SEQVIEW_VERSION_MINOR, SEQVIEW_VERSION_PATCH, SEQVIEW_BUILD_NUMBER
+ PRODUCTVERSION SEQVIEW_VERSION_MAJOR, SEQVIEW_VERSION_MINOR, SEQVIEW_VERSION_PATCH, SEQVIEW_BUILD_NUMBER
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Ulrich Staudinger"
+            VALUE "FileDescription", "1000A Sequence - FFGL source plugin for Clip Sequencer"
+            VALUE "FileVersion", SEQVIEW_VERSION
+            VALUE "InternalName", "SeqView"
+            VALUE "LegalCopyright", "Copyright (c) 2026 Ulrich Staudinger"
+            VALUE "OriginalFilename", "SeqView.dll"
+            VALUE "ProductName", "Clip Sequencer for Resolume"
+            VALUE "ProductVersion", SEQVIEW_VERSION
+            VALUE "Comments", SEQVIEW_BUILD_INFO
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
