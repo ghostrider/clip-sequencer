@@ -163,6 +163,8 @@ pub async fn run(
         },
         debounce: DebounceConfig::default(),
         ui: Some(listener),
+        // Headless (no shell): the browser UI may quit the app (File → Quit server).
+        quit: shell.is_none().then(|| shutdown.clone()),
         shell,
     })?;
     let mut runtime = app.outputs.runtime.clone();

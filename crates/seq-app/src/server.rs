@@ -42,6 +42,8 @@ pub struct ServerCtx {
     pub ui_port: u16,
     /// The desktop shell, if the UI runs in its window (`ShellAction`s go there).
     pub shell: Option<mpsc::UnboundedSender<ShellAction>>,
+    /// Headless only: cancelling it shuts the app down like Ctrl+C (`quit` from the browser UI).
+    pub quit: Option<tokio_util::sync::CancellationToken>,
     /// Set once the first batch of the live deck's thumbnails is cached (startup splash).
     pub thumbs_ready: Arc<watch::Sender<bool>>,
     /// The MIDI clock input, for the Preferences dialog (`None` in tests with a clock channel).
@@ -50,7 +52,8 @@ pub struct ServerCtx {
 
 /// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
 /// the native menu's shortcuts (WebView2 handles input in its own process), so the UI sends
-/// Ctrl+Q and the zoom keys here. Ignored when there is no shell (browser).
+/// Ctrl+Q and the zoom keys here. Without a shell (headless, browser UI) only `Quit` is used: it stops
+/// the app when `ServerCtx::quit` is set; the rest is ignored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ShellAction {
@@ -66,6 +69,7 @@ pub fn router(ctx: ServerCtx) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
         .route("/api/version", get(api_version))
+        .route("/api/licenses", get(api_licenses))
         .route("/api/logs/current", get(current_log))
         .route("/api/midi/ports", get(midi_ports))
         .route("/thumbs/clip/{file}", get(clip_thumb))
@@ -92,9 +96,27 @@ async fn api_version(State(ctx): State<ServerCtx>) -> impl IntoResponse {
         "commit": crate::GIT_COMMIT,
         "build_date": crate::BUILD_DATE,
         "target": crate::TARGET,
+        "copyright": crate::COPYRIGHT,
+        "repository": env!("CARGO_PKG_REPOSITORY"),
+        "homepage": env!("CARGO_PKG_HOMEPAGE"),
         "ui_port": ctx.ui_port,
         "desktop": ctx.shell.is_some(),
     }))
+}
+
+/// The project's MIT license (repo root `LICENSE`).
+const LICENSE_TEXT: &str = include_str!("../../../LICENSE");
+/// Third-party notices (`THIRD_PARTY_LICENSES.json`, see build.rs; a placeholder in dev builds).
+const NOTICES_JSON: &str = include_str!("../../../THIRD_PARTY_LICENSES.json");
+
+/// License dialog (M11 Phase F): `{ "license": "<MIT text>", "notices": { packages, texts, note, … } }`.
+async fn api_licenses() -> Response {
+    let license = serde_json::to_string(LICENSE_TEXT).expect("string serialises");
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        format!("{{\"license\":{license},\"notices\":{NOTICES_JSON}}}"),
+    )
+        .into_response()
 }
 
 // ---- WebSocket ----
@@ -119,6 +141,9 @@ enum ClientMsg {
     },
     Undo,
     Redo,
+    /// File menu of the browser UI (the desktop app's native menu sends these directly).
+    ReloadComposition,
+    SaveNow,
     PushThumbnail {
         seq: Uuid,
     },
@@ -293,6 +318,8 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Edit { op } => EngineCommand::Edit { op },
         ClientMsg::Undo => EngineCommand::Undo,
         ClientMsg::Redo => EngineCommand::Redo,
+        ClientMsg::ReloadComposition => EngineCommand::ReloadComposition,
+        ClientMsg::SaveNow => EngineCommand::SaveNow,
         ClientMsg::PushThumbnail { seq } => {
             tokio::spawn(push_thumbnail(ctx.clone(), seq));
             return;
@@ -300,6 +327,10 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Shell { action } => {
             if let Some(shell) = &ctx.shell {
                 let _ = shell.send(action);
+            } else if let (ShellAction::Quit, Some(quit)) = (action, &ctx.quit) {
+                // Browser UI of the headless app: File → Quit server (confirmed in the page).
+                log::info!("quit requested from the UI");
+                quit.cancel();
             }
             return;
         }

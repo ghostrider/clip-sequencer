@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub ui: Option<std::net::TcpListener>,
     /// The desktop shell's channel for window actions from the UI (`None` = browser only).
     pub shell: Option<mpsc::UnboundedSender<crate::server::ShellAction>>,
+    /// Headless: the run's shutdown token, so the browser UI can quit the app (`None` = not allowed).
+    pub quit: Option<tokio_util::sync::CancellationToken>,
 }
 
 /// Owns the MIDI clock input and switches it to another port at runtime (Preferences dialog).
@@ -214,6 +216,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 rest,
                 ui_port: bound.port(),
                 shell: cfg.shell.clone(),
+                quit: cfg.quit.clone(),
                 thumbs_ready: std::sync::Arc::new(thumbs_ready_tx),
                 clock: clock.clone(),
             };

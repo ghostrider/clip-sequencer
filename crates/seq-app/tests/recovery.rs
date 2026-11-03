@@ -93,6 +93,7 @@ fn start_app(rest: u16, osc: u16) -> H {
         },
         ui: None,
         shell: None,
+        quit: None,
     })
     .unwrap();
     H {

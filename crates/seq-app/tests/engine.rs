@@ -121,6 +121,7 @@ fn start_app_ui(
         },
         ui: ui.map(|addr| std::net::TcpListener::bind(addr).unwrap()),
         shell: None,
+        quit: None,
     })
     .unwrap();
     (app, clock)
@@ -1099,6 +1100,7 @@ async fn ui_shell_actions_reach_the_desktop_shell() {
         debounce: DebounceConfig::default(),
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: Some(shell_tx),
+        quit: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1162,6 +1164,7 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
         debounce: DebounceConfig::default(),
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
+        quit: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1230,4 +1233,103 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
     );
     token.cancel();
     let _ = running.done.await;
+}
+
+/// M11 Phase F: the browser UI of the headless app can quit it (File → Quit server), and the License
+/// dialog's data is served (MIT text plus the embedded third-party notices or their placeholder).
+#[tokio::test]
+async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::Message;
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let quit = tokio_util::sync::CancellationToken::new();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: Some(quit.clone()),
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+
+    let v: serde_json::Value = reqwest::get(format!("http://{ui}/api/version"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(v["desktop"], false);
+    assert_eq!(v["repository"], env!("CARGO_PKG_REPOSITORY"));
+    assert_eq!(v["homepage"], env!("CARGO_PKG_HOMEPAGE"));
+    assert_eq!(v["copyright"], seq_app::COPYRIGHT);
+
+    let lic: serde_json::Value = reqwest::get(format!("http://{ui}/api/licenses"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mit = lic["license"].as_str().unwrap();
+    assert!(mit.starts_with("MIT License") && mit.contains(seq_app::COPYRIGHT));
+    let notices = &lic["notices"];
+    assert!(
+        notices["packages"].is_array() && notices["texts"].is_array(),
+        "{notices}"
+    );
+    if notices["placeholder"] != true {
+        // Generated notices: every package points at texts that exist.
+        let texts = notices["texts"].as_array().unwrap().len();
+        for p in notices["packages"].as_array().unwrap() {
+            for t in p["texts"].as_array().unwrap() {
+                assert!((t.as_u64().unwrap() as usize) < texts, "{p}");
+            }
+        }
+    }
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    // The File menu's other commands are accepted: after them an unknown command (the control) must be
+    // the only "bad UI message" (commands are handled in order).
+    for cmd in ["save_now", "reload_composition", "no_such_command"] {
+        ws.send(Message::Text(json!({ "cmd": cmd }).to_string()))
+            .await
+            .unwrap();
+    }
+    let mut rt = app.outputs.runtime.clone();
+    let bad = |r: &seq_app::engine::view::RuntimeState| {
+        r.notices
+            .iter()
+            .filter(|n| n.contains("bad UI message"))
+            .count()
+    };
+    let r = tokio::time::timeout(
+        Duration::from_secs(3),
+        rt.wait_for(|r| r.notices.iter().any(|n| n.contains("no_such_command"))),
+    )
+    .await
+    .expect("the unknown command is reported")
+    .unwrap()
+    .clone();
+    assert_eq!(bad(&r), 1, "{:?}", r.notices);
+    assert!(!quit.is_cancelled());
+    ws.send(Message::Text(
+        json!({"cmd": "shell", "action": "quit"}).to_string(),
+    ))
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(3), quit.cancelled())
+        .await
+        .expect("quit from the UI cancels the headless app's token");
+    app.shutdown().await;
 }

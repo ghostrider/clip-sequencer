@@ -27,6 +27,7 @@ fn main() {
 
     build_info(manifest);
     product_info(manifest);
+    notices(manifest);
 
     // The splash page uses the same tokens as the UI (one source: web/src/tokens.css).
     let tokens = manifest.join("../../web/src/tokens.css");
@@ -35,6 +36,25 @@ fn main() {
 
     #[cfg(feature = "desktop")]
     tauri_build::build();
+}
+
+/// Third-party notices for the License dialog (M11 Phase F): `THIRD_PARTY_LICENSES.json` in the repo root,
+/// written by `scripts/third-party-licenses.mjs` (release builds run it before `cargo build`). Without it a
+/// placeholder is written there (git-ignored), so the dialog says the notices were not generated, and cargo
+/// does not rerun this script on every build (as it would for a missing watched file).
+fn notices(manifest: &Path) {
+    let path = manifest.join("../../THIRD_PARTY_LICENSES.json");
+    if !path.exists() {
+        std::fs::write(
+            &path,
+            "{\"placeholder\": true, \"packages\": [], \"texts\": [], \"note\": \"Third-party notices were not \
+             generated for this build (scripts/third-party-licenses.mjs). Release builds include them.\"}\n",
+        )
+        .expect("write placeholder THIRD_PARTY_LICENSES.json");
+    }
+    println!("cargo:rerun-if-changed={}", path.display());
+    let license = manifest.join("../../LICENSE");
+    println!("cargo:rerun-if-changed={}", license.display());
 }
 
 /// Name and copyright from `tauri.conf.json`, which tauri-build also writes into the exe. The config
