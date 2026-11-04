@@ -343,7 +343,7 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
 ### Screenshots
 - [x] Screenshots show **neutral demo content only** (generated colour clips, no third-party footage, no real show
       names). Use `tools/mock-resolume` with a demo composition.
-- [ ] Optional, ask Uli: a script (Playwright) that starts the app against the mock and regenerates all manual
+- [x] Optional, ask Uli: a script (Playwright) that starts the app against the mock and regenerates all manual
       screenshots, so they stay current after UI changes.
 
 ### Landing page (`site/landing/`)
@@ -384,8 +384,7 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
   mode are not in the manual; Uli to confirm (the chapter says "MIDI clock sync in Resolume's MIDI settings").*
   **Contact page:** *`contactEmail` set (2026-11-04); waiting for Uli's review of the wording (and a postal address
   if the Swiss rules require one); the shop button appears once `shopUrl` is set.* **Latest release only:** *with
-  the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` exists (it made the screenshots); keep or drop
-  per Uli. The "Installing the FFGL plugin" chapter follows with G3.)*
+  the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` is kept (Uli, 2026-11-04). The "Installing the FFGL plugin" chapter follows with G3.)*
 
 
 ## Phase G3 — FFGL plugin in the release
