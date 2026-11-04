@@ -39,13 +39,26 @@ bool ParseView( const std::string& text, View& view )
 {
 	std::istringstream in( text );
 	std::string line;
-	if( !std::getline( in, line ) || line != "SEQVIEW 1" )
+	if( !std::getline( in, line ) )
+	{
+		view.status = Status::BadResponse;
+		return false;
+	}
+	if( !line.empty() && line.back() == '\r' )
+		line.pop_back();
+	uint32_t unitsPerBar = 0;
+	if( line == "SEQVIEW 1" )
+		unitsPerBar = 8; // lengths in eighths
+	else if( line == "SEQVIEW 2" )
+		unitsPerBar = 16; // lengths in sixteenths
+	else
 	{
 		view.status = Status::BadResponse;
 		return false;
 	}
 	Runtime runtime;
 	Layout layout;
+	layout.unitsPerBar = unitsPerBar;
 	bool inLayout = false, gotLayout = false, gotEnd = false;
 	std::vector< std::string > f;
 	std::string rest;
@@ -65,14 +78,14 @@ bool ParseView( const std::string& text, View& view )
 			else if( line.rfind( "deck ", 0 ) == 0 )
 				layout.deck = line.substr( 5 );
 			else if( line.rfind( "pass ", 0 ) == 0 )
-				layout.passEighths = static_cast< uint32_t >( U64( line.substr( 5 ) ) );
+				layout.passUnits = static_cast< uint32_t >( U64( line.substr( 5 ) ) );
 			else if( line.rfind( "lane ", 0 ) == 0 && Fields( line, 3, f, &rest ) )
 				layout.lanes.push_back( Lane{ f[ 1 ], f[ 2 ], rest, {} } );
 			else if( line.rfind( "step ", 0 ) == 0 && Fields( line, 5, f, &rest ) && !layout.lanes.empty() )
 			{
 				Step s;
 				s.kind    = f[ 1 ] == "clip" ? StepKind::Clip : f[ 1 ] == "rest" ? StepKind::Rest : StepKind::Unresolved;
-				s.eighths = static_cast< uint32_t >( U64( f[ 2 ] ) );
+				s.units   = static_cast< uint32_t >( U64( f[ 2 ] ) );
 				s.clipId  = U64( f[ 3 ] );
 				s.thumb   = f[ 4 ] == "-" ? std::string() : f[ 4 ];
 				s.label   = rest;

@@ -195,7 +195,8 @@ void Client::PollOnce( const std::string& srv, const std::string& seq )
 		rev     = view.rev;
 		current = view;
 	}
-	std::string path = "/plugin/v1/view.txt?name=" + UrlEncode( seq );
+	// format=2: lengths in sixteenths (sequencer 0.2.0+); an older sequencer ignores it and answers SEQVIEW 1.
+	std::string path = "/plugin/v1/view.txt?format=2&name=" + UrlEncode( seq );
 	if( !rev.empty() && current.hasLayout )
 		path += "&rev=" + UrlEncode( rev );
 	std::string body;
