@@ -128,8 +128,8 @@ message, author data). Found and rewritten with `git filter-repo` in all history
       repository) **[verify the exact license text from the SDK repo]** and of any other library the plugin
       links or vendors (e.g. GLEW, GLM). Add them to the third-party notices, and include their license texts in
       the release. If the SDK is vendored as a git submodule, pin it to a commit.
-- [ ] Optional: SPDX header `// SPDX-License-Identifier: MIT` at the top of source files.
-      Ask Uli first.
+- [x] Optional: SPDX header `// SPDX-License-Identifier: MIT` at the top of source files.
+      Ask Uli first. *(2026-11-04: not for now, Uli.)*
 
 *(2026-11-01, done:*
 - *`LICENSE` (MIT, Ulrich Staudinger); `[workspace.package]` has authors, repository, homepage, description, readme,
@@ -265,7 +265,8 @@ function or a static info dialog. No new behaviour.
 - [x] `.github/ISSUE_TEMPLATE/bug_report.yml` (asks for app version/build, Resolume version,
       Windows version, MIDI clock source, a log excerpt) and `feature_request.yml`.
 - [x] `.github/pull_request_template.md` (short checklist: tests, clippy, changelog entry, manual updated if user-facing behaviour changed).
-- [ ] Optional: `.editorconfig`; `CODE_OF_CONDUCT.md` (Contributor Covenant). Ask Uli.
+- [x] Optional: `.editorconfig`; `CODE_OF_CONDUCT.md` (Contributor Covenant). Ask Uli. *(2026-11-04: `.editorconfig`
+      added, matching the existing code; no Code of Conduct for now.)*
 
 *(2026-11-03, done; the optional `.editorconfig` / `CODE_OF_CONDUCT.md` are waiting for Uli:*
 - *README: site / manual / download / changelog links on top; screenshot `docs/images/screenshot.png` of the
