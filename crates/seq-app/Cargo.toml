@@ -23,7 +23,7 @@ axum = { version = "0.8", features = ["ws"] }
 font8x8 = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rust-embed = { version = "8", features = ["mime-guess"] }
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 clap.workspace = true
 env_filter = "2"
 log.workspace = true

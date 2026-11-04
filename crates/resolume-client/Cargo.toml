@@ -14,7 +14,7 @@ description = "Resolume REST, WebSocket and OSC client plus composition index bu
 seq-core.workspace = true
 futures-util = "0.3"
 log.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "multipart"] }
 rosc = "0.10"
 serde.workspace = true
 serde_json.workspace = true
