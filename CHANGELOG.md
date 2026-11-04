@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
 ### Added
 
 - **Slot lanes** (positional sequencing): a lane in *Slot* mode plays whatever clip sits in a column of its
@@ -63,5 +65,6 @@ First public release.
 - The UI server only answers on `127.0.0.1` and refuses requests from other web pages.
 - Logs in daily files (kept 7 days); settings and sequences in `%APPDATA%\resolume-sequencer`.
 
-[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.1.0
