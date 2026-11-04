@@ -33,8 +33,8 @@ Wait until CI is green for this commit.
 
 On GitHub: **Actions → release → Run workflow** (branch `main`). It builds everything exactly like a release and
 uploads the result as the workflow artifact `release-x.y.z` (the zip, `SHA256SUMS.txt`, the notes), but creates no
-release. Download it, unzip, check the contents (`seq-app.exe`, `seq-app-cli.exe`, `ffgl\SeqView.dll`, licenses),
-and try the app.
+release. Download it, unzip, check the contents (one folder `clip-sequencer` with `seq-app.exe`,
+`seq-app-cli.exe`, `ffgl\SeqView.dll`, licenses), and try the app.
 
 ## 5. Tag
 
@@ -47,6 +47,10 @@ Only you can push `v*` tags (ruleset `protect-release-tags`). The tag starts the
 fails if the tag doesn't match the version, or if `CHANGELOG.md` has no dated section for it.
 
 ## 6. Approve
+
+If code signing is on (`docs/github-setup.md`, "Code signing"): the build job sends the zip to SignPath and waits up
+to an hour. Approve the signing request on https://app.signpath.io (you get an e-mail; the run's log links to it).
+The build then checks the signatures and goes on.
 
 The `publish` job waits for the `release` environment: **Actions → release → the run → Review deployments →
 release → Approve and deploy**. It then creates a **draft** release with the zip and `SHA256SUMS.txt`.

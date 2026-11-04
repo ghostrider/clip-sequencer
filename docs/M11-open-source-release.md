@@ -674,11 +674,15 @@ All workflows follow these rules:
 
 ## Later (after 0.1.0)
 
-- [ ] **Code signing** of `seq-app.exe`, `seq-app-cli.exe` and `SeqView.dll` (decided 2026-11-04: later). Unsigned,
-      Chrome blocks the zip ("Dangerous download blocked") and SmartScreen warns on start; the manual and the release
-      notes explain both. Options: a code-signing certificate (yearly cost) or a free open-source signing service
-      (e.g. SignPath, with an application). The secrets would go into the `release` environment
-      (`WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD`, see `docs/github-setup.md`).
+- [ ] **Code signing** of `seq-app.exe`, `seq-app-cli.exe` and `SeqView.dll`. Unsigned, Chrome blocks the zip
+      ("Dangerous download blocked") and SmartScreen warns on start; the manual and the release notes explain both.
+      *Decided 2026-11-04: SignPath Foundation (free for open source; the signer shown is "SignPath Foundation").*
+  - [x] Code signing policy page (`site/landing/code-signing.html`, linked in the site footer and the README).
+  - [x] `release.yml`: signing step (SignPath GitHub action, artifact configuration
+        `.signpath/artifact-configurations/release.xml`), signature check, `release-notes.mjs --signed`; off until
+        the variable `SIGNPATH_ORGANIZATION_ID` is set.
+  - [ ] **[Uli]** apply, set up SignPath and GitHub per `docs/github-setup.md` ("Code signing"), test with a dry run.
+  - [ ] First signed release; then update the policy's Status line and the unsigned notes in the manual and README.
 
 ## Definition of done
 
@@ -710,7 +714,8 @@ _(Phase A, 2026-11-01)_
 - GitHub owner/repo: **`ghostrider/clip-sequencer`** (Uli creates it in H1).
 - Starting version: **0.1.0**
 - Binary distribution: **(c) both**: the portable zip and `SHA256SUMS.txt` are free on GitHub Releases, and binaries
-  are also sold through a shop. Consequences: the landing page's contact / legal notice page must meet the Swiss
+  are also sold through a shop. *2026-11-04: no shop is planned for now, so in effect (a); the shop hooks
+  (`{{#SHOP}}`, `shopUrl`) stay unused.* Consequences: the landing page's contact / legal notice page must meet the Swiss
   e-commerce information duties (G2); release notes and the landing page link to the shop as well (shop URL: open,
   needed by G2/I2).
 - Release approval required: **yes** (draft release + protected `release` environment)

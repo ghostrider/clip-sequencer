@@ -68,9 +68,34 @@ The release workflow asks for write access itself, only in the job that publishe
 - [ ] **Environment secrets:** none. **Repository secrets:** none. The workflows use the automatic
       `GITHUB_TOKEN`.
 
-Kept for later, *not* created now: `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` (if the executables are
-code-signed one day), `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (only for an auto-updater).
-They would go into the `release` environment, never into the repository secrets.
+Kept for later, *not* created now: `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (only for an
+auto-updater). They would go into the `release` environment, never into the repository secrets.
+
+## Code signing (SignPath Foundation)
+
+The release workflow signs `seq-app.exe`, `seq-app-cli.exe` and `ffgl/SeqView.dll` through SignPath once this is set
+up; until then releases stay unsigned and nothing else changes. The policy that SignPath requires is
+`site/landing/code-signing.html` (https://ghostrider.github.io/clip-sequencer/code-signing.html).
+
+1. [ ] The policy page is live (deployed with the site), and multi-factor authentication is on for GitHub.
+2. [ ] Apply at https://signpath.org/ (Apply). Repository `https://github.com/ghostrider/clip-sequencer`, license MIT,
+       homepage and code signing policy as above, build system GitHub Actions (`.github/workflows/release.yml`).
+3. [ ] After approval, in **SignPath** (https://app.signpath.io), with multi-factor authentication on:
+   - the project slug is `clip-sequencer` (otherwise set the repository variable `SIGNPATH_PROJECT_SLUG`);
+   - its artifact configuration is `.signpath/artifact-configurations/release.xml` (paste it in as the default);
+   - the signing policies are `release-signing` and `test-signing` (the names release.yml uses), with the
+     GitHub trusted build system linked to the project;
+   - create a CI user (submitter on both policies) and copy its API token; you stay the approver.
+4. [ ] On GitHub, **Settings → Environments → New environment** `signing`: no reviewers (SignPath asks for the
+       approval); **Deployment branches and tags** → "Selected branches and tags": branch `main` and tag `v*`;
+       **Environment secrets** → `SIGNPATH_API_TOKEN` = the CI user's token.
+5. [ ] **Settings → Secrets and variables → Actions → Variables** → **New repository variable**
+       `SIGNPATH_ORGANIZATION_ID` = the organization ID from SignPath. This switches signing on.
+6. [ ] Test: **Actions → release → Run workflow** on `main` signs with `test-signing` (no approval needed, test
+       certificate). The step "Check the zip" lists the three files with their signer.
+7. [ ] With the next tag, approve the signing request on SignPath (the run waits up to an hour), then the
+       `release` environment as before. Update the Status line on the policy page, and the unsigned-download notes
+       in the manual (`installation.md`) and the README.
 
 ## H5 — Security
 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for release.yml (paste it into the SignPath project as its default
+  configuration). actions/upload-artifact always zips what it uploads, so the GitHub artifact is a zip around
+  the release zip clip-sequencer-<version>-windows-x64.zip (the GitHub wrapper exists only for the transfer to
+  SignPath; the release zip itself holds no zip). Inside the release zip everything is in the folder
+  clip-sequencer/: the two programs, and the FFGL plugin in clip-sequencer/ffgl/. SignPath signs the three files and returns both zips rebuilt around them.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <zip-file path="clip-sequencer-*-windows-x64.zip">
+      <pe-file-set>
+        <include path="clip-sequencer/seq-app.exe" />
+        <include path="clip-sequencer/seq-app-cli.exe" />
+        <include path="clip-sequencer/ffgl/SeqView.dll" />
+        <for-each>
+          <authenticode-sign />
+        </for-each>
+      </pe-file-set>
+    </zip-file>
+  </zip-file>
+</artifact-configuration>

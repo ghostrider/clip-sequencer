@@ -47,8 +47,11 @@ getting started and for building from source.*
 3. Unzip it anywhere (nothing is installed) and double-click `seq-app.exe`.
 
 The executables are not code-signed, so Windows SmartScreen may warn the first time ("Windows protected your
-PC"). Click **More info → Run anyway**. Settings and sequences live in `%APPDATA%\clip-sequencer`, not in
-the unzipped folder, so a new version can be unzipped next to the old one.
+PC"). Click **More info → Run anyway**. Signing through SignPath Foundation is being set up; see the
+[code signing policy](https://ghostrider.github.io/clip-sequencer/code-signing.html).
+
+Settings and sequences live in `%APPDATA%\clip-sequencer`, not in the unzipped folder, so a new version can be
+unzipped next to the old one.
 
 ## Resolume setup (once per composition)
 
@@ -207,8 +210,9 @@ powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 
 `release.ps1` builds the UI (`web/`), the third-party notices, the FFGL plugin and the release binaries. It puts
 `seq-app.exe` (desktop app, no console) and `seq-app-cli.exe` (console: headless, `--validate`,
-`--list-midi-ports`, `--clock-debug`, `--install-ffgl`) in `release\`, together with the portable zip (both
-executables, `ffgl\SeqView.dll` and the license files) and its `.sha256`. Both executables contain the UI.
+`--list-midi-ports`, `--clock-debug`, `--install-ffgl`) in `release\`, together with the portable zip (one folder
+`clip-sequencer` with both executables, `ffgl\SeqView.dll` and the license files) and its `.sha256`. Both
+executables contain the UI.
 
 Development (checks, mock Resolume, hot reload, test clock):
 

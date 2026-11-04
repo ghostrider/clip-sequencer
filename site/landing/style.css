@@ -41,3 +41,4 @@ footer.site a { color: var(--text-2); }
 .page h1 { font-size: 32px; margin: 0 0 16px; }
 .page h2 { font-size: 20px; margin: 28px 0 8px; }
 .page p, .page li { color: var(--text-2); }
+.page .note { background: var(--info-bg); border: 1px solid var(--info-line); border-radius: var(--radius); padding: 10px 14px; color: var(--info-text); }

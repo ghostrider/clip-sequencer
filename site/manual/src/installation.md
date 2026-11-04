@@ -13,9 +13,9 @@ The sequencer is a portable app: there is no installer. You unzip it and run it.
    ```
 
    The hash must match the line for the zip in `SHA256SUMS.txt`.
-4. Unzip it into a folder of your choice, for example `C:\Tools\Clip Sequencer`.
+4. Unzip it into a folder of your choice, for example `C:\Tools`. You get a folder `clip-sequencer`.
 
-The folder contains:
+The `clip-sequencer` folder contains:
 
 | File | What it is |
 |---|---|
@@ -57,7 +57,7 @@ open Microsoft's [download page](https://developer.microsoft.com/microsoft-edge/
 ## Updating
 
 1. Quit the sequencer (**File → Quit** or Ctrl+Q).
-2. Unzip the new version, into a new folder or over the old one.
+2. Unzip the new version, into a new place or over the old `clip-sequencer` folder.
 3. Start the new `seq-app.exe`.
 
 Your sequences, settings and caches are not in the app folder but in the data folder

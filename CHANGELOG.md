@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The release zip holds a single folder, `clip-sequencer`, instead of loose files.
+
 ## [0.2.0] - 2026-11-04
 
 First public release.

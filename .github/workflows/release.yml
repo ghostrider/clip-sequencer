@@ -1,6 +1,8 @@
 # Release (M11 Phase I2). A tag vX.Y.Z builds the portable zip and creates a DRAFT release after approval in the
 # `release` environment; Uli reviews the draft and clicks Publish (docs/RELEASING.md). "Run workflow" by hand is a
 # dry run: it builds everything and uploads it as a workflow artifact, without a release.
+# Code signing (SignPath, docs/github-setup.md): on once the repository variable SIGNPATH_ORGANIZATION_ID is set.
+# A tag uses the signing policy "release-signing" (approved by hand on SignPath), a dry run "test-signing".
 name: release
 
 on:
@@ -22,6 +24,10 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    # Holds the SignPath API token (environment secret); no reviewers here, SignPath asks for approval itself.
+    environment: signing
+    env:
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -44,9 +50,10 @@ jobs:
       - name: Release notes from CHANGELOG.md
         shell: pwsh
         run: |
-          $release = @()
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $release = @('--release') }
-          node scripts/release-notes.mjs @release --out release-notes.md
+          $flags = @()
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $flags += '--release' }
+          if ($env:SIGN -eq 'true') { $flags += '--signed' }
+          node scripts/release-notes.mjs @flags --out release-notes.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master (stable toolchain)
         with:
@@ -63,15 +70,51 @@ jobs:
       - name: Build (UI, notices, FFGL plugin, app) and pack the zip
         shell: pwsh
         run: ./scripts/release.ps1
-      - name: SHA256SUMS.txt
+      - name: Upload the unsigned zip for signing
+        id: unsigned
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-${{ steps.version.outputs.version }}
+          retention-days: 1
+          if-no-files-found: error
+          path: release/clip-sequencer-*-windows-x64.zip
+      - name: Sign the programs in the zip (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'clip-sequencer' }}
+          signing-policy-slug: ${{ github.ref_type == 'tag' && 'release-signing' || 'test-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600 # time to approve the request on SignPath
+          output-artifact-directory: signed
+      - name: Check the zip (signatures) and write SHA256SUMS.txt
         shell: pwsh
         run: |
           $v = '${{ steps.version.outputs.version }}'
-          $zip = "release/clip-sequencer-$v-windows-x64.zip"
+          $name = "clip-sequencer-$v-windows-x64.zip"
+          $zip = "release/$name"
+          if ($env:SIGN -eq 'true') { Copy-Item "signed/$name" $zip -Force }
+          Remove-Item "$zip.sha256" -ErrorAction SilentlyContinue # release.ps1's hash of the unsigned zip
+          $check = 'release/check'
+          Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip -DestinationPath $check
+          $app = Join-Path $check 'clip-sequencer' # the zip holds one folder, clip-sequencer
+          foreach ($f in 'seq-app.exe', 'seq-app-cli.exe', 'ffgl/SeqView.dll') {
+            $sig = Get-AuthenticodeSignature (Join-Path $app $f)
+            Write-Host "$f : $($sig.Status) $($sig.SignerCertificate.Subject)"
+            # A release must carry a valid signature; test-signing certificates are not trusted, so dry runs only print.
+            if ($env:SIGN -eq 'true' -and $env:GITHUB_REF_TYPE -eq 'tag' -and $sig.Status -ne 'Valid') {
+              throw "$f is not validly signed: $($sig.Status) $($sig.StatusMessage)"
+            }
+          }
           $lines = @()
-          $lines += "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())  clip-sequencer-$v-windows-x64.zip"
+          $lines += "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())  $name"
           # The plugin DLL inside the zip, to check it after unzipping or after an install.
-          $lines += "$((Get-FileHash ffgl/bin/x64/Release/SeqView.dll -Algorithm SHA256).Hash.ToLower())  ffgl/SeqView.dll"
+          $lines += "$((Get-FileHash (Join-Path $app 'ffgl/SeqView.dll') -Algorithm SHA256).Hash.ToLower())  clip-sequencer/ffgl/SeqView.dll"
           $lines -join "`n" | Set-Content -NoNewline -Encoding ascii release/SHA256SUMS.txt
           Add-Content -Encoding ascii release/SHA256SUMS.txt "`n"
           Get-Content release/SHA256SUMS.txt

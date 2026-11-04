@@ -41,8 +41,10 @@ Copy-Item target\release\seq-app-cli.exe release\seq-app-cli.exe -Force
 $version = ((& release\seq-app-cli.exe --version) -split ' ')[1]
 $name = "clip-sequencer-$version-windows-x64"
 Write-Host "==> $name.zip" -ForegroundColor Cyan
-$stage = Join-Path release $name
-Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+# Everything goes into one folder "clip-sequencer" at the top of the zip (no loose files at its root).
+$pack = Join-Path release 'pack'
+$stage = Join-Path $pack 'clip-sequencer'
+Remove-Item $pack -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage | Out-Null
 Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.md, OFL.txt $stage
 if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md $stage }
@@ -55,8 +57,8 @@ Copy-Item ffgl\bin\x64\Release\SeqView.dll (Join-Path $stage 'ffgl')
 Copy-Item ffgl\bin\x64\Release\SeqView.pdb (Join-Path release "SeqView-$version.pdb")
 $zip = Join-Path release "$name.zip"
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
-Remove-Item $stage -Recurse -Force
+Compress-Archive -Path $stage -DestinationPath $zip
+Remove-Item $pack -Recurse -Force
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 "$hash  $name.zip" | Set-Content -Encoding ascii "$zip.sha256"
 

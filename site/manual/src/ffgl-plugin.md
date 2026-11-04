@@ -50,9 +50,9 @@ done.
 
 ## Installing by hand
 
-The release zip contains the plugin as `ffgl\SeqView.dll`. Copy it into Resolume's plugin folder (normally
-`Documents\Resolume Arena\Extra Effects`, create it if it doesn't exist) while Resolume is closed, then start
-Resolume.
+The release zip contains the plugin as `clip-sequencer\ffgl\SeqView.dll`. Copy it into Resolume's plugin folder
+(normally `Documents\Resolume Arena\Extra Effects`, create it if it doesn't exist) while Resolume is closed, then
+start Resolume.
 
 ## Using it in Resolume
 

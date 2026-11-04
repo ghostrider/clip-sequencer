@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Extracts the CHANGELOG.md section of a version into release-notes.md (M11 Phase I2) and fails if there is none.
-//   node scripts/release-notes.mjs [--version x.y.z] [--release] [--out release-notes.md]
+//   node scripts/release-notes.mjs [--version x.y.z] [--release] [--signed] [--out release-notes.md]
 // --version: default [workspace.package] version. --release (tagged releases): the section must carry a date,
-// "## [x.y.z] - YYYY-MM-DD", not "Unreleased" (docs/RELEASING.md step 2).
+// "## [x.y.z] - YYYY-MM-DD", not "Unreleased" (docs/RELEASING.md step 2). --signed: the programs are code-signed
+// (release.yml with SignPath), which changes the download hint.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -42,10 +43,15 @@ const body = lines
   .trim();
 if (!body) fail(`the "## [${version}]" section of CHANGELOG.md is empty`);
 
+const site = 'https://ghostrider.github.io/clip-sequencer';
+const trust = process.argv.includes('--signed')
+  ? `The programs are signed (free code signing provided by SignPath.io, certificate by SignPath Foundation; ` +
+    `see the code signing policy: ${site}/code-signing.html). While a new version is still rare, your browser or ` +
+    `Windows SmartScreen may warn anyway (SmartScreen: choose "More info → Run anyway"). `
+  : `The programs are not code-signed, so your browser may block the download at first ` +
+    `(Chrome: "Dangerous download blocked"; keep it from the downloads list) and Windows SmartScreen may ask when ` +
+    `you start it (choose "More info → Run anyway"). `;
 const notes = `${body}\n\n---\n\nDownload \`clip-sequencer-${version}-windows-x64.zip\`, check it against \`SHA256SUMS.txt\`, unzip and ` +
-  `run \`seq-app.exe\`. The programs are not code-signed, so your browser may block the download at first ` +
-  `(Chrome: "Dangerous download blocked"; keep it from the downloads list) and Windows SmartScreen may ask when you ` +
-  `start it (choose "More info → Run anyway"). ` +
-  `Installation help: https://ghostrider.github.io/clip-sequencer/manual/installation.html\n`;
+  `run \`seq-app.exe\`. ${trust}Installation help: ${site}/manual/installation.html\n`;
 writeFileSync(out, notes);
 console.log(`release-notes: ${header.replace(/^## /, '')} -> ${out}`);

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Code signing policy · Clip Sequencer for Resolume</title>
+  <meta name="description" content="How the Windows programs of Clip Sequencer for Resolume are built and signed.">
+  <link rel="icon" type="image/png" href="shared/favicon.png">
+  <link rel="stylesheet" href="shared/fonts.css">
+  <link rel="stylesheet" href="shared/tokens.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site">
+  <div class="wrap">
+    <a class="logo" href="./" aria-label="Clip Sequencer, home">§ SEQ</a>
+    <nav class="top" aria-label="Main">
+      <a href="manual/">Manual</a>
+      <a href="{{REPO}}/releases/latest">Download</a>
+      <a href="{{REPO}}">Source</a>
+      <a href="{{REPO}}/blob/main/CHANGELOG.md">Changelog</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap page">
+  <h1>Code signing policy</h1>
+  <p>Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by
+    <a href="https://signpath.org/">SignPath Foundation</a>.</p>
+  <p class="note"><strong>Status:</strong> applied for. Releases up to and including 0.2.0 are not signed; this page
+    says from which version on they are once signing is set up.</p>
+
+  <h2>What is signed</h2>
+  <p>The Windows programs in the release zip <code>clip-sequencer-&lt;version&gt;-windows-x64.zip</code> on
+    <a href="{{REPO}}/releases">GitHub Releases</a>, all in its folder <code>clip-sequencer</code>:</p>
+  <ul>
+    <li><code>seq-app.exe</code>, the desktop app</li>
+    <li><code>seq-app-cli.exe</code>, the console program</li>
+    <li><code>ffgl/SeqView.dll</code>, the "1000A Sequence" FFGL plugin for Resolume</li>
+  </ul>
+  <p>Only files built from this project's own source code are signed. Third-party libraries are compiled into these
+    files and listed with their licenses in <code>THIRD_PARTY_LICENSES.md</code> in the zip and under
+    <strong>Help → Licenses</strong> in the app; no third-party program is signed on its own.</p>
+
+  <h2>How releases are built</h2>
+  <p>Every release is built by GitHub Actions from a version tag in the public
+    <a href="{{REPO}}">source repository</a>, by the workflow
+    <a href="{{REPO}}/blob/main/.github/workflows/release.yml"><code>release.yml</code></a>. The build sends the
+    programs to SignPath for signing; a release is signed only after a maintainer has approved that signing request.
+    Nothing is built or signed on a personal computer. Each release lists the SHA-256 checksums of the zip and the
+    plugin in <code>SHA256SUMS.txt</code>.</p>
+
+  <h2>Team roles</h2>
+  <ul>
+    <li><strong>Committers and reviewers:</strong> <a href="https://github.com/ghostrider">Ulrich Staudinger</a></li>
+    <li><strong>Approvers:</strong> <a href="https://github.com/ghostrider">Ulrich Staudinger</a></li>
+  </ul>
+  <p>Changes by other contributors come in as pull requests and are reviewed by a committer before they are merged.
+    The main branch and the release tags are protected, and all team members use multi-factor authentication for
+    GitHub and SignPath.</p>
+
+  <h2>Privacy</h2>
+  <p>This program will not transfer any information to other networked systems unless specifically requested by
+    the user or the person installing or operating it.</p>
+  <p>In detail: the app connects only to Resolume, at the address set in its settings (by default this computer,
+    <code>127.0.0.1</code>), and serves its user interface only to this computer. It has no telemetry and no update
+    check. Links in the Help menu open in your browser when you click them. See also the
+    <a href="privacy.html">privacy note</a>.</p>
+
+  <h2>Checking a download</h2>
+  <p>Right-click <code>seq-app.exe</code> → <strong>Properties → Digital Signatures</strong>: a signed release shows
+    "SignPath Foundation" as signer. Compare the zip's hash with <code>SHA256SUMS.txt</code> from the same release:
+    <code>Get-FileHash clip-sequencer-&lt;version&gt;-windows-x64.zip -Algorithm SHA256</code>.</p>
+  <p>Questions or a suspected problem with a signed file: see the <a href="{{REPO}}/security/policy">security
+    policy</a>.</p>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>Clip Sequencer for Resolume · Copyright (c) 2026 {{OWNER}} · Released under the
+      <a href="{{REPO}}/blob/main/LICENSE">MIT License</a> · Provided as is, without warranty of any kind.</p>
+    <p>Not affiliated with or endorsed by Resolume BV. Resolume is a trademark of Resolume BV.</p>
+    <p><a href="contact.html">Contact and legal notice</a> · <a href="privacy.html">Privacy</a> · <a href="code-signing.html">Code signing policy</a> ·
+      <a href="{{REPO}}">Source on GitHub</a></p>
+  </div>
+</footer>
+</body>
+</html>
