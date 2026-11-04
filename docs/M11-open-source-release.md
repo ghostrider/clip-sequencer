@@ -574,8 +574,8 @@ All workflows follow these rules:
 - `actions/checkout` with `fetch-depth: 0` wherever the build number is computed (Phase E).
 
 ### I1 — `ci.yml`
-- [ ] Triggers: `push` to `main`, `pull_request`, `workflow_dispatch`.
-- [ ] Jobs (names must match the required status checks from H3):
+- [x] Triggers: `push` to `main`, `pull_request`, `workflow_dispatch`.
+- [x] Jobs (names must match the required status checks from H3):
   - `rust`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
     `cargo test --workspace`
   - `web`: `npm ci`, `npm run build` (plus lint/tests if present), in `web/`
@@ -584,12 +584,12 @@ All workflows follow these rules:
     with `dumpbin /dependents` (no MSVC runtime DLLs). Initialise submodules if the SDK is vendored that way.
   - `site`: install mdBook, run `site/build.ps1`, and fail on broken internal links (mdBook's build
     warnings treated as errors, plus a simple link check over `site/dist/`). Nothing is deployed from CI.
-- [ ] The `rust` job builds the web UI first if the embedded assets are required to compile.
+- [x] The `rust` job builds the web UI first if the embedded assets are required to compile.
 
 ### I2 — `release.yml`
-- [ ] Triggers: `push` of tags `v*`, and `workflow_dispatch` with input `dry_run` (default `true`):
+- [x] Triggers: `push` of tags `v*`, and `workflow_dispatch` with input `dry_run` (default `true`):
       a dry run builds and uploads everything as a **workflow artifact**, but creates no release.
-- [ ] Job `build` (`permissions: contents: read`):
+- [x] Job `build` (`permissions: contents: read`):
   1. checkout with `fetch-depth: 0`
   2. **verify version:** the tag (minus `v`) must equal `[workspace.package].version` and the
      `web/package.json` version; otherwise fail with a clear message. A dry run checks only Cargo vs. npm.
@@ -606,7 +606,7 @@ All workflows follow these rules:
   7. compute SHA-256 for each asset in PowerShell (`Get-FileHash -Algorithm SHA256`) and write a
      combined `SHA256SUMS.txt`
   8. upload everything, plus `release-notes.md`, with `actions/upload-artifact` (retention 30 days)
-- [ ] Job `publish` (`needs: build`; skipped for dry runs; `environment: release`;
+- [x] Job `publish` (`needs: build`; skipped for dry runs; `environment: release`;
       `permissions: contents: write`):
   1. download the artifact
   2. create a **draft** release with the preinstalled `gh` CLI:
@@ -615,11 +615,11 @@ All workflows follow these rules:
      (a) or (c): the zip, installer and `SHA256SUMS.txt`;
      (b): no binaries (GitHub's automatic source archives only), and the release notes link to the shop
   4. Uli reviews the draft on GitHub and clicks **Publish** (the final manual step)
-- [ ] Optional, ask Uli: **build provenance** with `actions/attest-build-provenance` in the `build` job
+- [ ] Optional, ask Uli (not done yet): **build provenance** with `actions/attest-build-provenance` in the `build` job
       (needs `id-token: write` and `attestations: write`), so users can verify a binary with `gh attestation verify`.
 
 ### I3 — Release procedure (`docs/RELEASING.md`)
-- [ ] Claude writes `docs/RELEASING.md`, the steps Uli follows for every release:
+- [x] Claude writes `docs/RELEASING.md`, the steps Uli follows for every release:
   1. on an up-to-date `main` with green CI: set the new version in `Cargo.toml` (`[workspace.package]`)
      and `web/package.json`, and run the version-sync check
   2. move the `## [Unreleased]` entries in `CHANGELOG.md` to `## [x.y.z] - YYYY-MM-DD`
@@ -635,11 +635,11 @@ All workflows follow these rules:
      manually (I5). The version footer stays at the latest release.
 
 ### I5 — `pages.yml` (project site and manual)
-- [ ] Triggers: `release` with type `published` (so the site updates exactly when a release goes public), and
+- [x] Triggers: `release` with type `published` (so the site updates exactly when a release goes public), and
       `workflow_dispatch` (manual redeploy, e.g. for manual fixes).
-- [ ] Permissions: `contents: read`, `pages: write`, `id-token: write`. `concurrency: group: pages`,
+- [x] Permissions: `contents: read`, `pages: write`, `id-token: write`. `concurrency: group: pages`,
       `cancel-in-progress: false`.
-- [ ] Job `build` (`ubuntu-latest` is fine here):
+- [x] Job `build` (`ubuntu-latest` is fine here):
   1. checkout: the release tag for `release` events; for `workflow_dispatch`, the latest release tag by default,
      with an optional input to build from `main` instead
   2. install mdBook from its official GitHub release binary (version pinned in the workflow), and verify the
@@ -647,19 +647,23 @@ All workflows follow these rules:
   3. run the site build (a POSIX equivalent of `site/build.ps1`, or `pwsh`, which is preinstalled on the runner);
      inject the version for the "Manual for version x.y.z" footer
   4. `actions/configure-pages`, then `actions/upload-pages-artifact` with `site/dist/`
-- [ ] Job `deploy` (`needs: build`, `environment: github-pages` with `url: ${{ steps.deployment.outputs.page_url }}`):
+- [x] Job `deploy` (`needs: build`, `environment: github-pages` with `url: ${{ steps.deployment.outputs.page_url }}`):
       `actions/deploy-pages`.
-- [ ] After the first deployment: open the site, click through the landing page, the manual navigation, search, the
+- [x] After the first deployment: open the site, click through the landing page, the manual navigation, search, the
       download button and the contact page; check it at phone width.
 
 ### I4 — First release
-- [ ] Push all workflow files; the CI run on `main` is green; add the five job names as required checks (H3).
-- [ ] Run `release.yml` with `dry_run: true`; download the artifact, unzip it, and check the contents and checksums.
-- [ ] **[Uli]** switch the repo visibility to **public** (Settings → General → Danger Zone). Re-check that the
+- [x] Push all workflow files; the CI run on `main` is green; add the five job names as required checks (H3).
+- [x] Run `release.yml` with `dry_run: true`; download the artifact, unzip it, and check the contents and checksums.
+- [x] **[Uli]** switch the repo visibility to **public** (Settings → General → Danger Zone). Re-check that the
       Phase C scrub is complete *before* this step; it's the point of no return.
-- [ ] **[Uli]** enable GitHub Pages (H6) now that the repo is public.
-- [ ] Tag `v0.1.0` per `docs/RELEASING.md`; approve; review the draft; publish. Then confirm that `pages.yml` ran,
+- [x] **[Uli]** enable GitHub Pages (H6) now that the repo is public.
+- [x] Tag `v0.1.0` per `docs/RELEASING.md`; approve; review the draft; publish. Then confirm that `pages.yml` ran,
       and that the site and manual are live with "Manual for version 0.1.0".
+      *Done 2026-11-04 as **v0.2.0** (slot lanes came first; one changelog section). Before going public, `main`
+      was scrubbed once more (real clip names in an M13 sample) and the affected branches were deleted. The
+      `release` environment had no required reviewer while the repo was private (not available on the free plan),
+      so the publish job ran without approval; add the reviewer now that the repo is public.*
 - [ ] Download the published zip on a clean machine (or in a Windows Sandbox), verify the checksum, and run it
       once against Resolume.
 - [ ] On that machine: install the FFGL plugin through File → Install FFGL plugin… (with Resolume closed), start
@@ -687,9 +691,9 @@ All workflows follow these rules:
 - The UI server binds to localhost by default.
 - CI is green and required on `main`; release tags `v*` are protected; releases go through a draft (and the
   `release` environment approval, if chosen).
-- `docs/github-setup.md` and `docs/RELEASING.md` exist, and `v0.1.0` was released by following them.
-- `v0.1.0` exists as a GitHub Release with assets and `SHA256SUMS.txt` according to the distribution decision.
-- The project site and the end-user manual for `0.1.0` are live on GitHub Pages, make no external requests, and
+- `docs/github-setup.md` and `docs/RELEASING.md` exist, and `v0.2.0` was released by following them.
+- `v0.2.0` exists as a GitHub Release with assets and `SHA256SUMS.txt` according to the distribution decision.
+- The project site and the end-user manual for `0.2.0` are live on GitHub Pages, make no external requests, and
   are linked from the README, the repo's Website field, the About dialog and Help → User manual.
 - Publishing a release redeploys the site and manual automatically; manual fixes can be redeployed by hand.
 - The FFGL plugin is built in CI, ships in the release (zip and, after M12, the installer component), has its SDK
