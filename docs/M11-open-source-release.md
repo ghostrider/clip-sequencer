@@ -668,6 +668,14 @@ All workflows follow these rules:
 
 ---
 
+## Later (after 0.1.0)
+
+- [ ] **Code signing** of `seq-app.exe`, `seq-app-cli.exe` and `SeqView.dll` (decided 2026-11-04: later). Unsigned,
+      Chrome blocks the zip ("Dangerous download blocked") and SmartScreen warns on start; the manual and the release
+      notes explain both. Options: a code-signing certificate (yearly cost) or a free open-source signing service
+      (e.g. SignPath, with an application). The secrets would go into the `release` environment
+      (`WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD`, see `docs/github-setup.md`).
+
 ## Definition of done
 
 - The repo is public under MIT, with no personal or third-party content in its tree or history.
