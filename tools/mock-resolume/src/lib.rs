@@ -167,12 +167,12 @@ impl Mock {
     }
 
     /// A drag in Resolume's UI from slot `a` onto slot `b` of a layer (cells swap, no push;
-    /// notes §14).
+    /// notes §15).
     pub fn swap_slots_silently(&self, layer: usize, a: usize, b: usize) {
         self.shared.apply(|s| s.swap_slots(layer, a, b));
     }
 
-    /// A media file dropped onto a slot in Resolume's UI (no push; notes §14).
+    /// A media file dropped onto a slot in Resolume's UI (no push; notes §15).
     pub fn replace_media_silently(&self, layer: usize, column: usize, name: &str, path: &str) {
         self.shared
             .apply(|s| s.replace_media(layer, column, name, path));

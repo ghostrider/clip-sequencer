@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, EIGHTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
   import type { SequenceView } from '../lib/types';
 
   let deck = $derived(app.viewDeck);
@@ -10,7 +10,7 @@
   let resolumeDecks = $derived([...new Set(app.decks.filter((d) => !d.orphaned).map((d) => d.name))]);
 
   function bars(v: SequenceView) {
-    const b = v.pass_eighths / EIGHTHS_PER_BAR;
+    const b = v.pass_sixteenths / SIXTEENTHS_PER_BAR;
     return Number.isInteger(b) ? `${b}` : b.toFixed(2);
   }
 
@@ -110,7 +110,7 @@
             {#if running}<span class="run-badge">RUN</span>{/if}
           </div>
           <div class="meta">
-            {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} bars · {repeatLabel(v.sequence.repeat)}
+            {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} {bars(v) === '1' ? 'bar' : 'bars'} · {repeatLabel(v.sequence.repeat)}
           </div>
           <div class="bind" class:bad={b.bad}>{b.text}</div>
         </div>

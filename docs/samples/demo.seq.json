@@ -1,0 +1,282 @@
+{
+  "version": 2,
+  "composition": "Demo",
+  "decks": {
+    "Act 2": {
+      "sequences": [
+        {
+          "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d01",
+          "name": "Drop A",
+          "start": "immediate",
+          "repeat": {
+            "mode": "count",
+            "count": 4
+          },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Background",
+              "end": "loop_to_end",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000013,
+                    "name": "Gradient Sweep",
+                    "file": "gradient_sweep.mov"
+                  },
+                  "length": 32
+                },
+                {
+                  "clip": {
+                    "id": 1900000000210,
+                    "name": "Night Sky",
+                    "file": "night_sky.mov"
+                  },
+                  "length": 32
+                }
+              ]
+            },
+            {
+              "layer": "Mid",
+              "end": "loop_to_end",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000459,
+                    "name": "Bars",
+                    "file": "bars.mov"
+                  },
+                  "length": 16
+                },
+                {
+                  "clip": {
+                    "id": 1900000000515,
+                    "name": "Rings",
+                    "file": "rings.mov"
+                  },
+                  "length": 16
+                },
+                {
+                  "clip": null,
+                  "length": 8
+                },
+                {
+                  "clip": {
+                    "id": 1900000000600,
+                    "name": "Scan Lines",
+                    "file": "scan_lines.mov"
+                  },
+                  "length": 8
+                },
+                {
+                  "clip": {
+                    "id": 1900000000656,
+                    "name": "Tunnel",
+                    "file": "tunnel.mov"
+                  },
+                  "length": 16
+                }
+              ]
+            },
+            {
+              "layer": "Front",
+              "end": "clear",
+              "steps": [
+                {
+                  "clip": null,
+                  "length": 16
+                },
+                {
+                  "clip": {
+                    "id": 1900000000905,
+                    "name": "Sparks",
+                    "file": "sparks.mov"
+                  },
+                  "length": 8
+                },
+                {
+                  "clip": {
+                    "id": 1900000001046,
+                    "name": "Strobe",
+                    "file": "strobe.mov"
+                  },
+                  "length": 4
+                },
+                {
+                  "clip": {
+                    "id": 1900000001046,
+                    "name": "Strobe",
+                    "file": "strobe.mov"
+                  },
+                  "length": 4
+                },
+                {
+                  "clip": {
+                    "id": 1900000000990,
+                    "name": "Glitch Text",
+                    "file": "glitch_text.mov"
+                  },
+                  "length": 16
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d02",
+          "name": "Intro",
+          "start": "immediate",
+          "repeat": {
+            "mode": "once"
+          },
+          "after_last_pass": "hold",
+          "lanes": [
+            {
+              "layer": "Background",
+              "end": "hold",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000069,
+                    "name": "Slow Clouds",
+                    "file": "slow_clouds.mov"
+                  },
+                  "length": 64
+                },
+                {
+                  "clip": {
+                    "id": 1900000000125,
+                    "name": "Grid Pulse",
+                    "file": "grid_pulse.mov"
+                  },
+                  "length": 32
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d03",
+          "name": "Build B",
+          "start": "immediate",
+          "repeat": {
+            "mode": "infinite"
+          },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Mid",
+              "end": "loop_to_end",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000515,
+                    "name": "Rings",
+                    "file": "rings.mov"
+                  },
+                  "length": 8
+                },
+                {
+                  "clip": {
+                    "id": 1900000000459,
+                    "name": "Bars",
+                    "file": "bars.mov"
+                  },
+                  "length": 8
+                }
+              ]
+            },
+            {
+              "layer": "Front",
+              "end": "loop_to_end",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000001046,
+                    "name": "Strobe",
+                    "file": "strobe.mov"
+                  },
+                  "length": 4
+                },
+                {
+                  "clip": null,
+                  "length": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d04",
+          "name": "Old Set",
+          "start": "immediate",
+          "repeat": {
+            "mode": "once"
+          },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Background",
+              "end": "loop_to_end",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000210,
+                    "name": "Night Sky",
+                    "file": "night_sky.mov"
+                  },
+                  "length": 16
+                },
+                {
+                  "clip": {
+                    "id": 1900000099999,
+                    "name": "Old Loop",
+                    "file": "old_loop.mov"
+                  },
+                  "length": 16
+                },
+                {
+                  "clip": {
+                    "id": 1900000000069,
+                    "name": "Slow Clouds",
+                    "file": "slow_clouds.mov"
+                  },
+                  "length": 16
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Act 4": {
+      "sequences": [
+        {
+          "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d05",
+          "name": "Finale",
+          "start": "immediate",
+          "repeat": {
+            "mode": "once"
+          },
+          "after_last_pass": "clear",
+          "lanes": [
+            {
+              "layer": "Front",
+              "end": "clear",
+              "steps": [
+                {
+                  "clip": {
+                    "id": 1900000000905,
+                    "name": "Sparks",
+                    "file": "sparks.mov"
+                  },
+                  "length": 16
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

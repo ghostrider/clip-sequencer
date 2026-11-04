@@ -1,5 +1,7 @@
 <#
-  Builds the SeqView FFGL plugin (Release x64) and copies SeqView.dll to Resolume's Extra Effects folder.
+  Builds the SeqView FFGL plugin (Release x64, via build.ps1) and copies SeqView.dll to Resolume's Extra Effects
+  folder: the developer's build-and-install shortcut. End users install the plugin from the app
+  (File > Install FFGL plugin..., or seq-app-cli --install-ffgl); the release uses build.ps1 only.
 
   Usage:  powershell -ExecutionPolicy Bypass -File build_seqview.ps1 [-Configuration Release|Debug] [-Target <folder>] [-SkipCopy]
 
@@ -13,28 +15,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$here    = $PSScriptRoot
-$project = Join-Path $here 'SeqView.vcxproj'
+$here = $PSScriptRoot
 
-# MSBuild: not on PATH on this machine. Try vswhere first (also not on PATH by default - resolve it by its own
-# well-known install path), then fall back to the known VS install location.
-$msbuild = $null
-$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-if (Test-Path $vswhere) {
-    $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-}
-if (-not $msbuild) {
-    $msbuild = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe'
-}
-if (-not (Test-Path $msbuild)) { throw "MSBuild not found ($msbuild)" }
-
-Write-Host "Building SeqView ($Configuration|x64) ..."
-& $msbuild $project "-p:Configuration=$Configuration" '-p:Platform=x64' '-m' '-v:minimal' '-nologo'
-if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)" }
-
+# Build (ffgl\build.ps1, also used by the release script), then copy.
+& (Join-Path $here 'build.ps1') -Configuration $Configuration
 $dll = Join-Path $here "bin\x64\$Configuration\SeqView.dll"
-if (-not (Test-Path $dll)) { throw "Build output missing: $dll" }
-Write-Host "Built: $dll"
 if ($SkipCopy) { return }
 
 if (-not (Test-Path $Target)) {

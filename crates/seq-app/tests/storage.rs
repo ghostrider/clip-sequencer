@@ -54,6 +54,68 @@ fn save_then_load_round_trips_and_leaves_no_temp_file() {
 }
 
 #[test]
+fn v1_file_is_migrated_on_load_and_backed_up_on_first_save() {
+    const V1: &str = include_str!("../../seq-core/tests/fixtures/spec-example-v1.seq.json");
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Storage::new(dir.path());
+    let path = storage.path_for("MyShow");
+    fs::write(&path, V1).unwrap();
+    let file = storage.load("MyShow").unwrap().into_file();
+    assert_eq!(file.version, seq_core::FORMAT_VERSION);
+    assert_eq!(
+        file.decks["Act 1"].sequences[0].lanes[0].steps[0].length,
+        32
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        V1,
+        "load must not write"
+    );
+
+    storage.save(&file).unwrap();
+    let backup = dir.path().join("MyShow.seq.json.v1.bak");
+    assert_eq!(fs::read_to_string(&backup).unwrap(), V1);
+    assert_eq!(storage.load("MyShow").unwrap().into_file(), file);
+    // Later saves (over a current-version file) leave the backup alone.
+    storage.save(&renamed_first(file, "Other")).unwrap();
+    assert_eq!(fs::read_to_string(&backup).unwrap(), V1);
+}
+
+/// Format v3 (slot lanes): a v2 file (lengths already in sixteenths) loads unchanged and is kept as
+/// `.v2.bak` on its first save, since builds before v3 cannot read v3.
+#[test]
+fn v2_file_is_backed_up_as_v2_on_first_save() {
+    const V1: &str = include_str!("../../seq-core/tests/fixtures/spec-example-v1.seq.json");
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Storage::new(dir.path());
+    let path = storage.path_for("MyShow");
+    let v2 = V1.replacen("\"version\": 1", "\"version\": 2", 1);
+    assert_ne!(v2, V1);
+    fs::write(&path, &v2).unwrap();
+    let file = storage.load("MyShow").unwrap().into_file();
+    assert_eq!(file.version, 3);
+    assert_eq!(
+        file.decks["Act 1"].sequences[0].lanes[0].steps[0].length, 16,
+        "v2 lengths are not doubled"
+    );
+    storage.save(&file).unwrap();
+    assert_eq!(
+        fs::read_to_string(dir.path().join("MyShow.seq.json.v2.bak")).unwrap(),
+        v2
+    );
+    assert!(!dir.path().join("MyShow.seq.json.v1.bak").exists());
+    assert_eq!(
+        seq_core::file_version(&fs::read_to_string(&path).unwrap()),
+        Some(3)
+    );
+}
+
+fn renamed_first(mut f: SeqFile, name: &str) -> SeqFile {
+    f.decks.get_mut("Act 1").unwrap().sequences[0].name = name.into();
+    f
+}
+
+#[test]
 fn invalid_file_on_disk_is_reported_and_left_untouched() {
     let dir = tempfile::tempdir().unwrap();
     let storage = Storage::new(dir.path());

@@ -8,6 +8,7 @@ use seq_core::{AfterLastPass, LaneEnd, Repeat};
 use uuid::Uuid;
 
 const E: u64 = 12; // ticks per eighth
+const S: u64 = 6; // ticks per sixteenth
 const BAR: u64 = 96;
 
 use StepTarget::{Clip, Rest, Slot, Unresolved};
@@ -132,6 +133,43 @@ fn loop_to_end_restarts_short_lane_until_pass_end() {
         .collect();
     // 3-eighth loop inside an 8-eighth pass: 0, 3, 6 (the third is cut off by the pass end).
     assert_eq!(l1, vec![0, 3 * E, 6 * E]);
+}
+
+#[test]
+fn sixteenth_steps_fire_every_six_ticks() {
+    let mut s = Scheduler::new();
+    // 1/16, 1/16, 3/16 looped; a 1-bar lane sets the pass length.
+    let mut sp = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![
+            lane(100, LaneEnd::LoopToEnd, &[]),
+            lane(200, LaneEnd::Hold, &[(8, Clip(9))]),
+        ],
+    );
+    sp.lanes[0].steps = [(1, Clip(1)), (1, Clip(2)), (3, Clip(3))]
+        .iter()
+        .map(|&(sixteenths, target)| RunStep {
+            ticks: sixteenths * S,
+            target,
+        })
+        .collect();
+    let start = s.start(sp, Origin::Ui).unwrap();
+    let log = run(&mut s, start, BAR);
+    let l1: Vec<_> = triggers(&log).into_iter().filter(|t| t.1 != 9).collect();
+    // 5-sixteenth loop: 0, 6, 12, then again from 30.
+    assert_eq!(
+        &l1[..6],
+        &[
+            (0, 1),
+            (S, 2),
+            (2 * S, 3),
+            (5 * S, 1),
+            (6 * S, 2),
+            (7 * S, 3)
+        ]
+    );
 }
 
 #[test]
@@ -673,17 +711,17 @@ fn run_spec_from_sequence_and_resolution() {
                     Step {
                         column: None,
                         clip: named("A"),
-                        length: 8,
+                        length: 16,
                     },
                     Step {
                         column: None,
                         clip: None,
-                        length: 2,
+                        length: 4,
                     },
                     Step {
                         column: None,
                         clip: named("Missing"),
-                        length: 1,
+                        length: 2,
                     },
                 ],
             },
@@ -694,7 +732,7 @@ fn run_spec_from_sequence_and_resolution() {
                 steps: vec![Step {
                     column: None,
                     clip: named("A"),
-                    length: 4,
+                    length: 8,
                 }],
             },
         ],

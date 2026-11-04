@@ -1,0 +1,46 @@
+/* The manual in the app's look: IBM Plex (theme/fonts, copied by site/build.mjs) and the colours of
+   web/src/tokens.css mapped onto mdBook's navy theme (the default; the light themes stay available). */
+:root {
+  --mono-font: 'IBM Plex Mono', ui-monospace, monospace;
+  --code-font-size: 0.875em;
+}
+html { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+code, kbd, pre { font-family: var(--mono-font); }
+
+.navy {
+  --bg: #0E0F11;
+  --fg: #E6E6E3;
+  --sidebar-bg: #131417;
+  --sidebar-fg: #C9CCD1;
+  --sidebar-non-existant: #7E838B;
+  --sidebar-active: #F2A33A;
+  --sidebar-spacer: #26292E;
+  --scrollbar: #33373D;
+  --icons: #9A9EA6;
+  --icons-hover: #E6E6E3;
+  --links: #FFD39A;
+  --inline-code-color: #FFD39A;
+  --theme-popup-bg: #16181B;
+  --theme-popup-border: #33373D;
+  --theme-hover: #1C1E22;
+  --quote-bg: #16181B;
+  --quote-border: #33373D;
+  --warning-border: #F2A33A;
+  --table-border-color: #26292E;
+  --table-header-bg: #1C1E22;
+  --table-alternate-bg: #121316;
+  --searchbar-border-color: #33373D;
+  --searchbar-bg: #1C1E22;
+  --searchbar-fg: #E6E6E3;
+  --searchbar-shadow-color: #000;
+  --searchresults-header-fg: #9A9EA6;
+  --searchresults-border-color: #33373D;
+  --searchresults-li-bg: #16181B;
+  --search-mark-bg: #5A4220;
+}
+.navy .menu-title { color: #F2A33A; font-weight: 600; }
+.navy kbd { background: #1C1E22; border: 1px solid #33373D; border-radius: 4px; padding: 1px 6px; box-shadow: none; color: #E6E6E3; }
+.content img { max-width: 100%; border: 1px solid #26292E; border-radius: 8px; }
+.content figure { margin: 1em 0; }
+.content figcaption { color: #9A9EA6; font-size: 0.9em; margin-top: 0.3em; }
+.manual-footer { margin-top: 3em; padding-top: 1em; border-top: 1px solid var(--table-border-color, #26292E); color: #9A9EA6; font-size: 0.85em; }

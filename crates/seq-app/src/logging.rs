@@ -75,7 +75,7 @@ struct State {
     filter: env_filter::Filter,
     ring: Mutex<VecDeque<LogRecord>>,
     live: broadcast::Sender<LogRecord>,
-    writer: SyncSender<LogRecord>,
+    writer: SyncSender<WriterMsg>,
     dir: Option<PathBuf>,
     seq: AtomicU64,
     errors: AtomicU64,
@@ -116,7 +116,7 @@ impl log::Log for Logger {
         if is_live(record.level(), record.target()) {
             let _ = state.live.send(rec.clone()); // no subscriber: nothing to do
         }
-        if let Err(TrySendError::Full(_)) = state.writer.try_send(rec) {
+        if let Err(TrySendError::Full(_)) = state.writer.try_send(WriterMsg::Line(rec)) {
             state.dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -261,13 +261,37 @@ fn file_name(day: &str) -> String {
     format!("{FILE_PREFIX}{day}.log")
 }
 
-fn write_loop(lines: Receiver<LogRecord>, stderr: bool, dir: Option<PathBuf>) {
+/// What the writer thread receives: a log line, or a flush request (answered once everything before it is written).
+enum WriterMsg {
+    Line(LogRecord),
+    Flush(SyncSender<()>),
+}
+
+/// Waits (up to `timeout`) until the writer thread has written every record logged so far, so a short command
+/// that exits right after logging (`--install-ffgl`, an early error) doesn't lose its last lines.
+pub fn flush(timeout: std::time::Duration) {
+    let Some(state) = STATE.get() else { return };
+    let (done, wait) = sync_channel(1);
+    if state.writer.send(WriterMsg::Flush(done)).is_ok() {
+        let _ = wait.recv_timeout(timeout);
+    }
+}
+
+fn write_loop(lines: Receiver<WriterMsg>, stderr: bool, dir: Option<PathBuf>) {
     let mut day = String::new();
     let mut file: Option<std::io::BufWriter<File>> = None;
     while let Ok(first) = lines.recv() {
         let mut batch = vec![first];
         batch.extend(lines.try_iter().take(1024));
-        for rec in batch {
+        let mut flushed = Vec::new();
+        for msg in batch {
+            let rec = match msg {
+                WriterMsg::Line(rec) => rec,
+                WriterMsg::Flush(done) => {
+                    flushed.push(done);
+                    continue;
+                }
+            };
             let line = rec.line();
             if stderr {
                 eprintln!("{line}");
@@ -284,6 +308,9 @@ fn write_loop(lines: Receiver<LogRecord>, stderr: bool, dir: Option<PathBuf>) {
         }
         if let Some(f) = &mut file {
             let _ = f.flush();
+        }
+        for done in flushed {
+            let _ = done.send(());
         }
     }
 }

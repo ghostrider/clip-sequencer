@@ -1,6 +1,7 @@
 //! rust-embed needs `web/dist` to exist at compile time. If the UI has not been built yet,
 //! create a placeholder page so the workspace still compiles and tests run.
-//! Build info (`SEQ_BUILD_NUMBER`, `SEQ_GIT_COMMIT`) comes from git, with fallbacks.
+//! Build info (`SEQ_BUILD_NUMBER`, `SEQ_GIT_COMMIT`) comes from git, with fallbacks; `SEQ_BUILD_DATE` (UTC,
+//! ISO 8601; `SOURCE_DATE_EPOCH` if set), `SEQ_TARGET` and `SEQ_LONG_VERSION` (`--version`) are derived here.
 //! With the `desktop` feature, tauri-build embeds `tauri.conf.json`, the icon, the Windows
 //! manifest and the splash page in `shell/` (M12), which gets the UI's design tokens copied in.
 //! Product name and copyright come from `tauri.conf.json` (`SEQ_APP_NAME`, `SEQ_COPYRIGHT`), so
@@ -26,6 +27,7 @@ fn main() {
 
     build_info(manifest);
     product_info(manifest);
+    notices(manifest);
 
     // The splash page uses the same tokens as the UI (one source: web/src/tokens.css).
     let tokens = manifest.join("../../web/src/tokens.css");
@@ -34,6 +36,25 @@ fn main() {
 
     #[cfg(feature = "desktop")]
     tauri_build::build();
+}
+
+/// Third-party notices for the License dialog (M11 Phase F): `THIRD_PARTY_LICENSES.json` in the repo root,
+/// written by `scripts/third-party-licenses.mjs` (release builds run it before `cargo build`). Without it a
+/// placeholder is written there (git-ignored), so the dialog says the notices were not generated, and cargo
+/// does not rerun this script on every build (as it would for a missing watched file).
+fn notices(manifest: &Path) {
+    let path = manifest.join("../../THIRD_PARTY_LICENSES.json");
+    if !path.exists() {
+        std::fs::write(
+            &path,
+            "{\"placeholder\": true, \"packages\": [], \"texts\": [], \"note\": \"Third-party notices were not \
+             generated for this build (scripts/third-party-licenses.mjs). Release builds include them.\"}\n",
+        )
+        .expect("write placeholder THIRD_PARTY_LICENSES.json");
+    }
+    println!("cargo:rerun-if-changed={}", path.display());
+    let license = manifest.join("../../LICENSE");
+    println!("cargo:rerun-if-changed={}", license.display());
 }
 
 /// Name and copyright from `tauri.conf.json`, which tauri-build also writes into the exe. The config
@@ -88,9 +109,52 @@ fn build_info(manifest: &Path) {
     };
     println!("cargo:rustc-env=SEQ_BUILD_NUMBER={count}");
     println!("cargo:rustc-env=SEQ_GIT_COMMIT={commit}");
+
+    // The date is taken when this script runs, i.e. on the first build of a commit (it reruns when HEAD or
+    // the index changes). SOURCE_DATE_EPOCH (reproducible builds) overrides the clock.
+    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    let epoch = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        });
+    let date = iso8601_utc(epoch);
+    println!("cargo:rustc-env=SEQ_BUILD_DATE={date}");
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown".into());
+    println!("cargo:rustc-env=SEQ_TARGET={target}");
+    let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION");
+    println!(
+        "cargo:rustc-env=SEQ_LONG_VERSION={version} (build {count}, {commit}, {})",
+        &date[..10]
+    );
     if let Some(dir) = git(&["rev-parse", "--absolute-git-dir"]) {
         for f in ["HEAD", "index", "packed-refs"] {
             println!("cargo:rerun-if-changed={dir}/{f}");
         }
     }
+}
+
+/// `2026-11-03T14:05:09Z` from Unix seconds (UTC; civil-from-days, no date crate needed in build.rs).
+fn iso8601_utc(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        rem % 3_600 / 60,
+        rem % 60
+    )
 }

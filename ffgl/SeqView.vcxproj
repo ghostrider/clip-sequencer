@@ -56,6 +56,9 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;SEQVIEW_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
     <Link>
       <ModuleDefinitionFile>$(FFGLRoot)build\windows\FFGLPlugins.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -69,13 +72,13 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <OptimizeReferences>true</OptimizeReferences>
@@ -100,31 +103,63 @@
     <ClInclude Include="SeqViewRender.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="SeqView.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="README.md" />
     <None Include="build_seqview.ps1" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <!--
-    Build number + date. Runs before every compile: increments the counter in build_number.txt (per machine, not
-    tracked in git) and writes BuildInfo.h into the intermediate directory. SeqView.cpp includes it, so the
-    values end up in the DLL and are shown in Resolume as the "Build" parameter and in the About text.
+    C++ runtime: linked statically (/MT, MultiThreaded), so the DLL needs no Visual C++ Redistributable on the user's
+    machine (M11 Phase G3). The SDK's GLEW (glew32s.lib) is built with /MT too (/DEFAULTLIB:LIBCMT).
+    ffgl\build.ps1 -CheckDependencies verifies it with dumpbin.
   -->
-  <Target Name="GenerateBuildInfo" BeforeTargets="ClCompile">
+  <!--
+    Build info (M11 Phase E), the same values as the app's build.rs: version from [workspace.package] in
+    ../Cargo.toml (one version source), build number = git commit count, short commit (+ "-dirty"), UTC build
+    date. Without git: build 0, commit "unknown". Writes BuildInfo.h into the intermediate directory before
+    compiling; SeqView.cpp (About text, "Build" parameter) and SeqView.rc (DLL version resource) include it.
+  -->
+  <Target Name="GenerateBuildInfo" BeforeTargets="ClCompile;ResourceCompile">
     <PropertyGroup>
-      <BuildNumberFile>$(MSBuildThisFileDirectory)build_number.txt</BuildNumberFile>
+      <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</RepoRoot>
       <BuildInfoHeader>$(IntDir)BuildInfo.h</BuildInfoHeader>
+      <!-- Cargo.toml must not contain a single quote: it is embedded in the quoted Regex argument below. -->
+      <CargoToml>$([System.IO.File]::ReadAllText('$(RepoRoot)\Cargo.toml'))</CargoToml>
+      <SeqVersion>$([System.Text.RegularExpressions.Regex]::Match('$(CargoToml)', '\[workspace\.package\][^\[]*?\nversion = "(\d+)\.(\d+)\.(\d+)"').Value)</SeqVersion>
     </PropertyGroup>
-    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
-      <Output TaskParameter="Lines" PropertyName="PreviousBuildNumber" />
-    </ReadLinesFromFile>
+    <Error Condition="'$(SeqVersion)' == ''" Text="No version in [workspace.package] of $(RepoRoot)\Cargo.toml" />
     <PropertyGroup>
-      <PreviousBuildNumber Condition="'$(PreviousBuildNumber)' == ''">0</PreviousBuildNumber>
-      <NewBuildNumber>$([MSBuild]::Add($(PreviousBuildNumber), 1))</NewBuildNumber>
-      <BuildDateString>$([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm'))</BuildDateString>
+      <SeqVersion>$([System.Text.RegularExpressions.Regex]::Match('$(SeqVersion)', '(\d+)\.(\d+)\.(\d+)').Value)</SeqVersion>
+      <SeqVersionMajor>$([System.Text.RegularExpressions.Regex]::Match('$(SeqVersion)', '^\d+').Value)</SeqVersionMajor>
+      <SeqVersionMinor>$([System.Text.RegularExpressions.Regex]::Match('$(SeqVersion)', '(?&lt;=^\d+\.)\d+').Value)</SeqVersionMinor>
+      <SeqVersionPatch>$([System.Text.RegularExpressions.Regex]::Match('$(SeqVersion)', '\d+$').Value)</SeqVersionPatch>
+      <BuildDateString>$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))</BuildDateString>
+    </PropertyGroup>
+    <Exec Command="git rev-list --count HEAD" WorkingDirectory="$(RepoRoot)" ConsoleToMSBuild="true"
+          IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCount" />
+      <Output TaskParameter="ExitCode" PropertyName="GitCountExit" />
+    </Exec>
+    <Exec Command="git rev-parse --short HEAD" WorkingDirectory="$(RepoRoot)" ConsoleToMSBuild="true"
+          IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="GitCommitExit" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no -- ." WorkingDirectory="$(RepoRoot)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low"
+          Condition="'$(GitCommitExit)' == '0'">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <GitCount Condition="'$(GitCountExit)' != '0'">0</GitCount>
+      <GitCommit Condition="'$(GitCommitExit)' != '0'">unknown</GitCommit>
+      <GitCommit Condition="'$(GitCommitExit)' == '0' And '$(GitDirty)' != ''">$(GitCommit)-dirty</GitCommit>
     </PropertyGroup>
     <MakeDir Directories="$(IntDir)" />
-    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(NewBuildNumber)" Overwrite="true" />
     <WriteLinesToFile File="$(BuildInfoHeader)" Overwrite="true"
-                      Lines="#pragma once;#define SEQVIEW_BUILD_NUMBER $(NewBuildNumber);#define SEQVIEW_BUILD_DATE &quot;$(BuildDateString)&quot;" />
+                      Lines="#pragma once;#define SEQVIEW_VERSION &quot;$(SeqVersion)&quot;;#define SEQVIEW_VERSION_MAJOR $(SeqVersionMajor);#define SEQVIEW_VERSION_MINOR $(SeqVersionMinor);#define SEQVIEW_VERSION_PATCH $(SeqVersionPatch);#define SEQVIEW_BUILD_NUMBER $(GitCount);#define SEQVIEW_GIT_COMMIT &quot;$(GitCommit)&quot;;#define SEQVIEW_BUILD_DATE &quot;$(BuildDateString)&quot;;#define SEQVIEW_BUILD_INFO &quot;$(SeqVersion) (build $(GitCount), $(GitCommit), $(BuildDateString))&quot;" />
+    <Message Importance="high" Text="SeqView $(SeqVersion) (build $(GitCount), $(GitCommit), $(BuildDateString))" />
   </Target>
 </Project>

@@ -13,6 +13,7 @@ seq.toml
 # Show files: only test fixtures are tracked
 *.seq.json
 !crates/seq-core/tests/fixtures/*.seq.json
+!docs/samples/*.seq.json
 
 # FFGL / MSVC build output
 *.dll

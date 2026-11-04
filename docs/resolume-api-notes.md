@@ -250,7 +250,16 @@ source and the "1000A Shake" effect (`ffgl-plugins/shake`), 5 s timeline transpo
 | Effect params in the composition JSON | `clip.video.effects[]`: `{"id", "name": "1000A Shake", "display_name", "bypassed", "mixer", "params": {<display name>: param}}`. An FFGL `FF_TYPE_EVENT` param is `{"id", "valuetype": "ParamEvent"}` (no value); a boolean is `ParamBoolean` with `value`. Logical path: `/composition/layers/{L}/clips/{C}/video/effects/1000ashake/effect/trigger`. | ✅ |
 | Press a `ParamEvent` over the WebSocket | `set` with `value: true`, then `false` **100 ms later**: the effect fires (seen on output). `true` and `false` sent back to back: accepted (`parameter_set` + `parameter_update` each) but the effect does **not** fire. | ✅ |
 
-## 14. Slot content changes from Resolume's own UI (probed for M13, 2026-11-03, Arena 7.28.1)
+## 14. User plugin folder (FFGL)
+
+*2026-11-04, from Uli's setup (Arena 7.28):* Resolume loads user FFGL plugins from
+`<Documents>\Resolume Arena\Extra Effects` at startup (the folder `ffgl/build_seqview.ps1` has always installed
+`SeqView.dll` to). Plugins are loaded only at startup, and a loaded DLL is locked while Resolume runs (it can't
+be replaced or renamed). Further folders can be added in Resolume's preferences; the installer lets the user
+choose one (SPEC §12.1).
+
+
+## 15. Slot content changes from Resolume's own UI (probed for M13, 2026-11-03, Arena 7.28.1)
 
 Manual actions by Uli on layer `TEST` (deck "1000A Text3D", composition `dev`) while
 `resolume-probe session` logged the WebSocket with the `connect` and `transport/position` params of

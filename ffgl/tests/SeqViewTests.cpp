@@ -249,14 +249,14 @@ int PlayheadX( const Frame& f, int y0, int y1 )
 
 std::string Response( bool withLayout, uint64_t pos )
 {
-	std::string s = "SEQVIEW 1\nstatus ok\nrev abc\n";
+	std::string s = "SEQVIEW 2\nstatus ok\nrev abc\n";
 	if( withLayout )
-		s += "layout\nname Loop\ndeck Act 1\npass 16\n"
+		s += "layout\nname Loop\ndeck Act 1\npass 32\n"
 		     "lane ok loop_to_end BG\n"
-		     "step clip 8 7 v1 Tunnel Red\n"
-		     "step rest 8 0 - rest\n"
+		     "step clip 16 7 v1 Tunnel Red\n"
+		     "step rest 16 0 - rest\n"
 		     "lane ok hold FX\n"
-		     "step unresolved 16 0 - Glitch Bars\n"
+		     "step unresolved 32 0 - Glitch Bars\n"
 		     "endlayout\n";
 	s += "run 1 " + std::to_string( pos ) + " 192 2 4 1.3\nlanestate 0 playing 0\nlanestate 1 playing 0\nclock 0 0\nend\n";
 	return s;
@@ -276,10 +276,10 @@ void ParserTests()
 	View v;
 	CHECK( ParseView( Response( true, 48 ), v ), "full response parses" );
 	CHECK( v.status == Status::Ok && v.rev == "abc" && v.hasLayout, "status/rev/layout" );
-	CHECK( v.layout.name == "Loop" && v.layout.deck == "Act 1" && v.layout.passEighths == 16, "header fields (deck with a space)" );
+	CHECK( v.layout.name == "Loop" && v.layout.deck == "Act 1" && v.layout.passSixteenths == 32, "header fields (deck with a space)" );
 	CHECK( v.layout.lanes.size() == 2 && v.layout.lanes[ 0 ].layer == "BG" && v.layout.lanes[ 1 ].end == "hold", "lanes" );
 	const Step& s0 = v.layout.lanes[ 0 ].steps[ 0 ];
-	CHECK( s0.kind == StepKind::Clip && s0.eighths == 8 && s0.clipId == 7 && s0.thumb == "v1" && s0.label == "Tunnel Red", "clip step" );
+	CHECK( s0.kind == StepKind::Clip && s0.sixteenths == 16 && s0.clipId == 7 && s0.thumb == "v1" && s0.label == "Tunnel Red", "clip step" );
 	CHECK( v.layout.lanes[ 0 ].steps[ 1 ].kind == StepKind::Rest && v.layout.lanes[ 0 ].steps[ 1 ].thumb.empty(), "rest step" );
 	CHECK( v.layout.lanes[ 1 ].steps[ 0 ].kind == StepKind::Unresolved && v.layout.lanes[ 1 ].steps[ 0 ].label == "Glitch Bars", "unresolved step" );
 	CHECK( v.runtime.running && v.runtime.pos == 48 && v.runtime.passTicks == 192 && v.runtime.pass == 2 && v.runtime.passes == 4 &&
@@ -290,13 +290,18 @@ void ParserTests()
 	// Unchanged layout is not resent: the old one stays, the runtime updates.
 	CHECK( ParseView( Response( false, 96 ), v ), "runtime-only response parses" );
 	CHECK( v.hasLayout && v.layout.lanes.size() == 2 && v.runtime.pos == 96, "layout kept, runtime updated" );
-	CHECK( ParseView( "SEQVIEW 1\nstatus ok\nrev abc\nrun 0\nclock 1 128.00\nend\n", v ), "stopped" );
+	CHECK( ParseView( "SEQVIEW 2\nstatus ok\nrev abc\nrun 0\nclock 1 128.00\nend\n", v ), "stopped" );
 	CHECK( !v.runtime.running && v.runtime.clockRunning && std::abs( v.runtime.bpm - 128.0 ) < 1e-9, "stopped runtime + clock" );
 
-	CHECK( ParseView( "SEQVIEW 1\nstatus not_found\nend\n", v ) && v.status == Status::NotFound && !v.hasLayout, "not found clears" );
+	CHECK( ParseView( "SEQVIEW 2\nstatus not_found\nend\n", v ) && v.status == Status::NotFound && !v.hasLayout, "not found clears" );
 	View bad;
 	CHECK( !ParseView( "<html>nope</html>", bad ) && bad.status == Status::BadResponse, "foreign response rejected" );
-	CHECK( !ParseView( "SEQVIEW 1\nstatus ok\nlayout\nname x\n", bad ), "truncated response rejected" );
+	CHECK( !ParseView( "SEQVIEW 2\nstatus ok\nlayout\nname x\n", bad ), "truncated response rejected" );
+	// An older sequencer (SEQVIEW 1) counts eighths: read as sixteenths.
+	View old;
+	CHECK( ParseView( "SEQVIEW 1\nstatus ok\nrev r\nlayout\nname x\ndeck d\npass 16\nlane ok hold BG\nstep rest 3 0 - rest\nendlayout\nrun 0\nclock 0 0\nend\n", old ) &&
+	           old.layout.passSixteenths == 32 && old.layout.lanes[ 0 ].steps[ 0 ].sixteenths == 6,
+	       "SEQVIEW 1 lengths doubled to sixteenths" );
 	CHECK( UrlEncode( "\xC2\xA7 a1&b" ) == "%C2%A7%20a1%26b", "url encoding (%s)", UrlEncode( "\xC2\xA7 a1&b" ).c_str() );
 }
 }// namespace
@@ -376,7 +381,7 @@ int main( int argc, char** argv )
 		const int px4 = PlayheadX( a, 160, H - 60 );
 		CHECK( px4 > 0, "playhead found at position 4/16" );
 
-		// Same view, position 96 ticks = 8 eighths: the playhead moves right by 4/16 of the timeline.
+		// Same view, position 96 ticks = 16 sixteenths: the playhead moves right by 4/16 of the timeline.
 		CHECK( seqview::ParseView( Response( false, 96 ), v ), "runtime update parses" );
 		plugin.InjectForTest( v, {} );
 		Frame b = host.Step( plugin, true );
@@ -389,14 +394,14 @@ int main( int argc, char** argv )
 		       px4, px8, timeline * 4 / 16 );
 
 		// Not running: no playhead.
-		CHECK( seqview::ParseView( "SEQVIEW 1\nstatus ok\nrev abc\nrun 0\nclock 0 0\nend\n", v ), "stop parses" );
+		CHECK( seqview::ParseView( "SEQVIEW 2\nstatus ok\nrev abc\nrun 0\nclock 0 0\nend\n", v ), "stop parses" );
 		plugin.InjectForTest( v, {} );
 		Frame idle = host.Step( plugin, true );
 		CHECK( PlayheadX( idle, 160, H - 60 ) < 0, "no playhead when the sequence is not running" );
 		SavePreview( outDir / "04_idle.png", idle );
 
 		// Not found: message, no lanes.
-		CHECK( seqview::ParseView( "SEQVIEW 1\nstatus not_found\nend\n", v ), "not found parses" );
+		CHECK( seqview::ParseView( "SEQVIEW 2\nstatus not_found\nend\n", v ), "not found parses" );
 		plugin.InjectForTest( v, {} );
 		Frame nf = host.Step( plugin, true );
 		CHECK( Count( nf, 0, 0, W, H, kRed, 10 ) == 0, "no thumbnail when the sequence is not found" );

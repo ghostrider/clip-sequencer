@@ -17,7 +17,7 @@ enum class StepKind
 struct Step
 {
 	StepKind kind = StepKind::Rest;
-	uint32_t eighths = 1;
+	uint32_t sixteenths = 1;
 	uint64_t clipId = 0;
 	std::string thumb; // thumbnail version, empty = none
 	std::string label;
@@ -34,7 +34,7 @@ struct Lane
 struct Layout
 {
 	std::string name, deck;
-	uint32_t passEighths = 0;
+	uint32_t passSixteenths = 0;
 	std::vector< Lane > lanes;
 };
 

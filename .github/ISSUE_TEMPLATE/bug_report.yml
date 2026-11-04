@@ -1,0 +1,71 @@
+name: Bug report
+description: Something doesn't work as described in the manual.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems: please report them privately instead (see SECURITY.md).
+        Please don't attach show footage or other material you can't share publicly.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start Resolume with …
+        2. In the sequencer, …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version and build
+      description: Help → About, or `seq-app-cli.exe --version`, e.g. `0.1.0 (build 42, abc1234, 2026-11-03)`.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which program
+      options:
+        - Desktop app (seq-app.exe)
+        - Headless (seq-app-cli.exe, UI in a browser)
+        - FFGL plugin (1000A Sequence)
+    validations:
+      required: true
+  - type: input
+    id: resolume
+    attributes:
+      label: Resolume version
+      placeholder: Arena 7.28.1
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+  - type: input
+    id: clock
+    attributes:
+      label: MIDI clock source
+      description: What sends the clock, and the port name the sequencer uses.
+      placeholder: loopMIDI port "Clock", fed by …
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: >
+        From the Console tab (Copy visible / Save log…) or `%APPDATA%\resolume-sequencer\logs\`.
+        The lines around the problem are enough. Remove clip names or paths you don't want to share.
+      render: text

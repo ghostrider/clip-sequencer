@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -15,8 +15,8 @@
               "layer": "BG",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
-                { "clip": null, "length": 8 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
+                { "clip": null, "length": 16 }
               ]
             },
             {
@@ -24,9 +24,9 @@
               "mode": "slot",
               "end": "loop_to_end",
               "steps": [
-                { "column": 1, "length": 8 },
-                { "column": 2, "length": 8 },
-                { "column": null, "length": 8 }
+                { "column": 1, "length": 16 },
+                { "column": 2, "length": 16 },
+                { "column": null, "length": 16 }
               ]
             }
           ]
