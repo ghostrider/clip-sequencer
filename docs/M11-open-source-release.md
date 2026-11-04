@@ -29,7 +29,7 @@ action from Uli. Ask, don't guess.
 - [x] **Manual language:** English only, or English + German. Default: English only (German can follow later).
 - [x] **Site address:** the default GitHub Pages URL `https://<owner>.github.io/<repo>/`, or a custom
       domain (e.g. a subdomain of a domain Uli already owns). Default: the GitHub Pages URL.
-- [ ] **Public contact address** for the site and the manual (a project e-mail address, not a personal
+- [x] **Public contact address** for the site and the manual (a project e-mail address, not a personal
       inbox). It's needed for the contact / legal notice page (Phase G2).
 - [x] **FFGL plugin:** its name, what it does, and where its source currently lives (it was built in a
       separate Claude Code session). Claude reads the plugin's source and README to fill in the details,
@@ -382,7 +382,7 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
   no running state (no MIDI clock in the build container).*
 - *Open:* **Setting up Resolume:** *the exact preference path for MIDI clock sync and a recommended clip transport
   mode are not in the manual; Uli to confirm (the chapter says "MIDI clock sync in Resolume's MIDI settings").*
-  **Contact page:** *needs `contactEmail` in `site/site.json` and Uli's review of the wording (and a postal address
+  **Contact page:** *`contactEmail` set (2026-11-04); waiting for Uli's review of the wording (and a postal address
   if the Swiss rules require one); the shop button appears once `shopUrl` is set.* **Latest release only:** *with
   the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` exists (it made the screenshots); keep or drop
   per Uli. The "Installing the FFGL plugin" chapter follows with G3.)*
@@ -663,7 +663,7 @@ _(Phase A, 2026-11-01)_
 - Release approval required: **yes** (draft release + protected `release` environment)
 - Manual language: **English only**
 - Site address: **GitHub Pages URL**, `https://ghostrider.github.io/clip-sequencer/` (base path `/clip-sequencer/`)
-- Public contact address: **open**. Uli creates a project address; needed before Phase G2.
+- Public contact address: **ustaudinger@gmail.com** (decided 2026-11-04; set in `site/site.json`).
 - FFGL plugin: **"1000A Sequence"** (`SeqView`, plugin ID `VJSQ`), an FFGL 2.1 source plugin that shows a sequence
   (lanes, steps with thumbnails, playhead, pass counter) on the `§` placeholder clips of the SEQ layer. Source:
   `ffgl/` in this repo (moved from `vj_stuff/ffgl-plugins/seq_view/` on 2026-10-27). It currently builds through
