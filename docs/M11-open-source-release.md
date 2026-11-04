@@ -487,65 +487,65 @@ then waits for confirmation. The workflow files themselves are written by Claude
 ### H1 — Create the repository [Uli]
 - [x] Create an **empty** repo `<owner>/<repo>` (no README, LICENSE or .gitignore; they come from the
       local repo). Visibility: **private** for now, switched to public in Phase I after the first green run.
-- [ ] Settings → General: default branch `main`; Features: Issues on, Discussions optional,
+- [x] Settings → General: default branch `main`; Features: Issues on, Discussions optional,
       Wiki off, Projects off; Pull Requests: allow **squash merging** only, "Automatically delete head branches" on.
 - [x] Claude adds the remote and pushes `main`. No tags yet.
 
 ### H2 — Actions permissions [Uli]
-- [ ] Settings → Actions → General → **Actions permissions:** "Allow \<owner\>, and select non-\<owner\>,
+- [x] Settings → Actions → General → **Actions permissions:** "Allow \<owner\>, and select non-\<owner\>,
       actions and reusable workflows", with "Allow actions created by GitHub" on, and the allow-list:
       `dtolnay/rust-toolchain@*`, `Swatinem/rust-cache@*`, `EmbarkStudios/cargo-deny-action@*`.
       (Release creation uses the preinstalled `gh` CLI, so no third-party release action is needed.)
-- [ ] Settings → Actions → General → **Workflow permissions:** "Read repository contents and packages
+- [x] Settings → Actions → General → **Workflow permissions:** "Read repository contents and packages
       permissions" (read-only default). Leave "Allow GitHub Actions to create and approve pull requests" **off**.
       The release workflow requests `contents: write` itself, at job level.
-- [ ] Settings → Actions → General → **Fork pull request workflows:** "Require approval for first-time contributors".
-- [ ] Settings → Actions → General → **Artifact and log retention:** 30 days.
+- [x] Settings → Actions → General → **Fork pull request workflows:** "Require approval for first-time contributors".
+- [x] Settings → Actions → General → **Artifact and log retention:** 30 days.
 
 ### H3 — Branch and tag protection (rulesets) [Uli]
-- [ ] Settings → Rules → Rulesets → New branch ruleset **`protect-main`**, target `main`, enforcement *Active*:
+- [x] Settings → Rules → Rulesets → New branch ruleset **`protect-main`**, target `main`, enforcement *Active*:
       restrict deletions; block force pushes; require status checks to pass (add the CI job names
       from Phase I: `ci / rust`, `ci / web`, `ci / deny`, `ci / site`, `ci / ffgl`), with "require branches to be up to date" on.
       Bypass list: repository admin (so Uli can still push directly while working solo). Optional:
       require a pull request before merging.
-- [ ] New tag ruleset **`protect-release-tags`**, target pattern `v*`, enforcement *Active*:
+- [x] New tag ruleset **`protect-release-tags`**, target pattern `v*`, enforcement *Active*:
       restrict creations, updates and deletions; bypass list: repository admin only. This means only Uli
       can create release tags, and a published tag can't be moved.
-- [ ] Settings → General → **Releases:** enable "Immutable releases" if the option is available
+- [x] Settings → General → **Releases:** enable "Immutable releases" if the option is available
       (published releases and their assets can then no longer be changed).
 
 ### H4 — Release environment [Uli]
-- [ ] Settings → Environments → New environment **`release`**:
+- [x] Settings → Environments → New environment **`release`**:
   - Deployment branches and tags: "Selected branches and tags", rule: tag pattern `v*`
   - Required reviewers: Uli (if "Release approval" = yes in Phase A); "Prevent self-review" **off**
     (otherwise a solo maintainer can't approve)
   - Environment secrets: **none for now**. Placeholders, documented in `docs/github-setup.md` but not
     created: `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` (future code signing),
     `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (only if an updater is added later).
-- [ ] No repository secrets are needed: the workflows use the automatic `GITHUB_TOKEN`.
+- [x] No repository secrets are needed: the workflows use the automatic `GITHUB_TOKEN`.
 
 ### H5 — Security and dependency updates [Uli + Claude]
-- [ ] **[Uli]** Settings → Advanced Security (or Security): enable **Private vulnerability reporting**,
+- [x] **[Uli]** Settings → Advanced Security (or Security): enable **Private vulnerability reporting**,
       **Dependabot alerts**, **Dependabot security updates**, and **Secret scanning** with **push protection**.
 - [x] **Claude** adds `.github/dependabot.yml`: ecosystems `cargo` (`/`), `npm` (`/web`),
       `github-actions` (`/`); weekly schedule; grouped minor/patch updates per ecosystem; max 5 open PRs.
 - [x] **Claude** adds `.github/CODEOWNERS` with `* @<owner>`.
 
 ### H6 — GitHub Pages [Uli]
-- [ ] Settings → Pages → **Build and deployment → Source: GitHub Actions** (not "Deploy from a branch").
-- [ ] Note: Pages on a **private** repo needs a paid GitHub plan. On a free account, Pages only works after the
+- [x] Settings → Pages → **Build and deployment → Source: GitHub Actions** (not "Deploy from a branch").
+- [x] Note: Pages on a **private** repo needs a paid GitHub plan. On a free account, Pages only works after the
       repo is switched to public (I4). The first site deployment therefore happens after that switch.
 - [ ] Settings → Environments → **`github-pages`** (created automatically on first deploy): restrict deployments to
       tags `v*` and the `main` branch (for manual redeploys).
-- [ ] If a custom domain is chosen (Phase A):
+- [x] If a custom domain is chosen (Phase A): *not needed (GitHub Pages URL).*
   - set the DNS record at the domain provider: a `CNAME` from the subdomain to `<owner>.github.io`
   - Settings → Pages → Custom domain: enter the domain, wait for the DNS check, then enable **Enforce HTTPS**
   - verify the domain for the account (Settings of the user/org → Pages → Verified domains), to prevent takeover
   - no `CNAME` file is needed in the repo when deploying via Actions
-- [ ] The allow-list from H2 needs no change: the Pages actions (`actions/configure-pages`,
+- [x] The allow-list from H2 needs no change: the Pages actions (`actions/configure-pages`,
       `actions/upload-pages-artifact`, `actions/deploy-pages`) are created by GitHub. mdBook is installed from its
       official release binary in the workflow, not through a third-party action.
-- [ ] Settings → General → repo **Website** field (About box on the repo page): the site URL.
+- [x] Settings → General → repo **Website** field (About box on the repo page): the site URL.
 
 Done when: `docs/github-setup.md` is fully ticked by Uli, and `main` is pushed.
 
@@ -556,6 +556,10 @@ npm `/web`, github-actions `/`, weekly, minor+patch grouped, 5 open PRs each) an
 added after the first CI run (GitHub can only offer checks it has seen; listed under "After the first CI run" in the
 checklist, as `rust`, `web`, `deny`, `ffgl`, `site`), and Pages (H6) waits for the switch to public on a free
 account. Waiting for Uli to work through the checklist.)*
+
+*(2026-11-04: Uli worked through `docs/github-setup.md`. Still open by design: the required status checks
+(after the first CI run, Phase I) and the `github-pages` environment rules (the environment appears with the first
+deployment, I5). Uli also added `.github/FUNDING.yml` (Buy Me a Coffee).)*
 
 ## Phase I — CI/CD workflows and first release
 
