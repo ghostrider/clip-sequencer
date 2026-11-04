@@ -1,0 +1,118 @@
+# Release (M11 Phase I2). A tag vX.Y.Z builds the portable zip and creates a DRAFT release after approval in the
+# `release` environment; Uli reviews the draft and clicks Publish (docs/RELEASING.md). "Run workflow" by hand is a
+# dry run: it builds everything and uploads it as a workflow artifact, without a release.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_ABOUT_VERSION: 0.9.3
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # build number = commit count
+          submodules: true # FFGL SDK
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - id: version
+        name: Verify the version (tag = Cargo = web)
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { node scripts/check-version.mjs --tag $env:GITHUB_REF_NAME --github-output }
+          else { node scripts/check-version.mjs --github-output }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Release notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $release = @()
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $release = @('--release') }
+          node scripts/release-notes.mjs @release --out release-notes.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master (stable toolchain)
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: release
+      - name: Install cargo-about (third-party notices)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
+            cargo install --locked cargo-about --version $env:CARGO_ABOUT_VERSION --features cli
+          }
+      - name: Build (UI, notices, FFGL plugin, app) and pack the zip
+        shell: pwsh
+        run: ./scripts/release.ps1
+      - name: SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $zip = "release/clip-sequencer-$v-windows-x64.zip"
+          $lines = @()
+          $lines += "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())  clip-sequencer-$v-windows-x64.zip"
+          # The plugin DLL inside the zip, to check it after unzipping or after an install.
+          $lines += "$((Get-FileHash ffgl/bin/x64/Release/SeqView.dll -Algorithm SHA256).Hash.ToLower())  ffgl/SeqView.dll"
+          $lines -join "`n" | Set-Content -NoNewline -Encoding ascii release/SHA256SUMS.txt
+          Add-Content -Encoding ascii release/SHA256SUMS.txt "`n"
+          Get-Content release/SHA256SUMS.txt
+          Copy-Item release-notes.md release/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            release/clip-sequencer-*-windows-x64.zip
+            release/SHA256SUMS.txt
+            release/release-notes.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: symbols-${{ steps.version.outputs.version }}
+          retention-days: 30
+          if-no-files-found: error
+          path: release/SeqView-*.pdb
+
+  publish:
+    # Only for a pushed tag; waits for approval in the `release` environment, then creates a draft release.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: release
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          ls -l release
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "Clip Sequencer for Resolume $VERSION" --notes-file release/release-notes.md \
+            "release/clip-sequencer-$VERSION-windows-x64.zip" release/SHA256SUMS.txt
+          echo "Draft created: review it under Releases and click Publish." >> "$GITHUB_STEP_SUMMARY"

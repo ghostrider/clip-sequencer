@@ -5,10 +5,11 @@
 //   - crates/seq-app/tauri.conf.json sets no version (Tauri then takes Cargo's)
 //   - with --tag vX.Y.Z (or a tag in GITHUB_REF_NAME when --tag is given without a value): the tag matches
 // The FFGL plugin reads the version from Cargo.toml itself (ffgl/SeqView.vcxproj), so it cannot drift.
-// Usage: node scripts/check-version.mjs [--tag [vX.Y.Z]]
+// Usage: node scripts/check-version.mjs [--tag [vX.Y.Z]] [--github-output]
+//   --github-output  also appends "version=X.Y.Z" to $GITHUB_OUTPUT (GitHub Actions step output)
 // Exit code 0 = consistent, 1 = mismatch (with a message per problem).
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,3 +58,10 @@ if (problems.length) {
   process.exit(1);
 }
 console.log(`check-version: ${version} everywhere${tagArg > 0 ? ' (tag matches)' : ''}`);
+if (process.argv.includes('--github-output')) {
+  if (!process.env.GITHUB_OUTPUT) {
+    console.error('check-version: --github-output needs GITHUB_OUTPUT');
+    process.exit(1);
+  }
+  appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+}

@@ -9,9 +9,9 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 
-Write-Host '==> UI (npm install + build)' -ForegroundColor Cyan
+Write-Host '==> UI (npm ci + build)' -ForegroundColor Cyan
 Push-Location web
-& npm install --no-audit --no-fund
+& npm ci --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 & npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }

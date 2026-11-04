@@ -50,7 +50,9 @@ if ($CheckDependencies) {
         $dumpbin = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
     }
     if (-not $dumpbin -or -not (Test-Path $dumpbin)) { throw 'dumpbin.exe not found (needs the MSVC build tools).' }
-    $deps = & $dumpbin /nologo /dependents $dll | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\.dll$' }
+    # The dependent DLL names are the indented lines ending in .dll (not the "Dump of file ...SeqView.dll" header).
+    $deps = & $dumpbin /nologo /dependents $dll | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -match '^[\w.-]+\.dll$' }
     Write-Host "Dependencies of SeqView.dll: $($deps -join ', ')"
     # The static runtime (/MT) means none of these may appear: they would need the VC++ Redistributable.
     $runtime = $deps | Where-Object { $_ -match '^(msvcp|vcruntime|concrt|ucrtbase|api-ms-win-crt)' }
