@@ -485,11 +485,11 @@ Claude writes the exact path and value into `docs/github-setup.md` (a checklist 
 then waits for confirmation. The workflow files themselves are written by Claude in Phase I.
 
 ### H1 — Create the repository [Uli]
-- [ ] Create an **empty** repo `<owner>/<repo>` (no README, LICENSE or .gitignore; they come from the
+- [x] Create an **empty** repo `<owner>/<repo>` (no README, LICENSE or .gitignore; they come from the
       local repo). Visibility: **private** for now, switched to public in Phase I after the first green run.
 - [ ] Settings → General: default branch `main`; Features: Issues on, Discussions optional,
       Wiki off, Projects off; Pull Requests: allow **squash merging** only, "Automatically delete head branches" on.
-- [ ] Claude adds the remote and pushes `main`. No tags yet.
+- [x] Claude adds the remote and pushes `main`. No tags yet.
 
 ### H2 — Actions permissions [Uli]
 - [ ] Settings → Actions → General → **Actions permissions:** "Allow \<owner\>, and select non-\<owner\>,
@@ -527,9 +527,9 @@ then waits for confirmation. The workflow files themselves are written by Claude
 ### H5 — Security and dependency updates [Uli + Claude]
 - [ ] **[Uli]** Settings → Advanced Security (or Security): enable **Private vulnerability reporting**,
       **Dependabot alerts**, **Dependabot security updates**, and **Secret scanning** with **push protection**.
-- [ ] **Claude** adds `.github/dependabot.yml`: ecosystems `cargo` (`/`), `npm` (`/web`),
+- [x] **Claude** adds `.github/dependabot.yml`: ecosystems `cargo` (`/`), `npm` (`/web`),
       `github-actions` (`/`); weekly schedule; grouped minor/patch updates per ecosystem; max 5 open PRs.
-- [ ] **Claude** adds `.github/CODEOWNERS` with `* @<owner>`.
+- [x] **Claude** adds `.github/CODEOWNERS` with `* @<owner>`.
 
 ### H6 — GitHub Pages [Uli]
 - [ ] Settings → Pages → **Build and deployment → Source: GitHub Actions** (not "Deploy from a branch").
@@ -548,6 +548,14 @@ then waits for confirmation. The workflow files themselves are written by Claude
 - [ ] Settings → General → repo **Website** field (About box on the repo page): the site URL.
 
 Done when: `docs/github-setup.md` is fully ticked by Uli, and `main` is pushed.
+
+*(2026-11-04: Claude's part is done: `ghostrider/clip-sequencer` exists (private) with `main` pushed;
+`docs/github-setup.md` holds every [Uli] setting with its exact place and value; `.github/dependabot.yml` (cargo `/`,
+npm `/web`, github-actions `/`, weekly, minor+patch grouped, 5 open PRs each) and `.github/CODEOWNERS`
+(`* @ghostrider`) are in. Two orderings differ from the plan text: the required status checks of `protect-main` are
+added after the first CI run (GitHub can only offer checks it has seen; listed under "After the first CI run" in the
+checklist, as `rust`, `web`, `deny`, `ffgl`, `site`), and Pages (H6) waits for the switch to public on a free
+account. Waiting for Uli to work through the checklist.)*
 
 ## Phase I — CI/CD workflows and first release
 
