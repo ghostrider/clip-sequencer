@@ -122,6 +122,7 @@ fn start_app_ui(
         ui: ui.map(|addr| std::net::TcpListener::bind(addr).unwrap()),
         shell: None,
         quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     (app, clock)
@@ -1101,6 +1102,7 @@ async fn ui_shell_actions_reach_the_desktop_shell() {
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: Some(shell_tx),
         quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1165,6 +1167,7 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
         quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1258,6 +1261,7 @@ async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
         quit: Some(quit.clone()),
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1355,6 +1359,7 @@ async fn requests_from_other_web_pages_are_refused() {
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
         quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1396,5 +1401,95 @@ async fn requests_from_other_web_pages_are_refused() {
         "{refused:?}"
     );
     assert!(ws(format!("http://{ui}")).await.is_ok());
+    app.shutdown().await;
+}
+
+/// SPEC §12.1: the install dialog's API. The test binary has no bundled plugin, so install reports that; the
+/// folder is validated and saved; a POST from another web page is refused (§12.2).
+#[tokio::test]
+async fn ffgl_install_api() {
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: None,
+        ffgl_dir: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let client = reqwest::Client::new();
+    let post = |path: &str, body: serde_json::Value| {
+        client.post(format!("http://{ui}{path}")).json(&body).send()
+    };
+
+    let s: serde_json::Value = reqwest::get(format!("http://{ui}/api/ffgl"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(s["plugin_name"], "1000A Sequence");
+    assert_eq!(s["dir_source"], "default");
+
+    let r = post("/api/ffgl/dir", json!({ "dir": "relative/folder" }))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 409);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("not a full path"),
+        "{v}"
+    );
+
+    let fx = dir.path().join("Extra Effects");
+    let r = post("/api/ffgl/dir", json!({ "dir": fx.to_string_lossy() }))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(v["status"]["dir_source"], "saved");
+    assert_eq!(v["status"]["dir"], fx.to_string_lossy().as_ref());
+    assert_eq!(
+        seq_app::settings::Settings::load(dir.path()).ffgl_dir,
+        Some(fx.clone())
+    );
+
+    let r = post("/api/ffgl/install", json!({})).await.unwrap();
+    assert_eq!(r.status(), 409);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("no FFGL plugin"),
+        "{v}"
+    );
+    assert!(!fx.exists(), "nothing created without a plugin to install");
+
+    let r = post("/api/ffgl/remove", json!({})).await.unwrap();
+    assert_eq!(r.status(), 409);
+
+    // Back to the default folder.
+    let r = post("/api/ffgl/dir", json!({ "dir": null })).await.unwrap();
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(v["status"]["dir_source"], "default");
+
+    // Another web page can't trigger an install.
+    let r = client
+        .post(format!("http://{ui}/api/ffgl/install"))
+        .header("Origin", "https://evil.example")
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
     app.shutdown().await;
 }

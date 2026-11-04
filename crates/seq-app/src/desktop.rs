@@ -181,6 +181,7 @@ async fn start(app: AppHandle, config: Config) {
                 ShellAction::ZoomOut => zoom(&handle, Some(-ZOOM_STEP)),
                 ShellAction::ZoomReset => zoom(&handle, None),
                 ShellAction::OpenLogs => open_logs(&handle),
+                ShellAction::OpenFfglDir => open_ffgl_dir(&handle),
             }
         }
     });
@@ -618,6 +619,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&item("save", "Save now")?)
         .item(&item("data", "Open data folder")?)
         .item(&item("prefs", "Preferences…")?)
+        .item(&item("ffgl", "Install FFGL plugin…")?)
         .separator()
         .item(&item_key("quit", "Quit", "CmdOrCtrl+Q")?)
         .build()?;
@@ -673,7 +675,7 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
             }
         }
         // Help (M11 Phase F): the dialogs live in the page (one shortcut list: web/src/lib/shortcuts.ts).
-        "shortcuts" | "licenses" | "about" => page_dialog(app, event.id().as_ref()),
+        "shortcuts" | "licenses" | "about" | "ffgl" => page_dialog(app, event.id().as_ref()),
         "manual" => open_link(app, &format!("{}manual/", site_url())),
         "issue" => open_link(
             app,
@@ -691,6 +693,21 @@ fn open_logs(app: &AppHandle) {
         .unwrap_or_else(|| shell.data_dir.clone());
     if let Err(e) = app.opener().open_path(dir.to_string_lossy(), None::<&str>) {
         log::warn!("could not open {}: {e}", dir.display());
+    }
+}
+
+/// Resolume's plugin folder (as the install dialog resolves it) in Explorer, if it exists.
+fn open_ffgl_dir(app: &AppHandle) {
+    let shell = app.state::<Shell>();
+    let (dir, _) =
+        crate::ffgl_install::configured_dir(shell.config.ffgl_dir.as_deref(), &shell.data_dir);
+    match dir.filter(|d| d.is_dir()) {
+        Some(dir) => {
+            if let Err(e) = app.opener().open_path(dir.to_string_lossy(), None::<&str>) {
+                log::warn!("could not open {}: {e}", dir.display());
+            }
+        }
+        None => log::warn!("the FFGL plugin folder does not exist (yet)"),
     }
 }
 

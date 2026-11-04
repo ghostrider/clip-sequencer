@@ -165,6 +165,7 @@ pub async fn run(
         ui: Some(listener),
         // Headless (no shell): the browser UI may quit the app (File → Quit server).
         quit: shell.is_none().then(|| shutdown.clone()),
+        ffgl_dir: config.ffgl_dir.clone(),
         shell,
     })?;
     let mut runtime = app.outputs.runtime.clone();

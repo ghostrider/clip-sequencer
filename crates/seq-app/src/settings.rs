@@ -10,6 +10,9 @@ pub struct Settings {
     /// MIDI input carrying the clock (substring of the port name, like `--midi-port`).
     #[serde(default)]
     pub midi_port: Option<String>,
+    /// Resolume's plugin folder for the FFGL plugin, chosen in the install dialog (`None` = the default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ffgl_dir: Option<PathBuf>,
 }
 
 impl Settings {
@@ -49,6 +52,7 @@ mod tests {
         assert_eq!(Settings::load(dir.path()), Settings::default());
         let s = Settings {
             midi_port: Some("Default App Loopback (B)".into()),
+            ffgl_dir: Some(PathBuf::from("D:/Resolume/plugins")),
         };
         s.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), s);

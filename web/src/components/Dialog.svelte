@@ -55,6 +55,10 @@
   }
 </script>
 
+<!-- Esc also when focus left the dialog (e.g. a clicked button was disabled while working). Keys inside the
+     dialog are handled (and stopped) by its own handler first. -->
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onclose(); } }} />
+
 <div class="modal-backdrop open" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
   <div class="modal info-dialog" class:wide role="dialog" aria-modal="true" aria-labelledby={id} tabindex="-1"
     bind:this={box} {onkeydown}>

@@ -6,7 +6,7 @@ import type {
   SequenceView, StructureState, Uuid, VersionInfo,
 } from './types';
 
-export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit';
+export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit' | 'ffgl';
 
 const ZOOM_KEY = 'seq.uiZoom';
 function loadUiZoom(): number {

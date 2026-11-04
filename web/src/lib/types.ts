@@ -180,7 +180,7 @@ export type Command =
   | { cmd: 'set_midi_port'; port: string | null };
 
 /** Window actions for the desktop shell (ignored in a browser). */
-export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs';
+export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs' | 'open_ffgl_dir';
 
 /** One log record (Console tab, M12 E). */
 export interface LogRecord {
@@ -241,4 +241,35 @@ export interface LicensesInfo {
   /** The project's MIT license text. */
   license: string;
   notices: Notices;
+}
+
+/** `FILEVERSION` of a plugin DLL. */
+export interface DllVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  build: number;
+}
+
+/** `GET /api/ffgl`: the bundled FFGL plugin vs. the one in Resolume's plugin folder (SPEC §12.1). */
+export interface FfglStatus {
+  plugin_name: string;
+  bundled_path: string | null;
+  bundled_version: DllVersion | null;
+  dir: string | null;
+  dir_is_default: boolean;
+  dir_exists: boolean;
+  dir_source: 'command_line' | 'saved' | 'default';
+  installed: { version: DllVersion | null; ours: boolean } | null;
+  action: 'install' | 'update' | 'reinstall' | 'downgrade' | null;
+  resolume_running: boolean;
+  can_detect_resolume: boolean;
+}
+
+/** Result of `POST /api/ffgl/install`, `/remove`, `/dir`. */
+export interface FfglResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+  status: FfglStatus;
 }

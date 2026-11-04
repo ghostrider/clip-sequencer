@@ -9,7 +9,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use resolume_client::rest::RestClient;
 use rust_embed::RustEmbed;
@@ -44,6 +44,10 @@ pub struct ServerCtx {
     pub shell: Option<mpsc::UnboundedSender<ShellAction>>,
     /// Headless only: cancelling it shuts the app down like Ctrl+C (`quit` from the browser UI).
     pub quit: Option<tokio_util::sync::CancellationToken>,
+    /// The data folder (settings: the chosen FFGL plugin folder).
+    pub data_dir: std::path::PathBuf,
+    /// `--ffgl-dir` for this run.
+    pub ffgl_dir: Option<std::path::PathBuf>,
     /// Set once the first batch of the live deck's thumbnails is cached (startup splash).
     pub thumbs_ready: Arc<watch::Sender<bool>>,
     /// The MIDI clock input, for the Preferences dialog (`None` in tests with a clock channel).
@@ -63,6 +67,8 @@ pub enum ShellAction {
     ZoomReset,
     /// Open `<data-dir>/logs` in Explorer (Console tab).
     OpenLogs,
+    /// Open Resolume's plugin folder in Explorer (Install FFGL plugin dialog).
+    OpenFfglDir,
 }
 
 pub fn router(ctx: ServerCtx) -> Router {
@@ -70,6 +76,10 @@ pub fn router(ctx: ServerCtx) -> Router {
         .route("/ws", get(ws_upgrade))
         .route("/api/version", get(api_version))
         .route("/api/licenses", get(api_licenses))
+        .route("/api/ffgl", get(ffgl_status))
+        .route("/api/ffgl/install", post(ffgl_install))
+        .route("/api/ffgl/remove", post(ffgl_remove))
+        .route("/api/ffgl/dir", post(ffgl_set_dir))
         .route("/api/logs/current", get(current_log))
         .route("/api/midi/ports", get(midi_ports))
         .route("/thumbs/clip/{file}", get(clip_thumb))
@@ -147,6 +157,162 @@ async fn api_licenses() -> Response {
         format!("{{\"license\":{license},\"notices\":{NOTICES_JSON}}}"),
     )
         .into_response()
+}
+
+// ---- FFGL plugin installer (SPEC §12.1) ----
+
+#[derive(serde::Serialize)]
+struct FfglStatus {
+    #[serde(flatten)]
+    status: crate::ffgl_install::Status,
+    dir_source: crate::ffgl_install::DirSource,
+    /// Whether this platform can tell that Resolume runs (Windows only).
+    can_detect_resolume: bool,
+}
+
+fn ffgl_status_now(ctx: &ServerCtx) -> FfglStatus {
+    use crate::ffgl_install as ffgl;
+    let (dir, dir_source) = ffgl::configured_dir(ctx.ffgl_dir.as_deref(), &ctx.data_dir);
+    let default = ffgl::default_dir();
+    FfglStatus {
+        status: ffgl::status(
+            ffgl::bundled_plugin().as_deref(),
+            dir.as_deref(),
+            default.as_deref(),
+            ffgl::resolume_running(),
+        ),
+        dir_source,
+        can_detect_resolume: cfg!(windows),
+    }
+}
+
+/// Runs a blocking plugin operation (file copies, the process snapshot) off the async workers.
+async fn ffgl_blocking<T: Send + 'static>(
+    ctx: &ServerCtx,
+    f: impl FnOnce(&ServerCtx) -> T + Send + 'static,
+) -> T {
+    let ctx = ctx.clone();
+    tokio::task::spawn_blocking(move || f(&ctx))
+        .await
+        .expect("ffgl task")
+}
+
+async fn ffgl_status(State(ctx): State<ServerCtx>) -> Response {
+    axum::Json(ffgl_blocking(&ctx, ffgl_status_now).await).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct FfglInstallReq {
+    #[serde(default)]
+    allow_downgrade: bool,
+}
+
+/// `{ ok, message | error, status }`; 409 when nothing was changed (Resolume running, not our DLL, …).
+fn ffgl_result(ctx: &ServerCtx, result: Result<String, String>) -> Response {
+    let status = ffgl_status_now(ctx);
+    match result {
+        Ok(message) => {
+            axum::Json(json!({ "ok": true, "message": message, "status": status })).into_response()
+        }
+        Err(error) => (
+            StatusCode::CONFLICT,
+            axum::Json(json!({ "ok": false, "error": error, "status": status })),
+        )
+            .into_response(),
+    }
+}
+
+async fn ffgl_install(
+    State(ctx): State<ServerCtx>,
+    axum::Json(req): axum::Json<FfglInstallReq>,
+) -> Response {
+    ffgl_blocking(&ctx, move |ctx| {
+        use crate::ffgl_install as ffgl;
+        let (dir, _) = ffgl::configured_dir(ctx.ffgl_dir.as_deref(), &ctx.data_dir);
+        let result = ffgl::install(
+            ffgl::bundled_plugin().as_deref(),
+            dir.as_deref(),
+            true,
+            req.allow_downgrade,
+            ffgl::resolume_running(),
+            &ffgl::RealFs,
+        )
+        .map(|r| {
+            format!(
+                "{} {} installed in {}. Restart Resolume Arena to load the plugin.",
+                ffgl::PLUGIN_NAME,
+                r.version,
+                r.path.parent().unwrap_or(&r.path).display()
+            )
+        })
+        .map_err(|e| e.to_string());
+        ffgl_result(ctx, result)
+    })
+    .await
+}
+
+async fn ffgl_remove(State(ctx): State<ServerCtx>) -> Response {
+    ffgl_blocking(&ctx, |ctx| {
+        use crate::ffgl_install as ffgl;
+        let (dir, _) = ffgl::configured_dir(ctx.ffgl_dir.as_deref(), &ctx.data_dir);
+        let result = ffgl::remove(dir.as_deref(), ffgl::resolume_running(), &ffgl::RealFs)
+            .map(|p| {
+                format!(
+                    "Removed {}. Restart Resolume Arena to unload the plugin.",
+                    p.display()
+                )
+            })
+            .map_err(|e| e.to_string());
+        ffgl_result(ctx, result)
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct FfglDirReq {
+    /// The folder; `null` or empty = back to the default.
+    dir: Option<String>,
+}
+
+async fn ffgl_set_dir(
+    State(ctx): State<ServerCtx>,
+    axum::Json(req): axum::Json<FfglDirReq>,
+) -> Response {
+    ffgl_blocking(&ctx, move |ctx| {
+        let dir = req
+            .dir
+            .map(|d| d.trim().trim_matches('"').to_owned())
+            .filter(|d| !d.is_empty())
+            .map(std::path::PathBuf::from);
+        let result = match &dir {
+            Some(d) if !d.is_absolute() => Err(format!(
+                "{} is not a full path (like D:\\Resolume\\Plugins).",
+                d.display()
+            )),
+            _ => {
+                let mut settings = crate::settings::Settings::load(&ctx.data_dir);
+                settings.ffgl_dir = dir.clone();
+                settings
+                    .save(&ctx.data_dir)
+                    .map(|()| {
+                        log::info!(
+                            "FFGL plugin folder: {}",
+                            dir.as_ref()
+                                .map_or("default".into(), |d| d.display().to_string())
+                        );
+                        match &ctx.ffgl_dir {
+                            Some(cli) => {
+                                format!("Saved. This run still uses --ffgl-dir {}.", cli.display())
+                            }
+                            None => "Saved.".into(),
+                        }
+                    })
+                    .map_err(|e| format!("Could not save the settings: {e}"))
+            }
+        };
+        ffgl_result(ctx, result)
+    })
+    .await
 }
 
 // ---- WebSocket ----

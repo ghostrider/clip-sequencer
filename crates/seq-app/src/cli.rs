@@ -48,22 +48,27 @@ pub fn main(exe: Exe) -> ExitCode {
     let console_only = config.headless
         || config.validate.is_some()
         || config.list_midi_ports
-        || config.clock_debug;
+        || config.clock_debug
+        || config.install_ffgl;
     if gui_exe && console_only {
         // A GUI program started from a terminal runs in the background and gets no Ctrl+C.
         eprintln!(
-            "{}.exe is the desktop app. For --headless, --validate, --list-midi-ports and \
-             --clock-debug use {}.exe.",
+            "{}.exe is the desktop app. For --headless, --validate, --list-midi-ports, \
+             --clock-debug and --install-ffgl use {}.exe.",
             exe.name(),
             Exe::Console.name()
         );
         return ExitCode::from(2);
     }
     // Console commands log to stderr only; the sequencer also to daily files (Console tab, M12 E).
-    let runs = config.validate.is_none() && !config.list_midi_ports && !config.clock_debug;
+    let runs = config.validate.is_none()
+        && !config.list_midi_ports
+        && !config.clock_debug
+        && !config.install_ffgl;
     crate::logging::init(crate::logging::LogConfig {
         stderr: config.headless || !runs || cfg!(debug_assertions),
-        dir: runs.then(|| config.data_dir().join("logs")),
+        // Plugin installs are logged to the daily file too (SPEC §12.1).
+        dir: (runs || config.install_ffgl).then(|| config.data_dir().join("logs")),
     });
     crate::logging::log_panics();
     if runs {
@@ -95,6 +100,12 @@ pub fn main(exe: Exe) -> ExitCode {
                 ExitCode::FAILURE
             }
         };
+    }
+
+    if config.install_ffgl {
+        let code = install_ffgl(&config);
+        crate::logging::flush(std::time::Duration::from_secs(1));
+        return code;
     }
 
     if config.list_midi_ports {
@@ -220,3 +231,32 @@ fn attach_parent_console() {
 
 #[cfg(not(windows))]
 fn attach_parent_console() {}
+
+/// `--install-ffgl` (SPEC §12.1): install or update the bundled plugin; never downgrades; creates the folder.
+fn install_ffgl(config: &Config) -> ExitCode {
+    use crate::ffgl_install as ffgl;
+    let (dir, _) = ffgl::configured_dir(config.ffgl_dir.as_deref(), &config.data_dir());
+    match ffgl::install(
+        ffgl::bundled_plugin().as_deref(),
+        dir.as_deref(),
+        true,
+        false,
+        ffgl::resolume_running(),
+        &ffgl::RealFs,
+    ) {
+        Ok(r) => {
+            let was = r.previous.map_or("not installed".into(), |v| v.to_string());
+            println!(
+                "{} {} installed to {} (was {was}). Restart Resolume Arena to load it.",
+                ffgl::PLUGIN_NAME,
+                r.version,
+                r.path.display()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}

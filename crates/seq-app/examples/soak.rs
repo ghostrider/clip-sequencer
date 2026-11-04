@@ -80,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         ui: None,
         shell: None,
         quit: None,
+        ffgl_dir: None,
     })?;
     let mut rt = app.outputs.runtime.clone();
     while !rt.borrow_and_update().ws_synced {

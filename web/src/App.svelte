@@ -13,6 +13,7 @@
   import AboutDialog from './components/AboutDialog.svelte';
   import LicensesDialog from './components/LicensesDialog.svelte';
   import ShortcutsDialog from './components/ShortcutsDialog.svelte';
+  import PluginDialog from './components/PluginDialog.svelte';
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -99,3 +100,4 @@
 {#if app.dialog === 'about'}<AboutDialog />{/if}
 {#if app.dialog === 'licenses'}<LicensesDialog />{/if}
 {#if app.dialog === 'shortcuts'}<ShortcutsDialog />{/if}
+{#if app.dialog === 'ffgl'}<PluginDialog />{/if}

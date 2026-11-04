@@ -53,6 +53,13 @@ pub struct Config {
     /// Exit when no sequence is running any more (after --start). For testing.
     #[arg(long)]
     pub exit_when_done: bool,
+    /// Resolume's plugin folder for the FFGL plugin. Default: the folder chosen in the app, else
+    /// `<Documents>\Resolume Arena\Extra Effects`.
+    #[arg(long, value_name = "DIR")]
+    pub ffgl_dir: Option<PathBuf>,
+    /// Install or update the bundled FFGL plugin in Resolume's plugin folder and exit (0 = done).
+    #[arg(long)]
+    pub install_ffgl: bool,
 }
 
 impl Config {

@@ -20,6 +20,7 @@
         { label: 'Reload composition', run: () => app.send({ cmd: 'reload_composition' }) },
         { label: 'Save now', run: () => app.send({ cmd: 'save_now' }) },
         { label: 'Preferences…', hint: 'Ctrl+,', run: () => (app.prefsOpen = true) },
+        { label: 'Install FFGL plugin…', run: () => app.openDialog('ffgl') },
         'sep',
         { label: 'Quit server…', run: () => app.openDialog('quit') },
       ],

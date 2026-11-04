@@ -106,6 +106,31 @@ pub fn target_dir(
     cli.or(saved).map(Path::to_path_buf).or(default)
 }
 
+/// Where the target folder comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DirSource {
+    /// `--ffgl-dir` for this run.
+    CommandLine,
+    /// Chosen in the install dialog (`ffgl_dir` in the settings).
+    Saved,
+    /// `<Documents>\Resolume Arena\Extra Effects`.
+    Default,
+}
+
+/// The target folder for this run: `--ffgl-dir`, else the saved one (settings in `data_dir`), else the default.
+pub fn configured_dir(cli: Option<&Path>, data_dir: &Path) -> (Option<PathBuf>, DirSource) {
+    let saved = crate::settings::Settings::load(data_dir).ffgl_dir;
+    let source = if cli.is_some() {
+        DirSource::CommandLine
+    } else if saved.is_some() {
+        DirSource::Saved
+    } else {
+        DirSource::Default
+    };
+    (target_dir(cli, saved.as_deref(), default_dir()), source)
+}
+
 /// The bundled plugin: `<exe folder>/ffgl/SeqView.dll` (release zip). Debug builds also find a local
 /// `ffgl/bin/x64/Release/SeqView.dll` in the repository.
 pub fn bundled_plugin() -> Option<PathBuf> {
@@ -188,7 +213,10 @@ pub fn status(
             version: dll_version(&b),
             ours: is_our_plugin(&b),
         });
-    let action = bundled_version.map(|v| action_for(v, installed.as_ref().map(|i| i.version)));
+    // Someone else's SeqView.dll is never replaced: no action then.
+    let action = bundled_version
+        .filter(|_| installed.as_ref().is_none_or(|i| i.ours))
+        .map(|v| action_for(v, installed.as_ref().map(|i| i.version)));
     Status {
         plugin_name: PLUGIN_NAME,
         bundled_path: bundled.map(Path::to_path_buf),
@@ -733,6 +761,7 @@ mod tests {
         assert_eq!(std::fs::read(dir.join(PLUGIN_FILE)).unwrap(), foreign);
         let s = status(Some(&bundled), Some(&dir), None, false);
         assert_eq!(s.installed.map(|i| i.ours), Some(false));
+        assert_eq!(s.action, None, "no button for someone else's DLL");
     }
 
     #[test]
