@@ -37,7 +37,10 @@ First public release.
 - **Headless mode** (`seq-app-cli.exe`): console output, the UI in a browser with its own menu bar.
 - **About, Licenses and Keyboard shortcuts** dialogs; version, build number and commit in `--version`,
   `/api/version`, the log and the About dialog.
-- **FFGL plugin** "1000A Sequence" (source in `ffgl/`): shows a sequence's timeline on its `§` clip in Resolume.
+- **FFGL plugin** "1000A Sequence": shows a sequence's timeline on its `§` clip in Resolume. It ships in the
+  zip (static C++ runtime, no Visual C++ Redistributable needed) and is installed, updated or removed from the
+  app (**File → Install FFGL plugin…**) or with `seq-app-cli --install-ffgl`.
+- The UI server only answers on `127.0.0.1` and refuses requests from other web pages.
 - Logs in daily files (kept 7 days); settings and sequences in `%APPDATA%\resolume-sequencer`.
 
 [Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...HEAD

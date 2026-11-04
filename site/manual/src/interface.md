@@ -24,7 +24,8 @@ inspector on the right, and a status bar at the bottom.
 The **desktop app** has a menu bar in the window frame:
 
 - **File:** Reload composition (read the composition from Resolume again), Save now, Open data folder,
-  Preferences… (MIDI clock input), Quit (Ctrl+Q).
+  Preferences… (MIDI clock input), Install FFGL plugin… ([Installing the FFGL plugin](ffgl-plugin.md)),
+  Quit (Ctrl+Q).
 - **View:** Zoom in / out / reset (Ctrl+= / Ctrl+- / Ctrl+0), Toggle Console.
 - **Help:** Keyboard shortcuts, User manual, Report an issue, Licenses, About.
 

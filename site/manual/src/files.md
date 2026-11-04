@@ -58,7 +58,7 @@ with **File → Open data folder**.
 |---|---|
 | `<Composition>.seq.json` | your sequences, per composition |
 | `<Composition>.seq.json.v1.bak` | the original of a converted format-1 file |
-| `settings.json` | the chosen MIDI input |
+| `settings.json` | the chosen MIDI input and FFGL plugin folder |
 | `logs\` | daily log files, kept for 7 days |
 | `thumbs\` | cached clip thumbnails |
 | `decks\` | cached clips of each deck, for decks that aren't live |

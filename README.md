@@ -22,7 +22,7 @@ getting started and for building from source.*
 - Works per deck, follows renames, re-finds clips by id, name or file.
 - Desktop app (one window, splash, live Console tab) and a headless mode with the UI in a browser.
 - Optional FFGL source plugin "1000A Sequence" ([`ffgl/`](ffgl/README.md)) that shows the sequence timeline
-  on the `§` clip in Resolume.
+  on the `§` clip in Resolume; it ships in the zip and is installed from the app (**File → Install FFGL plugin…**).
 
 ## Requirements
 
@@ -198,10 +198,10 @@ cd clip-sequencer
 powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 ```
 
-`release.ps1` builds the UI (`web/`), the third-party notices and the release binaries. It puts
+`release.ps1` builds the UI (`web/`), the third-party notices, the FFGL plugin and the release binaries. It puts
 `seq-app.exe` (desktop app, no console) and `seq-app-cli.exe` (console: headless, `--validate`,
-`--list-midi-ports`, `--clock-debug`) in `release\`, together with the portable zip and its `.sha256`.
-Both executables contain the UI.
+`--list-midi-ports`, `--clock-debug`, `--install-ffgl`) in `release\`, together with the portable zip (both
+executables, `ffgl\SeqView.dll` and the license files) and its `.sha256`. Both executables contain the UI.
 
 Development (checks, mock Resolume, hot reload, test clock):
 
@@ -212,7 +212,8 @@ cd web; npm install; npm run dev                                 # UI with hot r
 $env:SEQ_DEV_URL='http://localhost:5173'; cargo run -p seq-app   # desktop window on the hot-reload UI
 cargo run --release -p clock-in --example clock_gen -- "Default App Loopback (A)" 128   # test clock
 cargo run --release -p seq-app --example soak -- "Default App Loopback (B)" 120          # long-run test
-powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1  # FFGL plugin: build + install
+powershell -ExecutionPolicy Bypass -File ffgl\build.ps1 -Tests  # FFGL plugin and its tests (no install)
+powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1  # FFGL plugin: build + copy to Resolume
 ```
 
 The desktop shell (Tauri v2) is built by plain `cargo build`; the Tauri CLI isn't needed. Debug builds read

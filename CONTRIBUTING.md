@@ -33,8 +33,9 @@ small demo show.
 | UI build / type check | `cd web; npm install; npm run build` / `npm run check` |
 | UI with hot reload | `cd web; npm run dev` (proxies to the app on :8090) |
 | Release zip | `powershell -ExecutionPolicy Bypass -File scripts\release.ps1` |
-| FFGL plugin | `powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1` (builds and installs; Resolume closed) |
-| FFGL plugin tests | build `ffgl\tests\SeqViewTests.vcxproj` (Release, x64), run `ffgl\tests\bin\Release\SeqViewTests.exe` |
+| FFGL plugin | `powershell -ExecutionPolicy Bypass -File ffgl\build.ps1 [-Tests] [-CheckDependencies]` (build only) |
+| FFGL plugin, build and copy to Resolume | `powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1` (Resolume closed) |
+| FFGL plugin tests | `ffgl\build.ps1 -Tests`, then run `ffgl\tests\bin\Release\SeqViewTests.exe` |
 | Version consistency | `node scripts/check-version.mjs` |
 
 Build the UI before `cargo build --release`: release binaries embed `web/dist`. `CLAUDE.md` lists more

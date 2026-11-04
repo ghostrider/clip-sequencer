@@ -24,6 +24,7 @@ Most settings are command-line options. The MIDI clock input is also chosen in t
 | `--data-dir <folder>` | `%APPDATA%\resolume-sequencer` | where sequences, settings, caches and logs are kept |
 | `--no-splash` | | desktop app: no splash screen, the window appears when ready |
 | `--headless` | | no window, UI in the browser (`seq-app-cli.exe` always runs like this) |
+| `--ffgl-dir <folder>` | the one chosen in the app, else `Documents\Resolume Arena\Extra Effects` | Resolume's plugin folder for the FFGL plugin |
 
 Commands of `seq-app-cli.exe` that print something and exit:
 
@@ -32,6 +33,7 @@ Commands of `seq-app-cli.exe` that print something and exit:
 | `--list-midi-ports` | lists the MIDI inputs |
 | `--clock-debug` | shows the incoming clock (bar.beat.tick and BPM) on the port given with `--midi-port` |
 | `--validate <file>` | checks a `.seq.json` file (exit code 0 = valid) |
+| `--install-ffgl` | installs or updates the FFGL plugin ([Installing the FFGL plugin](ffgl-plugin.md)) |
 | `--version` | prints the version, build number, commit and build date |
 | `--help` | lists all options |
 

@@ -21,6 +21,7 @@ The folder contains:
 |---|---|
 | `seq-app.exe` | The desktop app: one window with the sequencer. This is the one you normally start. |
 | `seq-app-cli.exe` | The console version: runs without a window, the UI opens in a web browser. Also has a few check commands ([Settings](settings.md)). |
+| `ffgl\SeqView.dll`, `ffgl\README.txt` | The optional FFGL plugin for Resolume ([Installing the FFGL plugin](ffgl-plugin.md)). |
 | `README.md`, `CHANGELOG.md` | Short overview and the list of changes per version. |
 | `LICENSE`, `THIRD_PARTY_LICENSES.md`, `OFL.txt` | Licenses (also in the app under **Help → Licenses**). |
 

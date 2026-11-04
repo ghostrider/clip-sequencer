@@ -42,7 +42,7 @@ crates/seq-app/         binary: wiring, engine task, storage, thumbnails, axum U
 tools/resolume-probe/   Milestone 0: explores the live API, writes findings
 tools/mock-resolume/    fake REST/WS/OSC server for integration tests
 web/                    Svelte UI
-ffgl/                   "1000A Sequence" FFGL source plugin (C++/MSVC, own build: build_seqview.ps1, SPEC §12)
+ffgl/                   "1000A Sequence" FFGL source plugin (C++/MSVC, own build: build.ps1, SPEC §12)
 external/ffgl/          FFGL SDK (git submodule, pinned commit)
 third_party/stb/        stb_image.h, stb_truetype.h (vendored; MIT / public domain)
 docs/                   SPEC.md, PLAN.md, resolume-api-notes.md, samples/
@@ -58,9 +58,11 @@ Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disag
 - Build: `cargo build --workspace`
 - Test: `cargo test --workspace`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all`
-- FFGL plugin (`ffgl/`, second build system: MSVC, not cargo): build + install
-  `powershell -ExecutionPolicy Bypass -File ffgl\build_seqview.ps1` (Resolume closed); tests: build
-  `ffgl\tests\SeqViewTests.vcxproj` (Release x64) and run `ffgl\tests\bin\Release\SeqViewTests.exe`.
+- FFGL plugin (`ffgl/`, second build system: MSVC, not cargo): build `powershell -ExecutionPolicy Bypass -File
+  ffgl\build.ps1 [-Tests] [-CheckDependencies]` (static C++ runtime, /MT); build + copy to Resolume
+  `ffgl\build_seqview.ps1` (Resolume closed); tests: `ffgl\build.ps1 -Tests`, then run
+  `ffgl\tests\bin\Release\SeqViewTests.exe`. Installing for users: `seq_app::ffgl_install` (SPEC §12.1;
+  File → Install FFGL plugin…, `seq-app-cli --install-ffgl`).
   It uses the FFGL SDK as a pinned git submodule (`external/ffgl`; after cloning run
   `git submodule update --init`) and the vendored stb headers in `third_party/stb`.
   Follow `ffgl/AGENTS.md` for plugin work.

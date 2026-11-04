@@ -16,6 +16,7 @@
 - [Playing live](playing-live.md)
 - [Files and data](files.md)
 - [Thumbnails](thumbnails.md)
+- [Installing the FFGL plugin](ffgl-plugin.md)
 
 # Reference
 

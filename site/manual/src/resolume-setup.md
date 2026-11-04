@@ -55,7 +55,7 @@ red when there is none.
 
 > **Tip:** The optional **"1000A Sequence"** FFGL source plugin can replace the *Blank* source on these clips. It
 > shows the sequence's timeline (lanes, steps, playhead) right on the clip in Resolume. See
-> [its README](https://github.com/ghostrider/clip-sequencer/blob/main/ffgl/README.md).
+> [Installing the FFGL plugin](ffgl-plugin.md).
 
 The layer name `SEQ` and the `§ ` prefix can be changed ([Settings](settings.md)).
 

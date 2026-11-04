@@ -391,20 +391,20 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
 ## Phase G3 — FFGL plugin in the release
 
 ### Build
-- [ ] The plugin builds from the repo with one command (CMake + MSVC, x64, Release), documented in
+- [x] The plugin builds from the repo with one command (CMake + MSVC, x64, Release), documented in
       `CONTRIBUTING.md`. If it currently only builds through a Visual Studio solution, add a CMake build or a
       scripted `msbuild` call that works on a CI runner.
-- [ ] Link the MSVC runtime **statically** (`/MT`), so the DLL doesn't need the Visual C++ Redistributable on
+- [x] Link the MSVC runtime **statically** (`/MT`), so the DLL doesn't need the Visual C++ Redistributable on
       the user's machine. Verify with `dumpbin /dependents`: only system DLLs and `opengl32.dll`.
-- [ ] Built outputs (`.dll`, `.pdb`, build folders) are git-ignored. The release ships the `.dll` only; `.pdb`
+- [x] Built outputs (`.dll`, `.pdb`, build folders) are git-ignored. The release ships the `.dll` only; `.pdb`
       files are kept as a workflow artifact for debugging crash reports.
-- [ ] Uli's existing personal install script is **not** used by CI or the release. The deployment feature below
+- [x] Uli's existing personal install script is **not** used by CI or the release. The deployment feature below
       replaces it for end users. Claude may read the script to reuse its logic (target folder, overwrite handling).
 
 ### Release contents
-- [ ] The portable zip contains `ffgl/<PluginName>.dll` and `ffgl/README.txt` (what it is, where it goes, the
+- [x] The portable zip contains `ffgl/<PluginName>.dll` and `ffgl/README.txt` (what it is, where it goes, the
       version, a pointer to the manual).
-- [ ] After M12: the NSIS installer gets an optional component, "FFGL plugin for Resolume Arena" (checked by
+- [x] After M12: the NSIS installer gets an optional component, "FFGL plugin for Resolume Arena" (checked by
       default), which installs the DLL into the Resolume plugin folder (see below), using the same logic as the
       in-app deployment.
 - [ ] `SHA256SUMS.txt` (Phase I) includes the DLL.
@@ -414,40 +414,67 @@ New, small feature requested by Uli: the user can install or update the bundled 
 Arena's plugin folder from the app, without copying files by hand. Add it to `docs/SPEC.md` (new section)
 before implementing.
 
-- [ ] **[verify] Target folder:** confirm with Uli's Resolume 7.26 setup where Resolume looks for user FFGL
+- [x] **[verify] Target folder:** confirm with Uli's Resolume 7.26 setup where Resolume looks for user FFGL
       plugins. Expected: the per-user folder `Documents\Resolume Arena\Extra Effects` and any extra folders
       listed under Preferences → Video → plugin folders. Never write into `C:\Program Files\…` (that would need
       admin rights). Record the result in `docs/resolume-api-notes.md`.
-- [ ] **Detection:** resolve the user's Documents folder through the Windows Known Folder API (it may be
+- [x] **Detection:** resolve the user's Documents folder through the Windows Known Folder API (it may be
       redirected, e.g. to OneDrive), not a hard-coded `C:\Users\…\Documents`. If the folder doesn't exist, offer
       to create it. A setting / CLI flag `--ffgl-dir` overrides the detected folder.
-- [ ] **UI:** a menu item **File → Install FFGL plugin…** (native menu after M12, HTML menu otherwise), which
+- [x] **UI:** a menu item **File → Install FFGL plugin…** (native menu after M12, HTML menu otherwise), which
       opens a dialog showing:
   - the bundled plugin name and version
   - the target folder (with "Change…" and "Open folder")
   - the installed version found there, or "not installed"
   - one primary button: **Install**, **Update** (bundled is newer), **Reinstall** (same version) or
     **Downgrade** (bundled is older, with a warning)
-- [ ] **Resolume running:** Resolume locks loaded plugin DLLs. Before copying, check whether `Arena.exe` is running.
+- [x] **Resolume running:** Resolume locks loaded plugin DLLs. Before copying, check whether `Arena.exe` is running.
       If it is, show "Quit Resolume Arena to install the plugin", with a Retry button. Never kill the process.
-- [ ] **Safe copy:** copy to a temp file in the target folder, then rename over the old DLL. Keep the previous
+- [x] **Safe copy:** copy to a temp file in the target folder, then rename over the old DLL. Keep the previous
       version as `<PluginName>.dll.bak` until the copy succeeds. On failure, restore it and show the error.
-- [ ] **After install:** "Restart Resolume Arena to load the plugin" (Resolume scans plugins at startup).
-- [ ] **CLI:** `seq-app --install-ffgl [--ffgl-dir <path>]` does the same without the UI (exit code 0 = done,
+- [x] **After install:** "Restart Resolume Arena to load the plugin" (Resolume scans plugins at startup).
+- [x] **CLI:** `seq-app --install-ffgl [--ffgl-dir <path>]` does the same without the UI (exit code 0 = done,
       non-zero = error with a message), for scripting and for the NSIS installer to reuse.
 - [ ] **Startup hint (optional, ask Uli):** if the installed plugin is missing or older than the bundled one,
       show a one-line hint in the status bar ("FFGL plugin update available"). No automatic installs.
-- [ ] **Uninstall:** a "Remove" button in the same dialog (deletes only the DLL the app installed). The NSIS
+- [x] **Uninstall:** a "Remove" button in the same dialog (deletes only the DLL the app installed). The NSIS
       uninstaller removes the DLL only if it installed it.
-- [ ] **Logging:** every install, update or removal is logged with the source version, target path and result.
-- [ ] **Tests:** unit tests for version comparison and folder resolution (with an injected Documents path);
+- [x] **Logging:** every install, update or removal is logged with the source version, target path and result.
+- [x] **Tests:** unit tests for version comparison and folder resolution (with an injected Documents path);
       an integration test that installs into a temp folder, updates, simulates a locked file, and restores from `.bak`.
 
 ### Manual and site
-- [ ] Manual (Phase G2): a chapter **"Installing the FFGL plugin"**: what the plugin does, installing via the app
+- [x] Manual (Phase G2): a chapter **"Installing the FFGL plugin"**: what the plugin does, installing via the app
       or the installer, manual install from the zip, restarting Resolume, where to find the plugin in Resolume,
       updating, removing, and troubleshooting (plugin not showing up, "file in use").
-- [ ] Landing page: list the plugin among the features.
+- [x] Landing page: list the plugin among the features.
+
+*(2026-11-04, done except the two open items; Windows-only parts written but not run here:*
+- *Build: `ffgl/build.ps1` (scripted MSBuild, found via vswhere; `-Tests`, `-CheckDependencies` runs
+  `dumpbin /dependents` and fails on any VC++ runtime DLL). Both projects link `/MT`; the SDK's `glew32s.lib` is
+  built with `LIBCMT` too, so this also ends a runtime mix. `build_seqview.ps1` (Uli's build + copy) calls it; the
+  release doesn't use the copy script. Outputs and `.pdb` are git-ignored; `release.ps1` keeps
+  `SeqView-<version>.pdb` next to the zip for I2.*
+- *Zip: `ffgl/SeqView.dll` and `ffgl/README.txt` (from `ffgl/README.release.txt`). The NSIS items are dropped
+  (portable only, M12).*
+- *Target folder: `<Documents>\Resolume Arena\Extra Effects`, the folder Uli's install script has always used
+  successfully; recorded in `docs/resolume-api-notes.md`. Documents via `dirs` (Known Folder API); `--ffgl-dir`,
+  else the folder chosen in the dialog (`settings.json` `ffgl_dir`), else the default; created on install.*
+- *Dialog: File → Install FFGL plugin… (native and browser menu). "Change…" is an editable path (the page can't
+  open a native folder picker in the browser; same in both modes), plus "Use default" and, in the desktop app,
+  "Open folder". Resolume check: `Arena.exe`/`Avenue.exe` via a ToolHelp snapshot, "Check again" as the Retry.
+  Remove deletes only our own `SeqView.dll` (identified by its version resource), not tracked per install.*
+- *CLI: on `seq-app-cli` (console flags live there since M12): `--install-ffgl [--ffgl-dir]`, never downgrades.*
+- *Tests: 7 unit tests (version parsing, action table, folder order, install/update/locked DLL/restore from
+  `.bak`/downgrade/remove, foreign DLL) and an API test; an end-to-end run in Chromium against the headless app.
+  The mutation check (removing the restore, removing the "ours" check) makes them fail.*
+- *Also found and fixed on the way: the UI server accepted WebSocket and POST requests from other web pages
+  (SPEC §12.2, now 403); short commands lost their last log lines (`logging::flush`); dialogs didn't close with Esc
+  when focus had left them.*
+- ***To verify on Windows:** `ffgl\build.ps1 -Tests -CheckDependencies`, run `SeqViewTests.exe`, `scripts\release.ps1`
+  (zip contains `ffgl\SeqView.dll`), File → Install FFGL plugin… with Resolume closed and open (the "Quit Resolume"
+  message), the plugin loads in Resolume after a restart.)*
+
 
 ## Phase H — GitHub repository configuration
 
