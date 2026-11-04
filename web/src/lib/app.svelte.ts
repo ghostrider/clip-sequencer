@@ -2,8 +2,8 @@
 // sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
 
 import type {
-  ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, LogRecord, LogStats, RunView, RuntimeState,
-  SequenceView, StructureState, Uuid, VersionInfo,
+  ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, RunView, RuntimeState,
+  SequenceView, Step, StructureState, Uuid, VersionInfo,
 } from './types';
 
 export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit' | 'ffgl';
@@ -280,6 +280,15 @@ class AppState {
 }
 
 export const app = new AppState();
+
+/** A step plays nothing of its own: a rest in either lane mode. */
+export function isRest(step: Step): boolean {
+  return !step.clip && step.column == null;
+}
+
+export function isSlotLane(lane: Lane): boolean {
+  return lane.mode === 'slot';
+}
 
 /**
  * Layer label as Resolume shows it. Unnamed layers all report the raw name "Layer #" through the

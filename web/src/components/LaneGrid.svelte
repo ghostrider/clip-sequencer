@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel } from '../lib/app.svelte';
-  import type { DeckView, SequenceView, Step, LaneEnd } from '../lib/types';
+  import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
+  import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
 
@@ -26,9 +26,14 @@
   // Sixteenth ticks on the ruler once they are far enough apart to read.
   let fineRuler = $derived(zoom >= 6);
 
-  function stepLabel(step: Step, clipId: number | null): string {
+  function stepLabel(step: Step, r: StepResolution | undefined): string {
+    const c = app.clip(r?.clip_id);
+    if (step.column != null) {
+      // Slot lane step (SPEC §4.5): the column and what it holds now.
+      if (r?.state === 'empty') return `col ${step.column} · empty`;
+      return c?.name ? `col ${step.column} · ${c.name}` : `col ${step.column}`;
+    }
     if (!step.clip) return 'rest';
-    const c = app.clip(clipId);
     return c?.name || step.clip.name || step.clip.file || `clip ${step.clip.id}`;
   }
 
@@ -47,6 +52,8 @@
   // ---- drop from the clip browser ----
   function onDragOver(e: DragEvent, lane: number) {
     if (!e.dataTransfer?.types.includes('application/x-seq-clip')) return;
+    // Slot lanes take the clip's column (SPEC §9.3); generator/placeholder rows set it too.
+    if (isSlotLane(seq.lanes[lane]) && !e.dataTransfer.types.includes('application/x-seq-column')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     dropAt = { lane, index: indexAt(e.currentTarget as HTMLElement, e.clientX, seq.lanes[lane].steps, lane) };
@@ -57,7 +64,10 @@
     if (!data) return;
     e.preventDefault();
     const index = indexAt(e.currentTarget as HTMLElement, e.clientX, seq.lanes[lane].steps, lane);
-    app.edit({ op: 'insert_step', seq: seq.id, lane, index, step: { clip: JSON.parse(data), length: SIXTEENTHS_PER_BAR } });
+    const step: Step = isSlotLane(seq.lanes[lane])
+      ? { column: Number(e.dataTransfer?.getData('application/x-seq-column')), length: SIXTEENTHS_PER_BAR }
+      : { clip: JSON.parse(data), length: SIXTEENTHS_PER_BAR };
+    app.edit({ op: 'insert_step', seq: seq.id, lane, index, step });
     app.selectedStep = { lane, index };
   }
 
@@ -134,6 +144,10 @@
     return run?.lanes[li]?.state ?? 'idle';
   }
 
+  function setMode(lane: number, mode: LaneMode) {
+    if ((seq.lanes[lane].mode ?? 'clip') !== mode) app.edit({ op: 'set_lane_mode', seq: seq.id, lane, mode });
+  }
+
   const ends: { value: LaneEnd; label: string }[] = [
     { value: 'loop_to_end', label: 'Loop to end' },
     { value: 'hold', label: 'Hold' },
@@ -171,6 +185,11 @@
             </span>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <div class="mode-switch" role="group" aria-label="Lane mode"
+              title="Clip: steps follow their clips. Slot: steps play whatever is in a column of this layer.">
+              <button aria-pressed={!isSlotLane(lane)} onclick={() => setMode(li, 'clip')}>Clip</button>
+              <button aria-pressed={isSlotLane(lane)} onclick={() => setMode(li, 'slot')}>Slot</button>
+            </div>
             <select class="pill-select" value={lane.end}
               onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
               {#each ends as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
@@ -203,7 +222,7 @@
             {@const r = res?.steps[si]}
             {@const clip = app.clip(r?.clip_id)}
             {@const thumb = app.thumbUrl(clip)}
-            {@const isRest = !step.clip}
+            {@const rest = isRest(step) || r?.state === 'empty'}
             {@const unresolved = r?.state === 'unresolved'}
             {@const playing = rl?.state === 'playing' && rl.step === si}
             {@const notConfirmed = rl?.not_confirmed.includes(si)}
@@ -214,7 +233,8 @@
               class:drop-after={drag?.active && !drag.alt && drag.lane === li && drag.to === si && drag.to > drag.from}>
               <div
                 class="step"
-                class:rest={isRest}
+                class:rest
+                class:slot-step={step.column != null}
                 class:unresolved
                 class:selected
                 class:playing
@@ -222,7 +242,7 @@
                 class:dragged
                 class:warn={r?.ambiguous || r?.other_layer}
                 style:background-image={thumb ? `linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), color-mix(in srgb, var(--bg) 55%, transparent)), url(${thumb})` : null}
-                title={`${stepLabel(step, r?.clip_id ?? null)}${r?.ambiguous ? ' · ambiguous match' : ''}${r?.other_layer ? ' · clip is on another layer' : ''}${notConfirmed ? ' · not confirmed by Resolume' : ''}`}
+                title={`${stepLabel(step, r)}${step.column != null && r?.state === 'empty' ? ' · plays as a rest' : ''}${r?.ambiguous ? ' · ambiguous match' : ''}${r?.other_layer ? ' · clip is on another layer' : ''}${notConfirmed ? ' · not confirmed by Resolume' : ''}`}
                 role="button"
                 tabindex="-1"
                 onpointerdown={(e) => stepDown(e, li, si)}
@@ -230,7 +250,7 @@
                 onpointerup={() => stepUp(li, si)}
                 onpointercancel={() => (drag = null)}
               >
-                <div class="name">{stepLabel(step, r?.clip_id ?? null)}</div>
+                <div class="name">{stepLabel(step, r)}</div>
                 <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
                 <div class="resize" role="separator" aria-label="Resize step"
                   onpointerdown={(e) => resizeDown(e, li, si, step)} onpointermove={resizeMove} onpointerup={resizeUp}></div>
@@ -239,7 +259,9 @@
           {/each}
           {#if dropAt?.lane === li && dropAt.index === lane.steps.length}<div class="slot drop-before" style:width="8px"></div>{/if}
           {#if lane.steps.length === 0 && dropAt?.lane !== li}
-            <div class="hint" style="align-self:center;padding:0 10px">drop clips here</div>
+            <div class="hint" style="align-self:center;padding:0 10px">
+              {isSlotLane(lane) ? 'drop clips here: each step plays its column' : 'drop clips here'}
+            </div>
           {/if}
         </div>
       {/each}

@@ -39,7 +39,8 @@ impl ThumbCache {
             .unwrap_or(false)
     }
 
-    /// PNG for a clip. `version` is the `thumbnail.last_update` the caller saw.
+    /// PNG for a clip. `version` is the thumbnail version the caller saw (`view::thumb_version`);
+    /// a fetched picture is stored under it, or under Resolume's ETag without one.
     pub async fn clip(&self, id: u64, version: Option<&str>) -> Option<Vec<u8>> {
         if let Some(v) = version {
             if let Ok(png) = tokio::fs::read(self.path(id, v)).await {
@@ -48,7 +49,7 @@ impl ThumbCache {
         }
         match self.rest.thumbnail(id).await {
             Ok(t) => {
-                let v = t.etag.as_deref().or(version).unwrap_or("0").to_owned();
+                let v = version.or(t.etag.as_deref()).unwrap_or("0").to_owned();
                 self.store(id, &v, &t.png).await;
                 Some(t.png)
             }
@@ -138,7 +139,8 @@ where
         let mut cells = Vec::new();
         for (si, step) in lane.steps.iter().enumerate() {
             let r = res.and_then(|l| l.steps.get(si));
-            let cell = match (step.clip.is_some(), r.and_then(|r| r.clip_id)) {
+            let empty_slot = r.is_some_and(|r| r.state == "empty");
+            let cell = match (!step.is_rest() && !empty_slot, r.and_then(|r| r.clip_id)) {
                 (false, _) => Cell::Rest,
                 (true, Some(id)) => match thumb(id)
                     .await

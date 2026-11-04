@@ -7,6 +7,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- **Slot lanes** (positional sequencing): a lane in *Slot* mode plays whatever clip sits in a column of its
+  layer when each step starts, so clips can be swapped in Resolume while the sequence runs. Empty slots act as
+  rests. Lanes switch between *Clip* and *Slot* in the lane header (steps are converted). The slot is read
+  over REST just before its step, because drags in Resolume's own UI are not pushed.
+- Column numbers on the clip browser thumbnails.
+
+### Changed
+
+- Sequence file format **v3** (lane `mode`, step `column`). Version 2 files load unchanged and are kept as
+  `.v2.bak` on their first save; builds before this one cannot read v3.
+- The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%esolume-sequencer` is moved there on
+  first start.
+- Clip thumbnails are refreshed when a slot gets new media (Resolume keeps its change marker then).
+
+### Fixed
+
+- The third-party notices script works when the release script runs under PowerShell.
+
 ## [0.1.0] - Unreleased
 
 First public release.
@@ -43,5 +65,6 @@ First public release.
 - The UI server only answers on `127.0.0.1` and refuses requests from other web pages.
 - Logs in daily files (kept 7 days); settings and sequences in `%APPDATA%\resolume-sequencer`.
 
-[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.1.0

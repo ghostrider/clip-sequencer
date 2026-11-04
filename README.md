@@ -105,7 +105,7 @@ The UI uses port `8090` (`--ui-port`). If another program has it, the sequencer 
 port from 8091 to 8099, then one the OS assigns. It logs a warning, and the desktop window and
 console output use the actual address. `--strict-port` exits with an error instead of falling back.
 If the port belongs to a running sequencer, no second one starts. The running instance's address is
-written to `%APPDATA%\resolume-sequencer\runtime.json` (`pid`, `ui_url`, `started_at`) while it runs.
+written to `%APPDATA%\clip-sequencer\runtime.json` (`pid`, `ui_url`, `started_at`) while it runs.
 
 ### Options
 
@@ -119,14 +119,19 @@ Useful options (`--help` lists all):
 | `--strict-port` | | Don't fall back if the UI port is taken |
 | `--no-splash` | | Desktop app: no splash screen |
 | `--seq-layer`, `--seq-prefix` | `SEQ`, `"§ "` | Placeholder layer and clip-name prefix |
-| `--data-dir` | `%APPDATA%\resolume-sequencer` | Sequence files, settings, logs, thumbnail and deck caches |
+| `--data-dir` | `%APPDATA%\clip-sequencer` | Sequence files, settings, logs, thumbnail and deck caches |
 | `--list-midi-ports` | | Print MIDI input ports and exit (`seq-app-cli.exe`) |
 | `--clock-debug` | | Show the incoming clock (bar.beat.tick, BPM) to check the port (`seq-app-cli.exe`) |
 | `--validate <file>` | | Check a `.seq.json` file and exit (`seq-app-cli.exe`) |
 
+Earlier builds kept their data in `%APPDATA%\resolume-sequencer`. Without `--data-dir`, the first
+start of this version renames that folder to `%APPDATA%\clip-sequencer` (only if the new one does not
+exist yet). If that fails, for example because an older build is still running, it keeps using the old
+folder and logs a warning.
+
 ### Logs
 
-- **Files:** daily log files in `%APPDATA%\resolume-sequencer\logs\` (`seq-app-YYYY-MM-DD.log`). They
+- **Files:** daily log files in `%APPDATA%\clip-sequencer\logs\` (`seq-app-YYYY-MM-DD.log`). They
   are kept for 7 days.
 - **Console tab:** shows the log live (Ctrl+2), with level filters, pause, copy and save. In the
   desktop app, it opens with View → Toggle Console.
@@ -164,7 +169,7 @@ Useful options (`--help` lists all):
 - **Stop all** clears every layer the sequencer owns.
 
 Sequences are saved automatically (about 1 s after an edit) to
-`%APPDATA%\resolume-sequencer\<Composition>.seq.json`.
+`%APPDATA%\clip-sequencer\<Composition>.seq.json`.
 
 ## Behaviour worth knowing
 

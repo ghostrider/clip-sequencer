@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "composition": "dev",
   "decks": {
     "1000A Text3D": {
@@ -68,6 +68,16 @@
               "steps": [
                 { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 32 },
                 { "clip": null, "length": 32 }
+              ]
+            },
+            {
+              "layer": "Layer 3",
+              "mode": "slot",
+              "end": "hold",
+              "steps": [
+                { "column": 3, "length": 8 },
+                { "column": null, "length": 3 },
+                { "column": 12, "length": 16 }
               ]
             }
           ]

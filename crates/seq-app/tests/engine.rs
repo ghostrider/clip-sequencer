@@ -29,6 +29,8 @@ struct Harness {
     app: App,
     clock: mpsc::UnboundedSender<ClockEvent>,
     dir: tempfile::TempDir,
+    /// Timestamps for [`Harness::ticks_at_128`].
+    virtual_clock: std::cell::Cell<Instant>,
 }
 
 fn step(name: &str, length: u32) -> serde_json::Value {
@@ -89,6 +91,7 @@ async fn harness() -> Harness {
         app,
         clock,
         dir,
+        virtual_clock: std::cell::Cell::new(Instant::now()),
     };
     h.structure(|s| s.decks.iter().any(|d| !d.sequences.is_empty()))
         .await;
@@ -169,6 +172,22 @@ impl Harness {
                 .send(ClockEvent::Msg {
                     msg: ClockMsg::Tick,
                     at: Instant::now(),
+                })
+                .unwrap();
+        }
+    }
+
+    /// Ticks stamped 128 BPM apart, so the engine's tempo (and with it the slot read
+    /// look-ahead, ~8 ticks) is what it would be live.
+    fn ticks_at_128(&self, n: u64) {
+        let dt = Duration::from_secs_f64(60.0 / 128.0 / 24.0);
+        for _ in 0..n {
+            let at = self.virtual_clock.get() + dt;
+            self.virtual_clock.set(at);
+            self.clock
+                .send(ClockEvent::Msg {
+                    msg: ClockMsg::Tick,
+                    at,
                 })
                 .unwrap();
         }
@@ -769,6 +788,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             lane: 0,
             index: 0,
             step: Step {
+                column: None,
                 clip: Some(clip(TWISTED)),
                 length: 2,
             },
@@ -778,6 +798,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             lane: 0,
             index: 1,
             step: Step {
+                column: None,
                 clip: None,
                 length: 2,
             },
@@ -1236,6 +1257,153 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
     );
     token.cancel();
     let _ = running.done.await;
+}
+
+const SEQ_SLOT: Uuid = Uuid::from_u128(0x51);
+
+/// A slot lane on L2 (columns 1, 2, 3; one bar each), created through edit operations.
+/// L2 in the mock: column 1 "Clip 13", column 2 empty, column 3 "Clip 08".
+async fn add_slot_sequence(h: &Harness, repeat: seq_core::Repeat) {
+    use seq_core::edit::EditOp;
+    let ops = [
+        EditOp::CreateSequence {
+            deck: "2132323".into(),
+            id: SEQ_SLOT,
+            name: "Slots".into(),
+            layer: "L2".into(),
+        },
+        EditOp::SetLaneMode {
+            seq: SEQ_SLOT,
+            lane: 0,
+            mode: seq_core::LaneMode::Slot,
+        },
+        EditOp::SetRepeat {
+            seq: SEQ_SLOT,
+            repeat,
+        },
+    ];
+    for op in ops {
+        h.cmd(EngineCommand::Edit { op });
+    }
+    for (i, col) in [1, 2, 3].into_iter().enumerate() {
+        h.cmd(EngineCommand::Edit {
+            op: EditOp::InsertStep {
+                seq: SEQ_SLOT,
+                lane: 0,
+                index: i,
+                step: seq_core::Step::slot(Some(col), 16),
+            },
+        });
+    }
+    let s = h
+        .structure(|s| slot_states(s).is_some_and(|st| st == ["slot", "empty", "slot"]))
+        .await;
+    assert!(s
+        .decks
+        .iter()
+        .any(|d| d.sequences.iter().any(|v| v.sequence.id == SEQ_SLOT)));
+}
+
+/// Resolution states of the slot sequence's steps.
+fn slot_states(s: &StructureState) -> Option<Vec<String>> {
+    let v = s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_SLOT)?;
+    Some(
+        v.resolution.as_ref()?.lanes[0]
+            .steps
+            .iter()
+            .map(|st| st.state.to_owned())
+            .collect(),
+    )
+}
+
+/// SPEC §4.5 and notes §15: a drag in Resolume's UI sends no composition push. The slot read
+/// before each slot step still sees it: the moved clip plays in its new column, and the slot it
+/// left is a rest.
+#[tokio::test]
+async fn slot_lane_plays_what_is_in_the_slot_after_a_silent_swap() {
+    let h = harness().await;
+    add_slot_sequence(&h, seq_core::Repeat::Once).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_SLOT });
+    h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(h.osc(1).await, vec![connect(2, 1)]);
+
+    h.ticks_at_128(80);
+    // Let the composition push that follows the trigger land first: it must not carry the swap.
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    // The user drags "Clip 08" from column 3 onto the empty column 2.
+    h.mock.swap_slots_silently(2, 3, 2);
+    h.ticks_at_128(15); // position 95: the read of column 2 went out at ~88
+    h.structure(|s| slot_states(s).is_some_and(|st| st == ["slot", "slot", "empty"]))
+        .await;
+    h.ticks_at_128(1);
+    assert_eq!(
+        h.osc(2).await[1],
+        connect(2, 2),
+        "column 2 now holds Clip 08"
+    );
+
+    h.ticks_at_128(96);
+    let log = h.osc(4).await;
+    let [c1, c2] = clear(2);
+    assert_eq!(
+        log[2..4].to_vec(),
+        vec![c1, c2],
+        "column 3 is empty now: a rest"
+    );
+    let r = h.runtime(|r| r.last_confirm.is_some()).await;
+    assert!(
+        r.notices
+            .iter()
+            .all(|n| !n.contains("not confirmed") && !n.contains("yielded")),
+        "{:?}",
+        r.notices
+    );
+    h.app.shutdown().await;
+}
+
+/// SPEC §4.5: new media dropped onto the playing slot stops it in Resolume. The sequencer does
+/// not yield and does not re-trigger; the slot plays again at its next step, with the new media.
+#[tokio::test]
+async fn media_dropped_on_the_playing_slot_plays_at_its_next_step() {
+    let h = harness().await;
+    add_slot_sequence(&h, seq_core::Repeat::Count { count: 2 }).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_SLOT });
+    h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(h.osc(1).await, vec![connect(2, 1)]);
+    tokio::time::sleep(Duration::from_millis(150)).await; // outside the override window
+    assert_eq!(h.mock.clip_state(2, 1).as_deref(), Some("Connected"));
+
+    h.mock.clear_osc_log();
+    h.mock
+        .replace_media_silently(2, 1, "New Media", "D:\\media\\new.mov");
+    h.ticks_at_128(40);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        h.mock.osc_log().is_empty(),
+        "no re-trigger before the next step"
+    );
+    let r = h.runtime(|r| !r.running.is_empty()).await;
+    assert_eq!(r.running[0].lanes[0].state, "playing", "not yielded");
+
+    // Pass 1: column 2 empty (clear), column 3 Clip 08; pass 2 starts with column 1 again.
+    h.ticks_at_128(3 * 96 - 40);
+    let log = h.osc(4).await;
+    let [c1, c2] = clear(2);
+    assert_eq!(log, vec![c1, c2, connect(2, 3), connect(2, 1)]);
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.layers)
+                .any(|l| l.clips.iter().any(|c| c.name == "New Media"))
+        })
+        .await;
+    assert!(s.decks.iter().any(|d| d.live));
+    h.app.shutdown().await;
 }
 
 /// M11 Phase F: the browser UI of the headless app can quit it (File → Quit server), and the License

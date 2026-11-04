@@ -163,6 +163,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         });
     }
 
+    let slot_aux = aux_tx.clone();
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     let thumbs_dir = cfg.storage.dir().join("thumbs");
     let data_dir = cfg.storage.dir().to_path_buf();
@@ -175,6 +176,10 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         aux_tx,
     );
     engine.set_clock_port(port);
+    engine.set_slot_reader(engine::spawn_slot_reader(
+        RestClient::new(cfg.resolume.rest_base()),
+        slot_aux,
+    ));
     let ws_events = ws.events;
     let engine_task = tokio::spawn(async move {
         engine::run(

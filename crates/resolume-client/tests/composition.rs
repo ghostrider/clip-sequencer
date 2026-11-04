@@ -174,10 +174,12 @@ fn sequence_from(v: &Value, lanes: &[(&str, &[(usize, usize)])]) -> Sequence {
             .iter()
             .map(|(layer, cells)| Lane {
                 layer: (*layer).into(),
+                mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
                 steps: cells
                     .iter()
                     .map(|&(l, c)| Step {
+                        column: None,
                         clip: Some(clip_ref_for(idx.clip_at(l, c).unwrap())),
                         length: 8,
                     })

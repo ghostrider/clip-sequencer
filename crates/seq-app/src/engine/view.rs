@@ -42,6 +42,9 @@ pub struct DeckView {
     /// Clip data: live, cached from the last time the deck was live, or none.
     pub clips_source: ClipsSource,
     pub layers: Vec<LayerView>,
+    /// Number of columns in the deck's clip data (0 without clip data); slot lane steps pick a
+    /// column up to this (SPEC §4.5).
+    pub columns: usize,
     pub sequences: Vec<SequenceView>,
     /// `§` clips on the SEQ layer whose name matches no sequence of this deck.
     pub unmatched_seq_clips: Vec<String>,
@@ -109,7 +112,8 @@ pub struct LaneResolutionView {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StepResolutionView {
-    /// `rest`, `ok` or `unresolved`.
+    /// `rest`, `ok` or `unresolved`; slot lane steps (SPEC §4.5): `slot` (the slot holds
+    /// `clip_id`) or `empty` (plays as a rest).
     pub state: &'static str,
     pub clip_id: Option<u64>,
     pub by: Option<&'static str>,
@@ -169,10 +173,19 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
                             ResolvedBy::Id => "id",
                             ResolvedBy::Name => "name",
                             ResolvedBy::File => "file",
+                            ResolvedBy::Slot => "slot",
                         }),
                         ambiguous: clip.ambiguous,
                         other_layer: !clip.on_lane_layer,
                         methods: (*methods).into(),
+                    },
+                    StepResolution::Slot { clip, .. } => StepResolutionView {
+                        state: if clip.is_some() { "slot" } else { "empty" },
+                        clip_id: clip.map(|c| c.clip_id),
+                        by: clip.map(|_| "slot"),
+                        ambiguous: false,
+                        other_layer: false,
+                        methods: MethodsView::default(),
                     },
                     StepResolution::Unresolved { methods } => StepResolutionView {
                         state: "unresolved",
@@ -194,6 +207,17 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
     }
 }
 
+/// Version of a clip's thumbnail for the cache and the UI: Resolume's `last_update` plus a
+/// fingerprint of the content. Media dropped onto a slot keeps the slot's id and, as seen in the
+/// M13 probe (notes §15), its `last_update`, so the marker alone would keep the old picture.
+pub fn thumb_version(c: &seq_core::index::ClipInfo) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    c.file_path.hash(&mut h);
+    c.name.hash(&mut h);
+    format!("{}x{:08x}", c.thumbnail.last_update, h.finish() as u32)
+}
+
 pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> {
     index
         .layers
@@ -213,7 +237,7 @@ pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> 
                     column: c.column,
                     name: c.name.clone(),
                     file: c.file_name().map(str::to_owned),
-                    thumb: (!c.thumbnail.is_default).then(|| c.thumbnail.last_update.clone()),
+                    thumb: (!c.thumbnail.is_default).then(|| thumb_version(c)),
                 })
                 .collect(),
         })
