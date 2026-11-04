@@ -14,7 +14,8 @@ Anything that sends MIDI clock to a MIDI input on the Resolume computer works:
 On Windows the sequencer can't create a virtual port itself: it connects to an existing input by name. Start the
 clock source (or create the virtual port) before choosing it.
 
-Feed **the same clock to Resolume** (its MIDI clock sync), so Resolume's tempo and the sequencer's steps agree.
+Resolume and the sequencer must both receive **the same MIDI clock**, so Resolume's tempo and the sequencer's
+steps agree.
 
 ### Projector latency
 

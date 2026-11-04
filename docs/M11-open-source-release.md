@@ -312,7 +312,7 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
 - [x] **Introduction:** what the sequencer does, how it fits next to Resolume and the MIDI clock, requirements.
 - [x] **Installation:** installer vs. portable zip, WebView2 (after M12), the SmartScreen warning, checksum
       verification, updating to a new version, uninstalling (and where the data stays).
-- [ ] **Setting up Resolume:** enable the webserver and OSC input (with the exact preference paths), MIDI clock
+- [x] **Setting up Resolume:** enable the webserver and OSC input (with the exact preference paths), MIDI clock
       sync, Beat Snap **off** for clip triggers, recommended clip transport mode (BPM sync), creating the `SEQ`
       layer with `§ <name>` placeholder clips and an invisible source.
 - [x] **Setting up the clock:** any MIDI clock source works; selecting the input port; using a virtual MIDI
@@ -380,9 +380,9 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
   order; text contrast ≥ 6.8:1 (WCAG AA) for every colour pair used.*
 - *Screenshots: 14 in `site/manual/src/images/`, from the demo show (`docs/samples/demo-*`, generated thumbnails),
   no running state (no MIDI clock in the build container).*
-- *Open:* **Setting up Resolume:** *the exact preference path for MIDI clock sync and a recommended clip transport
-  mode are not in the manual; Uli to confirm (the chapter says "MIDI clock sync in Resolume's MIDI settings").*
-  **Contact page:** *`contactEmail` set (2026-11-04); waiting for Uli's review of the wording (and a postal address
+- *Setting up Resolume (decided 2026-11-04): no menu path for MIDI clock sync; the chapter says that Resolume and
+  the sequencer must both receive the same MIDI clock. Clip transport mode: either works (the sequencer only
+  triggers the start).* *Open:* **Contact page:** *`contactEmail` set (2026-11-04); waiting for Uli's review of the wording (and a postal address
   if the Swiss rules require one); the shop button appears once `shopUrl` is set.* **Latest release only:** *with
   the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` is kept (Uli, 2026-11-04). The "Installing the FFGL plugin" chapter follows with G3.)*
 

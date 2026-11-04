@@ -8,9 +8,8 @@ The sequencer talks to Resolume over its **webserver** (to read the composition 
 1. **Preferences → Webserver:** switch on *Webserver & REST API*. Keep the port at `8080` (or tell the sequencer
    another one, see [Settings](settings.md)).
 2. **Preferences → OSC:** switch on *OSC Input*. Keep the port at `7000` (or tell the sequencer another one).
-3. **Tempo:** let Resolume follow the same MIDI clock as the sequencer (MIDI clock sync in Resolume's MIDI
-   settings), so the clips' own BPM-synced playback matches the sequencer's steps. See
-   [Setting up the clock](clock.md).
+3. **Tempo:** Resolume and the sequencer must both receive **the same MIDI clock**, so Resolume's tempo and the
+   sequencer's steps agree. See [Setting up the clock](clock.md).
 
 The sequencer connects to `127.0.0.1`, the same computer. On the top bar of the app, the chips **REST**, **WS**
 (WebSocket) and **OSC** turn green when the connection works.
@@ -21,6 +20,11 @@ The sequencer connects to `127.0.0.1`, the same computer. On the top bar of the 
 
 **Composition → Clip Beat Snap: None.** The sequencer sends each trigger exactly on the tick where the step
 begins. With Beat Snap, Resolume would wait for the next beat or bar and the step would start late.
+
+### Clip transport mode
+
+Any transport mode works (for example *Timeline* or *BPM Sync*): the sequencer only triggers when a clip starts;
+how the clip plays after that is up to Resolume.
 
 ### Name your layers
 
