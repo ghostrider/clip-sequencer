@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, EIGHTHS_PER_BAR, TICKS_PER_EIGHTH, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, TICKS_PER_SIXTEENTH, LENGTH_STEP, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
   import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
@@ -9,7 +9,8 @@
   let zoom = $derived(app.zoom);
 
   // Local previews while dragging; the edit is sent on release.
-  let resize = $state<{ lane: number; index: number; startX: number; startLen: number; len: number } | null>(null);
+  // `at`: the step's start in sixteenths, so its end (not its length) snaps to the grid.
+  let resize = $state<{ lane: number; index: number; at: number; startX: number; startLen: number; len: number } | null>(null);
   let drag = $state<{ lane: number; from: number; to: number; startX: number; active: boolean; alt: boolean } | null>(null);
   let dropAt = $state<{ lane: number; index: number } | null>(null);
 
@@ -17,12 +18,12 @@
     return resize && resize.lane === lane && resize.index === index ? resize.len : step.length;
   }
 
-  let totalEighths = $derived.by(() => {
+  let totalSixteenths = $derived.by(() => {
     const longest = Math.max(0, ...seq.lanes.map((l, li) => l.steps.reduce((a, s, i) => a + len(li, i, s), 0)));
-    const bars = Math.max(4, Math.ceil(longest / EIGHTHS_PER_BAR) + 1);
-    return bars * EIGHTHS_PER_BAR;
+    const bars = Math.max(4, Math.ceil(longest / SIXTEENTHS_PER_BAR) + 1);
+    return bars * SIXTEENTHS_PER_BAR;
   });
-  let bars = $derived(totalEighths / EIGHTHS_PER_BAR);
+  let bars = $derived(totalSixteenths / SIXTEENTHS_PER_BAR);
 
   function stepLabel(step: Step, r: StepResolution | undefined): string {
     const c = app.clip(r?.clip_id);
@@ -63,8 +64,8 @@
     e.preventDefault();
     const index = indexAt(e.currentTarget as HTMLElement, e.clientX, seq.lanes[lane].steps, lane);
     const step: Step = isSlotLane(seq.lanes[lane])
-      ? { column: Number(e.dataTransfer?.getData('application/x-seq-column')), length: 8 }
-      : { clip: JSON.parse(data), length: 8 };
+      ? { column: Number(e.dataTransfer?.getData('application/x-seq-column')), length: SIXTEENTHS_PER_BAR }
+      : { clip: JSON.parse(data), length: SIXTEENTHS_PER_BAR };
     app.edit({ op: 'insert_step', seq: seq.id, lane, index, step });
     app.selectedStep = { lane, index };
   }
@@ -73,11 +74,16 @@
   function resizeDown(e: PointerEvent, lane: number, index: number, step: Step) {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resize = { lane, index, startX: e.clientX, startLen: step.length, len: step.length };
+    const at = seq.lanes[lane].steps.slice(0, index).reduce((a, s) => a + s.length, 0);
+    resize = { lane, index, at, startX: e.clientX, startLen: step.length, len: step.length };
   }
   function resizeMove(e: PointerEvent) {
     if (!resize) return;
-    resize.len = Math.max(1, resize.startLen + Math.round((e.clientX - resize.startX) / zoom));
+    // The step's end snaps to the 1/8 grid, or to 1/16 with Shift held (SPEC §9.3).
+    const unit = e.shiftKey ? 1 : LENGTH_STEP;
+    const end = resize.at + resize.startLen + (e.clientX - resize.startX) / zoom;
+    const snapped = Math.round(end / unit) * unit;
+    resize.len = Math.max(1, snapped - resize.at);
   }
   function resizeUp() {
     if (!resize) return;
@@ -124,7 +130,7 @@
   function onWheel(e: WheelEvent) {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    app.zoom = Math.min(60, Math.max(4, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+    app.zoom = Math.min(30, Math.max(2, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
   }
 
   function moveLane(from: number, to: number) {
@@ -151,7 +157,7 @@
 </script>
 
 <div class="grid" onwheel={onWheel}>
-  <div class="grid-inner" style:min-width={`calc(var(--lane-head-w) + ${totalEighths * zoom}px)`}>
+  <div class="grid-inner" style:min-width={`calc(var(--lane-head-w) + ${totalSixteenths * zoom}px)`}>
     <div class="lanehead-col">
       <div class="ruler-spacer">bar.beat</div>
       {#each seq.lanes as lane, li (li)}
@@ -203,9 +209,9 @@
     <div class="tracks">
       <div class="ruler">
         {#each Array(bars) as _, b (b)}
-          <div class="bar" style:flex={`0 0 ${EIGHTHS_PER_BAR * zoom}px`}>
+          <div class="bar" style:flex={`0 0 ${SIXTEENTHS_PER_BAR * zoom}px`}>
             <div class="num">{b + 1}</div>
-            <div class="ticks">{#each Array(EIGHTHS_PER_BAR) as _, t (t)}<i></i>{/each}</div>
+            <div class="ticks">{#each Array(SIXTEENTHS_PER_BAR / LENGTH_STEP) as _, t (t)}<i></i>{/each}</div>
           </div>
         {/each}
       </div>
@@ -261,7 +267,7 @@
         </div>
       {/each}
       {#if run}
-        {@const x = (run.pos / TICKS_PER_EIGHTH) * zoom}
+        {@const x = (run.pos / TICKS_PER_SIXTEENTH) * zoom}
         <div class="playhead" style:left={`${x}px`}></div>
         <div class="playhead-label" style:left={`${x}px`}>{run.bar_beat}</div>
       {/if}
