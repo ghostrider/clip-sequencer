@@ -1333,3 +1333,68 @@ async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
         .expect("quit from the UI cancels the headless app's token");
     app.shutdown().await;
 }
+
+/// SPEC §12.2: a web page from another origin can't use the UI server (HTTP or WebSocket); the app's own
+/// origin and clients without an `Origin` header (the FFGL plugin, tools) can.
+#[tokio::test]
+async fn requests_from_other_web_pages_are_refused() {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let client = reqwest::Client::new();
+    let get = |origin: Option<String>| {
+        let mut r = client.get(format!("http://{ui}/api/version"));
+        if let Some(o) = origin {
+            r = r.header("Origin", o);
+        }
+        r.send()
+    };
+    assert_eq!(
+        get(None).await.unwrap().status(),
+        200,
+        "no Origin (plugin, tools)"
+    );
+    assert_eq!(
+        get(Some(format!("http://{ui}"))).await.unwrap().status(),
+        200,
+        "the app's own page"
+    );
+    for evil in ["https://evil.example", "http://127.0.0.1:1", "null"] {
+        assert_eq!(
+            get(Some(evil.into())).await.unwrap().status(),
+            403,
+            "{evil}"
+        );
+    }
+
+    // WebSocket: a foreign page's handshake is refused, the app's own goes through.
+    let ws = |origin: String| {
+        let mut req = format!("ws://{ui}/ws").into_client_request().unwrap();
+        req.headers_mut().insert("Origin", origin.parse().unwrap());
+        tokio_tungstenite::connect_async(req)
+    };
+    let refused = ws("https://evil.example".into()).await;
+    assert!(
+        matches!(&refused, Err(tokio_tungstenite::tungstenite::Error::Http(r)) if r.status() == 403),
+        "{refused:?}"
+    );
+    assert!(ws(format!("http://{ui}")).await.is_ok());
+    app.shutdown().await;
+}

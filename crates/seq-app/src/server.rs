@@ -76,7 +76,37 @@ pub fn router(ctx: ServerCtx) -> Router {
         .route("/thumbs/seq/{file}", get(seq_thumb))
         .route("/plugin/v1/view.txt", get(plugin_view))
         .fallback(get(static_file))
+        .layer(axum::middleware::from_fn(same_origin_only))
         .with_state(ctx)
+}
+
+/// Refuses requests from other web pages (SPEC §12.2): a page open in the user's browser can reach
+/// `127.0.0.1` too, and neither WebSockets nor simple POSTs are held back by the same-origin policy. A request
+/// whose `Origin` names another host or port than its `Host` gets 403. Requests without `Origin` (the FFGL
+/// plugin, curl, same-origin GETs) pass.
+async fn same_origin_only(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let headers = req.headers();
+    if let Some(origin) = headers.get(header::ORIGIN) {
+        let host = headers.get(header::HOST).and_then(|h| h.to_str().ok());
+        let origin_host = origin
+            .to_str()
+            .ok()
+            .and_then(|o| o.split_once("://"))
+            .map(|(_, rest)| rest.trim_end_matches('/'));
+        if origin_host.is_none() || origin_host != host {
+            log::warn!(
+                "refused a request from another web page: Origin {origin:?}, Host {host:?}, {} {}",
+                req.method(),
+                req.uri().path()
+            );
+            return (
+                StatusCode::FORBIDDEN,
+                "cross-origin requests are not allowed",
+            )
+                .into_response();
+        }
+    }
+    next.run(req).await
 }
 
 pub async fn serve(listener: tokio::net::TcpListener, ctx: ServerCtx) -> anyhow::Result<()> {
