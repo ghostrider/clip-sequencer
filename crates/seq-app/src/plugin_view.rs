@@ -106,10 +106,15 @@ fn layout_text(deck: &DeckView, view: &SequenceView) -> String {
         let _ = writeln!(out, "lane {state} {end} {}", one_line(&lane.layer));
         for (si, step) in lane.steps.iter().enumerate() {
             let r = res.and_then(|l| l.steps.get(si));
-            let (kind, clip_id) = match (&step.clip, r) {
-                (None, _) => ("rest", 0),
-                (Some(_), Some(r)) if r.state == "ok" => ("clip", r.clip_id.unwrap_or(0)),
-                (Some(_), _) => ("unresolved", 0),
+            // Slot steps (SPEC §4.5) show what the slot holds now; an empty slot is a rest.
+            let (kind, clip_id) = match (step.is_rest(), r) {
+                (true, _) => ("rest", 0),
+                (false, Some(r)) if r.state == "ok" || r.state == "slot" => {
+                    ("clip", r.clip_id.unwrap_or(0))
+                }
+                (false, Some(r)) if r.state == "empty" => ("rest", 0),
+                (false, _) if step.column.is_some() => ("rest", 0),
+                (false, _) => ("unresolved", 0),
             };
             let clip = (clip_id != 0)
                 .then(|| {
@@ -120,10 +125,13 @@ fn layout_text(deck: &DeckView, view: &SequenceView) -> String {
                 })
                 .flatten();
             let thumb = clip.and_then(|c| c.thumb.as_deref()).unwrap_or("-");
-            let label = match (&step.clip, clip) {
-                (None, _) => "rest".to_owned(),
-                (_, Some(c)) if !c.name.is_empty() => c.name.clone(),
-                (Some(r), _) => r
+            let label = match (&step.clip, step.column, clip) {
+                (None, None, _) => "rest".to_owned(),
+                (_, Some(col), Some(c)) if !c.name.is_empty() => format!("col {col}: {}", c.name),
+                (_, _, Some(c)) if !c.name.is_empty() => c.name.clone(),
+                (_, Some(col), None) => format!("col {col} empty"),
+                (_, Some(col), Some(_)) => format!("col {col}"),
+                (Some(r), None, _) => r
                     .name
                     .clone()
                     .or_else(|| r.file.clone())

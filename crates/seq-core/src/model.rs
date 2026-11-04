@@ -151,13 +151,137 @@ pub enum AfterLastPass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "LaneRepr", into = "LaneRepr")]
 pub struct Lane {
     /// Resolume layer name; never an index (SPEC §4.4).
     pub layer: String,
+    /// What the steps reference (SPEC §4.5). Clip lanes use [`Step::clip`], slot lanes
+    /// [`Step::column`]; the other field stays `None`.
+    pub mode: LaneMode,
     pub end: LaneEnd,
-    #[serde(default)]
     pub steps: Vec<Step>,
+}
+
+/// What a lane's steps reference (SPEC §4.5).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaneMode {
+    /// A clip by identity (id, name, file), following it when it moves.
+    #[default]
+    Clip,
+    /// A column number on the lane's layer: whatever sits in that slot plays.
+    Slot,
+}
+
+impl LaneMode {
+    fn is_clip(&self) -> bool {
+        *self == LaneMode::Clip
+    }
+}
+
+// The step field depends on the lane's mode: `clip` in clip lanes, `column` in slot lanes, each
+// written even when `null` (a rest). The lane-level form checks that and writes only that field.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LaneRepr {
+    layer: String,
+    #[serde(default, skip_serializing_if = "LaneMode::is_clip")]
+    mode: LaneMode,
+    end: LaneEnd,
+    #[serde(default)]
+    steps: Vec<StepRepr>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StepRepr {
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    clip: Option<Option<ClipRef>>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    column: Option<Option<u32>>,
+    length: u32,
+}
+
+/// Tells a field given as `null` (`Some(None)`) from a missing one (`None`).
+fn present<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(d).map(Some)
+}
+
+impl TryFrom<LaneRepr> for Lane {
+    type Error = String;
+
+    fn try_from(r: LaneRepr) -> Result<Self, Self::Error> {
+        let layer = &r.layer;
+        let steps = r
+            .steps
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let n = i + 1;
+                match (r.mode, s.clip, s.column) {
+                    (LaneMode::Clip, Some(clip), None) => Ok(Step::clip(clip, s.length)),
+                    (LaneMode::Slot, None, Some(column)) => Ok(Step::slot(column, s.length)),
+                    (LaneMode::Clip, _, Some(_)) => Err(format!(
+                        "lane \"{layer}\" step {n}: \"column\" needs lane mode \"slot\""
+                    )),
+                    (LaneMode::Slot, Some(_), _) => Err(format!(
+                        "lane \"{layer}\" step {n}: steps of a slot lane have \"column\", not \"clip\""
+                    )),
+                    (LaneMode::Clip, None, None) => Err(format!(
+                        "lane \"{layer}\" step {n}: missing \"clip\" (null for a rest)"
+                    )),
+                    (LaneMode::Slot, None, None) => Err(format!(
+                        "lane \"{layer}\" step {n}: missing \"column\" (null for a rest)"
+                    )),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Lane {
+            layer: r.layer,
+            mode: r.mode,
+            end: r.end,
+            steps,
+        })
+    }
+}
+
+impl From<Lane> for LaneRepr {
+    fn from(l: Lane) -> Self {
+        let mode = l.mode;
+        LaneRepr {
+            layer: l.layer,
+            mode,
+            end: l.end,
+            steps: l
+                .steps
+                .into_iter()
+                .map(|s| match mode {
+                    LaneMode::Clip => StepRepr {
+                        clip: Some(s.clip),
+                        column: None,
+                        length: s.length,
+                    },
+                    LaneMode::Slot => StepRepr {
+                        clip: None,
+                        column: Some(s.column),
+                        length: s.length,
+                    },
+                })
+                .collect(),
+        }
+    }
 }
 
 impl Lane {
@@ -176,13 +300,46 @@ pub enum LaneEnd {
     Clear,
 }
 
+/// One step. In the file, steps are written by their [`Lane`], whose mode decides the field.
+/// Its own serde form (edit operations, SPEC §9.6) is flat: `{"clip": …, "length": 8}` or
+/// `{"column": 3, "length": 8}`; validation checks it against the lane's mode.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
-    /// `None` (JSON `null`) is a rest.
+    /// Clip lanes: the clip; `None` (JSON `null`) is a rest. Always `None` in slot lanes.
+    #[serde(default)]
     pub clip: Option<ClipRef>,
+    /// Slot lanes: 1-based column on the lane's layer (SPEC §4.5); `None` is a rest. Always
+    /// `None` in clip lanes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<u32>,
     /// In sixteenths, ≥ 1 (checked by validation). Version 1 files counted eighths.
     pub length: u32,
+}
+
+impl Step {
+    /// A step of a clip lane.
+    pub fn clip(clip: Option<ClipRef>, length: u32) -> Self {
+        Self {
+            clip,
+            column: None,
+            length,
+        }
+    }
+
+    /// A step of a slot lane.
+    pub fn slot(column: Option<u32>, length: u32) -> Self {
+        Self {
+            clip: None,
+            column,
+            length,
+        }
+    }
+
+    /// A rest in either mode.
+    pub fn is_rest(&self) -> bool {
+        self.clip.is_none() && self.column.is_none()
+    }
 }
 
 /// Up to three features identifying a clip, tried in order: id, name, file (SPEC §4.3).
@@ -212,10 +369,11 @@ mod tests {
     fn lane(lengths: &[u32]) -> Lane {
         Lane {
             layer: "BG".into(),
+            mode: LaneMode::Clip,
             end: LaneEnd::Hold,
             steps: lengths
                 .iter()
-                .map(|&length| Step { clip: None, length })
+                .map(|&length| Step::clip(None, length))
                 .collect(),
         }
     }
@@ -267,6 +425,38 @@ mod tests {
         assert_eq!(j(Repeat::Infinite), r#"{"mode":"infinite"}"#);
         assert!(serde_json::from_str::<Repeat>(r#"{"mode":"once","count":3}"#).is_err());
         assert!(serde_json::from_str::<Repeat>(r#"{"mode":"count"}"#).is_err());
+    }
+
+    #[test]
+    fn lane_modes_serde_shapes() {
+        let clip = r#"{"layer":"BG","end":"hold","steps":[{"clip":{"name":"A"},"length":8},{"clip":null,"length":4}]}"#;
+        let lane: Lane = serde_json::from_str(clip).unwrap();
+        assert_eq!(lane.mode, LaneMode::Clip);
+        assert!(lane.steps[1].is_rest());
+        assert_eq!(serde_json::to_string(&lane).unwrap(), clip);
+
+        let slot = r#"{"layer":"FG","mode":"slot","end":"hold","steps":[{"column":3,"length":8},{"column":null,"length":4}]}"#;
+        let lane: Lane = serde_json::from_str(slot).unwrap();
+        assert_eq!(lane.mode, LaneMode::Slot);
+        assert_eq!(lane.steps[0], Step::slot(Some(3), 8));
+        assert!(lane.steps[1].is_rest());
+        assert_eq!(serde_json::to_string(&lane).unwrap(), slot);
+    }
+
+    #[test]
+    fn step_field_must_match_lane_mode() {
+        let bad = [
+            r#"{"layer":"L","end":"hold","steps":[{"column":1,"length":8}]}"#,
+            r#"{"layer":"L","mode":"slot","end":"hold","steps":[{"clip":null,"length":8}]}"#,
+            r#"{"layer":"L","end":"hold","steps":[{"length":8}]}"#,
+            r#"{"layer":"L","mode":"slot","end":"hold","steps":[{"length":8}]}"#,
+            r#"{"layer":"L","mode":"slot","end":"hold","steps":[{"column":1,"clip":null,"length":8}]}"#,
+            r#"{"layer":"L","mode":"grid","end":"hold","steps":[]}"#,
+            r#"{"layer":"L","end":"hold","steps":[],"extra":1}"#,
+        ];
+        for j in bad {
+            assert!(serde_json::from_str::<Lane>(j).is_err(), "{j}");
+        }
     }
 
     #[test]

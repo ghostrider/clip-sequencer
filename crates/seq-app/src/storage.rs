@@ -3,8 +3,9 @@
 //! Saves are atomic: the JSON goes to `<file>.tmp`, is flushed to disk, then renamed over the
 //! old file, so a crash never leaves a half-written file. Loading never modifies anything.
 //!
-//! A version 1 file (lengths in eighths) is migrated in memory on load. The first save over it
-//! copies it to `<file>.v1.bak` first, so the original stays readable by older builds.
+//! An older file version (v1: lengths in eighths; v2: no slot lanes) is migrated in memory on
+//! load. The first save over it copies it to `<file>.v<N>.bak` first, so the original stays
+//! readable by the builds that wrote it.
 
 use std::fs;
 use std::io::Write;
@@ -108,7 +109,7 @@ impl Storage {
             move |source| StorageError::Io { path, source }
         };
         fs::create_dir_all(&self.dir).map_err(io(&self.dir))?;
-        backup_v1(&path).map_err(io(&path))?;
+        backup_older(&path).map_err(io(&path))?;
         let tmp = tmp_path(&path);
         {
             let mut f = fs::File::create(&tmp).map_err(io(&tmp))?;
@@ -128,18 +129,25 @@ pub fn load_text(path: &Path, text: &str) -> Result<SeqFile, StorageError> {
     })
 }
 
-/// Copies a version 1 file at `path` to `<path>.v1.bak` before it is overwritten in the current
-/// format. An existing backup is kept (it is the oldest original).
-fn backup_v1(path: &Path) -> std::io::Result<()> {
+/// Copies a file of an older version N at `path` to `<path>.vN.bak` before it is overwritten in
+/// the current format. An existing backup is kept (it is the oldest original of that version).
+fn backup_older(path: &Path) -> std::io::Result<()> {
     let text = match fs::read_to_string(path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e),
     };
-    let backup = suffixed(path, ".v1.bak");
-    if file_version(&text) == Some(1) && !backup.exists() {
+    let Some(version) = file_version(&text).filter(|v| *v < u64::from(seq_core::FORMAT_VERSION))
+    else {
+        return Ok(());
+    };
+    let backup = suffixed(path, &format!(".v{version}.bak"));
+    if !backup.exists() {
         fs::write(&backup, text)?;
-        log::info!("kept the version 1 sequence file as {}", backup.display());
+        log::info!(
+            "kept the version {version} sequence file as {}",
+            backup.display()
+        );
     }
     Ok(())
 }

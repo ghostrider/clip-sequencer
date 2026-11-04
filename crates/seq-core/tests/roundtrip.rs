@@ -1,7 +1,8 @@
 //! Round-trip tests of the sequence file format against fixture files (SPEC §6).
 
 use seq_core::{
-    from_json, to_json, AfterLastPass, LaneEnd, LoadError, Repeat, Start, ValidationErrorKind,
+    from_json, to_json, AfterLastPass, LaneEnd, LaneMode, LoadError, Repeat, Start, Step,
+    ValidationErrorKind,
 };
 use serde_json::Value;
 
@@ -37,7 +38,7 @@ fn full_fixture_round_trips() {
 #[test]
 fn spec_example_maps_to_model() {
     let file = from_json(SPEC_EXAMPLE).unwrap();
-    assert_eq!(file.version, 2);
+    assert_eq!(file.version, 3);
     assert_eq!(file.composition, "MyShow");
     let seq = &file.decks["Act 1"].sequences[0];
     assert_eq!(seq.id.to_string(), "6f1c2a9e-0d5b-4c1e-9a0f-2f7d4c1b8e11");
@@ -54,16 +55,32 @@ fn spec_example_maps_to_model() {
     assert_eq!(clip.file.as_deref(), Some("tunnel_red.mov"));
     assert_eq!(lane.steps[0].length, 32);
     assert_eq!(lane.steps[1].clip, None);
+    assert_eq!(lane.mode, LaneMode::Clip);
+    let slot = &seq.lanes[1];
+    assert_eq!(slot.layer, "FG");
+    assert_eq!(slot.mode, LaneMode::Slot);
+    assert_eq!(
+        slot.steps,
+        [
+            Step::slot(Some(1), 16),
+            Step::slot(Some(2), 16),
+            Step::slot(None, 16)
+        ]
+    );
     assert_eq!(seq.pass_length(), 48);
 }
 
 #[test]
-fn v1_file_migrates_to_the_v2_document() {
-    // Lengths double (eighths -> sixteenths), everything else is unchanged.
-    assert_eq!(
-        from_json(SPEC_EXAMPLE_V1).unwrap(),
-        from_json(SPEC_EXAMPLE).unwrap()
-    );
+fn v1_file_migrates_to_the_current_document() {
+    // Lengths double (eighths -> sixteenths), everything else is unchanged. The v3 example also has
+    // a slot lane, which v1 cannot have: compare without it.
+    let mut current = from_json(SPEC_EXAMPLE).unwrap();
+    for d in current.decks.values_mut() {
+        for s in &mut d.sequences {
+            s.lanes.retain(|l| l.mode == LaneMode::Clip);
+        }
+    }
+    assert_eq!(from_json(SPEC_EXAMPLE_V1).unwrap(), current);
 }
 
 #[test]
@@ -92,21 +109,22 @@ fn invalid_fixture_reports_every_problem() {
         panic!("expected validation errors");
     };
     let kinds: Vec<_> = errors.iter().map(|e| &e.kind).collect();
-    assert_eq!(errors.len(), 5, "{errors:#?}");
+    assert_eq!(errors.len(), 6, "{errors:#?}");
     assert!(matches!(
         kinds[0],
         ValidationErrorKind::CountTooSmall { count: 1 }
     ));
     assert!(matches!(kinds[1], ValidationErrorKind::ZeroLength));
     assert!(matches!(kinds[2], ValidationErrorKind::EmptyClipRef));
+    assert!(matches!(kinds[3], ValidationErrorKind::ZeroColumn));
     assert!(matches!(
-        kinds[3],
+        kinds[4],
         ValidationErrorKind::DuplicateName { first_index: 0, .. }
     ));
-    assert!(matches!(kinds[4], ValidationErrorKind::NoLanes));
+    assert!(matches!(kinds[5], ValidationErrorKind::NoLanes));
     let message = LoadError::Invalid(errors).to_string();
     assert!(
-        message.starts_with("5 problem(s) in sequence file:"),
+        message.starts_with("6 problem(s) in sequence file:"),
         "{message}"
     );
     assert!(message.contains(r#"decks["Act 1"].sequences[0] "Drop A".lanes[0].steps[0].length"#));

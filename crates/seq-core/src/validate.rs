@@ -9,7 +9,7 @@ use std::fmt;
 
 use uuid::Uuid;
 
-use crate::model::{Repeat, SeqFile, Sequence};
+use crate::model::{LaneMode, Repeat, SeqFile, Sequence};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{path}: {kind}")]
@@ -41,6 +41,10 @@ pub enum ValidationErrorKind {
     ZeroLength,
     /// A clip reference with no id, name or file can never resolve; use `null` for a rest.
     EmptyClipRef,
+    /// Slot lane column 0; columns are 1-based (SPEC §4.5).
+    ZeroColumn,
+    /// A clip lane step with a column, or a slot lane step with a clip.
+    StepModeMismatch,
     /// Two lanes of one sequence target the same layer.
     DuplicateLayer {
         layer: String,
@@ -69,6 +73,13 @@ impl fmt::Display for ValidationErrorKind {
             Self::EmptyLayer => write!(f, "layer name is empty"),
             Self::ZeroLength => write!(f, "step length must be at least 1 sixteenth"),
             Self::EmptyClipRef => write!(f, "clip has no id, name or file; use null for a rest"),
+            Self::ZeroColumn => write!(f, "column numbers start at 1"),
+            Self::StepModeMismatch => {
+                write!(
+                    f,
+                    "step does not match the lane mode (clip lanes use clip, slot lanes column)"
+                )
+            }
             Self::DuplicateLayer { layer, first_lane } => write!(
                 f,
                 "layer {layer:?} is already used by lanes[{first_lane}] of this sequence"
@@ -179,6 +190,19 @@ fn validate_sequence(
                     ValidationErrorKind::EmptyClipRef,
                 );
             }
+            if step.column == Some(0) {
+                err(
+                    format!("{step_path}.column"),
+                    ValidationErrorKind::ZeroColumn,
+                );
+            }
+            let mismatch = match lane.mode {
+                LaneMode::Clip => step.column.is_some(),
+                LaneMode::Slot => step.clip.is_some(),
+            };
+            if mismatch {
+                err(step_path, ValidationErrorKind::StepModeMismatch);
+            }
         }
     }
 }
@@ -209,8 +233,10 @@ mod tests {
             after_last_pass: AfterLastPass::Clear,
             lanes: vec![Lane {
                 layer: "BG".into(),
+                mode: crate::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
                 steps: vec![Step {
+                    column: None,
                     clip: Some(ClipRef {
                         name: Some("Tunnel".into()),
                         ..Default::default()

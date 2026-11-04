@@ -5,9 +5,11 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::index::CompositionIndex;
 use crate::model::{
-    AfterLastPass, ClipRef, Deck, Lane, LaneEnd, Repeat, SeqFile, Sequence, Start, Step,
+    AfterLastPass, ClipRef, Deck, Lane, LaneEnd, LaneMode, Repeat, SeqFile, Sequence, Start, Step,
 };
+use crate::resolve::convert_steps;
 use crate::validate::{validate, ValidationError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,6 +71,12 @@ pub enum EditOp {
         lane: usize,
         end: LaneEnd,
     },
+    /// Switches a lane between clip and slot mode, converting its steps (SPEC §9.3).
+    SetLaneMode {
+        seq: Uuid,
+        lane: usize,
+        mode: LaneMode,
+    },
     /// `index` may equal the step count (append).
     InsertStep {
         seq: Uuid,
@@ -101,6 +109,13 @@ pub enum EditOp {
         index: usize,
         clip: Option<ClipRef>,
     },
+    /// Slot lanes: set the column (or a rest with `None`).
+    SetStepColumn {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        column: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -115,8 +130,19 @@ pub enum EditError {
     Invalid(Vec<ValidationError>),
 }
 
-/// Applies `op` to a copy of `file` and validates the result.
+/// Applies `op` to a copy of `file` and validates the result. Without an index,
+/// [`EditOp::SetLaneMode`] turns every step into a rest; use [`apply_with`].
 pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
+    apply_with(file, op, None)
+}
+
+/// [`apply`] with the clip index of the edited sequence's deck, which lane mode changes use to
+/// convert steps (a clip's column, or the clip in a slot).
+pub fn apply_with(
+    file: &SeqFile,
+    op: &EditOp,
+    index: Option<&CompositionIndex>,
+) -> Result<SeqFile, EditError> {
     let mut f = file.clone();
     match op {
         EditOp::CreateSequence {
@@ -137,6 +163,7 @@ pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
                     after_last_pass: AfterLastPass::Clear,
                     lanes: vec![Lane {
                         layer: layer.clone(),
+                        mode: LaneMode::Clip,
                         end: LaneEnd::LoopToEnd,
                         steps: Vec::new(),
                     }],
@@ -164,6 +191,7 @@ pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
         EditOp::SetAfterLastPass { seq, value } => seq_mut(&mut f, *seq)?.after_last_pass = *value,
         EditOp::AddLane { seq, layer } => seq_mut(&mut f, *seq)?.lanes.push(Lane {
             layer: layer.clone(),
+            mode: LaneMode::Clip,
             end: LaneEnd::LoopToEnd,
             steps: Vec::new(),
         }),
@@ -188,6 +216,13 @@ pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
             lane_mut(&mut f, *seq, *lane)?.layer = layer.clone()
         }
         EditOp::SetLaneEnd { seq, lane, end } => lane_mut(&mut f, *seq, *lane)?.end = *end,
+        EditOp::SetLaneMode { seq, lane, mode } => {
+            let l = lane_mut(&mut f, *seq, *lane)?;
+            if l.mode != *mode {
+                l.steps = convert_steps(l, *mode, index);
+                l.mode = *mode;
+            }
+        }
         EditOp::InsertStep {
             seq,
             lane,
@@ -235,6 +270,12 @@ pub fn apply(file: &SeqFile, op: &EditOp) -> Result<SeqFile, EditError> {
             index,
             clip,
         } => step_mut(&mut f, *seq, *lane, *index)?.clip = clip.clone(),
+        EditOp::SetStepColumn {
+            seq,
+            lane,
+            index,
+            column,
+        } => step_mut(&mut f, *seq, *lane, *index)?.column = *column,
     }
     validate(&f).map_err(EditError::Invalid)?;
     Ok(f)
@@ -327,10 +368,7 @@ mod tests {
                     seq: A,
                     lane: 0,
                     index: i,
-                    step: Step {
-                        clip: clip(n),
-                        length: 8,
-                    },
+                    step: Step::clip(clip(n), 8),
                 },
             )
             .unwrap();
@@ -623,5 +661,106 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(insert, EditOp::InsertStep { .. }));
+    }
+
+    #[test]
+    fn lane_mode_and_step_column() {
+        use crate::index::test_support::Builder;
+        // BG: [a(1), b(2), empty]
+        let idx = Builder::new(3)
+            .layer("BG", &[Some((1, "a", None)), Some((2, "b", None)), None])
+            .build();
+        let f = base(); // steps a, b, c (c is not in the index)
+        let to_slot = EditOp::SetLaneMode {
+            seq: A,
+            lane: 0,
+            mode: LaneMode::Slot,
+        };
+        let f = apply_with(&f, &to_slot, Some(&idx)).unwrap();
+        let lane = &f.find_sequence(A).unwrap().1.lanes[0];
+        assert_eq!(lane.mode, LaneMode::Slot);
+        let cols: Vec<_> = lane.steps.iter().map(|s| s.column).collect();
+        assert_eq!(cols, [Some(1), Some(2), None]);
+
+        let f = apply(
+            &f,
+            &EditOp::SetStepColumn {
+                seq: A,
+                lane: 0,
+                index: 2,
+                column: Some(3),
+            },
+        )
+        .unwrap();
+        // Column 0 and a clip in a slot lane are rejected.
+        for bad in [
+            EditOp::SetStepColumn {
+                seq: A,
+                lane: 0,
+                index: 0,
+                column: Some(0),
+            },
+            EditOp::SetStepClip {
+                seq: A,
+                lane: 0,
+                index: 0,
+                clip: clip("a"),
+            },
+            EditOp::InsertStep {
+                seq: A,
+                lane: 0,
+                index: 0,
+                step: Step::clip(clip("a"), 8),
+            },
+        ] {
+            assert!(
+                matches!(apply(&f, &bad), Err(EditError::Invalid(_))),
+                "{bad:?}"
+            );
+        }
+        let f = apply(
+            &f,
+            &EditOp::InsertStep {
+                seq: A,
+                lane: 0,
+                index: 3,
+                step: Step::slot(Some(1), 4),
+            },
+        )
+        .unwrap();
+
+        // Back to clips: what is in each slot now; column 3 is empty.
+        let to_clip = EditOp::SetLaneMode {
+            seq: A,
+            lane: 0,
+            mode: LaneMode::Clip,
+        };
+        let f = apply_with(&f, &to_clip, Some(&idx)).unwrap();
+        assert_eq!(names(&f), ["a", "b", "-", "a"]);
+    }
+
+    #[test]
+    fn step_edit_op_json_shapes() {
+        let op: EditOp = serde_json::from_str(
+            r#"{"op":"insert_step","seq":"00000000-0000-0000-0000-000000000001","lane":0,"index":0,"step":{"column":3,"length":8}}"#,
+        )
+        .unwrap();
+        assert!(matches!(op, EditOp::InsertStep { step, .. } if step == Step::slot(Some(3), 8)));
+        let op: EditOp = serde_json::from_str(
+            r#"{"op":"insert_step","seq":"00000000-0000-0000-0000-000000000001","lane":0,"index":0,"step":{"clip":null,"length":8}}"#,
+        )
+        .unwrap();
+        assert!(matches!(op, EditOp::InsertStep { step, .. } if step == Step::clip(None, 8)));
+        let op: EditOp = serde_json::from_str(
+            r#"{"op":"set_lane_mode","seq":"00000000-0000-0000-0000-000000000001","lane":0,"mode":"slot"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            op,
+            EditOp::SetLaneMode {
+                mode: LaneMode::Slot,
+                ..
+            }
+        ));
     }
 }

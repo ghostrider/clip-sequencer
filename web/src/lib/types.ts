@@ -8,10 +8,14 @@ export interface ClipRef {
   file?: string;
 }
 
+/** Clip lanes use `clip`, slot lanes `column` (1-based, SPEC §4.5); `null` is a rest. */
 export interface Step {
-  clip: ClipRef | null;
+  clip?: ClipRef | null;
+  column?: number | null;
   length: number;
 }
+
+export type LaneMode = 'clip' | 'slot';
 
 export type LaneEnd = 'loop_to_end' | 'hold' | 'clear';
 export type AfterLastPass = 'clear' | 'hold';
@@ -19,6 +23,8 @@ export type Repeat = { mode: 'once' } | { mode: 'count'; count: number } | { mod
 
 export interface Lane {
   layer: string;
+  /** Omitted for clip lanes. */
+  mode?: LaneMode;
   end: LaneEnd;
   steps: Step[];
 }
@@ -39,9 +45,10 @@ export interface Methods {
 }
 
 export interface StepResolution {
-  state: 'rest' | 'ok' | 'unresolved';
+  /** Slot steps: `slot` (the slot holds `clip_id`) or `empty` (plays as a rest). */
+  state: 'rest' | 'ok' | 'unresolved' | 'slot' | 'empty';
   clip_id: number | null;
-  by: 'id' | 'name' | 'file' | null;
+  by: 'id' | 'name' | 'file' | 'slot' | null;
   ambiguous: boolean;
   other_layer: boolean;
   methods: Methods;
@@ -92,6 +99,8 @@ export interface DeckView {
   ambiguous: boolean;
   clips_source: 'live' | 'cached' | 'none';
   layers: LayerView[];
+  /** Columns in the deck's clip data (0 without clip data). */
+  columns: number;
   sequences: SequenceView[];
   unmatched_seq_clips: string[];
 }
@@ -157,11 +166,13 @@ export type EditOp =
   | { op: 'move_lane'; seq: Uuid; from: number; to: number }
   | { op: 'set_lane_layer'; seq: Uuid; lane: number; layer: string }
   | { op: 'set_lane_end'; seq: Uuid; lane: number; end: LaneEnd }
+  | { op: 'set_lane_mode'; seq: Uuid; lane: number; mode: LaneMode }
   | { op: 'insert_step'; seq: Uuid; lane: number; index: number; step: Step }
   | { op: 'remove_step'; seq: Uuid; lane: number; index: number }
   | { op: 'set_step_length'; seq: Uuid; lane: number; index: number; length: number }
   | { op: 'move_step'; seq: Uuid; lane: number; from: number; to: number }
-  | { op: 'set_step_clip'; seq: Uuid; lane: number; index: number; clip: ClipRef | null };
+  | { op: 'set_step_clip'; seq: Uuid; lane: number; index: number; clip: ClipRef | null }
+  | { op: 'set_step_column'; seq: Uuid; lane: number; index: number; column: number | null };
 
 export type Command =
   | { cmd: 'start'; seq: Uuid }

@@ -7,7 +7,9 @@
 //!
 //! Actions name clips and layers by **Resolume id**, not position: ids follow clips and layers
 //! when columns or layers are inserted while a sequence runs (`docs/resolume-api-notes.md`
-//! §2.1). The engine maps them to the current OSC address at send time.
+//! §2.1). The engine maps them to the current OSC address at send time. Slot lane steps are the
+//! exception (SPEC §4.5): they name a column on the lane's layer, and the engine triggers
+//! whatever is in that slot when the step starts.
 //!
 //! Timing: a start emits its first steps immediately (position 0). Each [`Scheduler::on_tick`]
 //! advances every running sequence by one tick (24 PPQN, 6 ticks per sixteenth) and emits what
@@ -38,6 +40,9 @@ pub enum StepTarget {
     Rest,
     /// Clip could not be resolved: nothing is triggered (SPEC §4.3).
     Unresolved,
+    /// Slot lane: trigger what is in this 1-based column of the lane's layer when the step
+    /// starts; an empty slot clears the layer like a rest (SPEC §4.5).
+    Slot(u32),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +103,7 @@ impl RunSpec {
                             StepResolution::Rest => StepTarget::Rest,
                             StepResolution::Resolved { clip, .. } => StepTarget::Clip(clip.clip_id),
                             StepResolution::Unresolved { .. } => StepTarget::Unresolved,
+                            StepResolution::Slot { column, .. } => StepTarget::Slot(*column),
                         },
                     })
                     .collect(),
@@ -190,6 +196,15 @@ pub enum Action {
         clip_id: u64,
         layer_id: u64,
     },
+    /// Trigger whatever is in `column` of the lane's layer now; clear the layer if the slot is
+    /// empty (SPEC §4.5). The engine decides which, from its newest view of the slot.
+    TriggerSlot {
+        seq: Uuid,
+        lane: usize,
+        step: usize,
+        column: u32,
+        layer_id: u64,
+    },
     /// Clear this layer (OSC).
     Clear {
         seq: Uuid,
@@ -221,6 +236,17 @@ pub enum Action {
         reason: EndReason,
         origin: Origin,
     },
+}
+
+/// A slot lane step that starts a given number of ticks from now (see
+/// [`Scheduler::slot_steps_ahead`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpcomingSlot {
+    pub seq: Uuid,
+    pub lane: usize,
+    pub step: usize,
+    pub layer_id: u64,
+    pub column: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -485,6 +511,60 @@ impl Scheduler {
         }
     }
 
+    /// Slot lane steps that will start exactly `ahead` ticks from now (≥ 1), assuming no start,
+    /// stop or yield happens meanwhile. The engine calls this on every tick with the same
+    /// `ahead` to read each such slot shortly before its step (SPEC §4.5); each upcoming step
+    /// is reported once. Only lanes that will trigger are included (playing, or yielded with a
+    /// resume pending).
+    pub fn slot_steps_ahead(&self, ahead: u64) -> Vec<UpcomingSlot> {
+        let mut out = Vec::new();
+        if ahead == 0 {
+            return out;
+        }
+        for run in &self.runs {
+            let mut at = run.pos + ahead;
+            if at >= run.pass_ticks {
+                let passes_left = run
+                    .spec
+                    .passes()
+                    .map_or(u64::MAX, |n| u64::from(n.saturating_sub(run.pass)));
+                let wraps = at / run.pass_ticks;
+                if wraps > passes_left {
+                    continue;
+                }
+                at %= run.pass_ticks;
+            }
+            for (lane, rt) in run.lanes.iter().enumerate() {
+                let will_play = matches!(
+                    rt.state,
+                    LaneState::Playing
+                        | LaneState::Yielded {
+                            resume_pending: true
+                        }
+                );
+                if !will_play {
+                    continue;
+                }
+                let spec = &run.spec.lanes[lane];
+                let Some(step) = rt.step_starting_at(spec.end, at) else {
+                    continue;
+                };
+                if let (StepTarget::Slot(column), Some(layer_id)) =
+                    (spec.steps[step].target, spec.layer_id)
+                {
+                    out.push(UpcomingSlot {
+                        seq: run.spec.seq_id,
+                        lane,
+                        step,
+                        layer_id,
+                        column,
+                    });
+                }
+            }
+        }
+        out
+    }
+
     /// Advances every running sequence by one tick.
     pub fn on_tick(&mut self) -> Vec<Action> {
         let mut out = Vec::new();
@@ -615,6 +695,13 @@ fn step_actions(run: &Run, lane: usize, step: usize) -> Vec<Action> {
             layer_id,
         }),
         StepTarget::Unresolved => {}
+        StepTarget::Slot(column) => out.push(Action::TriggerSlot {
+            seq,
+            lane,
+            step,
+            column,
+            layer_id,
+        }),
     }
     out
 }

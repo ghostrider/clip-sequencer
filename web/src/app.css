@@ -157,6 +157,15 @@ button, input, select { font: inherit; }
 .browser { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
 .clip.pickable { cursor: pointer; outline: 1px dashed var(--accent-line); border-radius: 4px; }
 .thumb { background: var(--control); background-size: cover; background-position: center; }
+/* Column number on clip browser thumbnails (SPEC §9.4): the number a slot lane step uses. */
+.clip .thumb { position: relative; }
+.col-badge { position: absolute; top: 2px; left: 2px; min-width: 14px; padding: 0 3px; border-radius: 3px; font-size: 9px; line-height: 13px; text-align: center; background: color-mix(in srgb, var(--bg) 80%, transparent); color: var(--text-2); }
+/* Lane mode switch (SPEC §9.3), same look as the repeat control. */
+.mode-switch { display: flex; border: 1px solid var(--line-strong); border-radius: 4px; overflow: hidden; }
+.mode-switch button { border: 0; background: var(--control); color: var(--text-2); font-size: 11px; padding: 2px 6px; cursor: pointer; }
+.mode-switch button + button { border-left: 1px solid var(--line-strong); }
+.mode-switch button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; }
+.step.slot-step .name { font-family: var(--mono); }
 .thumb.unres { border: 1px dashed var(--err); background-color: var(--err-bg); }
 .thumb.rest { border: 1px dashed var(--line-strong); background: transparent; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
