@@ -8,7 +8,8 @@
 // Usage: node scripts/third-party-licenses.mjs [--out-dir <dir>]   (default: repository root)
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,18 +27,20 @@ const version = /\[workspace\.package\][^[]*?\nversion = "([^"]+)"/.exec(read('C
 if (!version) fail('no version in [workspace.package] of Cargo.toml');
 
 // --- Rust crates -------------------------------------------------------------------------------
+// cargo-about writes to a file (-o): it refuses to print to a redirected stdout when started from PowerShell.
 let about;
+const aboutDir = mkdtempSync(join(tmpdir(), 'cargo-about-'));
 try {
-  about = JSON.parse(
-    execFileSync('cargo', ['about', 'generate', '--format', 'json'], {
-      cwd: root,
-      encoding: 'utf8',
-      maxBuffer: 256 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'inherit'],
-    }),
-  );
+  const out = join(aboutDir, 'about.json');
+  execFileSync('cargo', ['about', 'generate', '--format', 'json', '-o', out], {
+    cwd: root,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+  about = JSON.parse(readFileSync(out, 'utf8'));
 } catch (e) {
   fail(`cargo about failed (${e.message}). Install it: cargo install --locked cargo-about --features cli`);
+} finally {
+  rmSync(aboutDir, { recursive: true, force: true });
 }
 
 const texts = []; // distinct license texts
