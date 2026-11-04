@@ -136,3 +136,42 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [ ] Live check in Resolume (Uli): swap clips in slots and drop media onto the playing slot while a
       slot sequence runs; also whether the slot's thumbnail updates after a media drop (Resolume kept
       its `last_update`, notes §15; the UI keys thumbnails by content as well).
+
+## M14 — In-app update  (planned 2026-11-04, not started)
+Goal: the app finds a newer release on GitHub, downloads it and replaces itself, so users don't have to download
+and unzip by hand. Work out the details in SPEC first (new section), then build it.
+
+Design points to settle in SPEC:
+- **Opt-in, and the privacy texts.** Today the privacy note, the code signing policy (`site/landing/privacy.html`,
+  `code-signing.html`: "no update check") and SECURITY.md promise that the app contacts nothing but Resolume. An
+  update check changes that: make it a setting (ask once on first start, or off by default, and "Help → Check for
+  updates…" always by hand), and update all three texts in the same change.
+- **Source:** `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login; 60
+  requests per hour per IP is plenty for one check per start). Compare semver with our version; ignore drafts and
+  pre-releases. Show the release notes and the version before anything is downloaded.
+- **Download and verify:** the zip and `SHA256SUMS.txt` of that release; check the hash, and, once releases are
+  signed (SignPath, M11 "Later"), that all programs in it carry a valid Authenticode signature by the expected
+  signer (WinVerifyTrust). The hash alone comes from the same place as the zip, so the signature check is the
+  real protection. No update from an unsigned or mismatching zip.
+- **Replacing the running app:** Windows can't overwrite a running exe but can rename it. Unpack into a temp
+  folder next to the app, rename the current files to `*.old` (or move them to `previous\`), move the new ones
+  in, restart, and remove the old files after the new version started cleanly; on failure, put the old ones back.
+  Only the files of the `clip-sequencer` folder are touched; the data folder (`%APPDATA%\clip-sequencer`) never.
+  If the folder isn't writable (e.g. under Program Files), say so and open the release page instead.
+- **Never during a show:** no download or restart while a sequence runs; all network work in its own task, never
+  on the timing path (CLAUDE.md ground rules). The restart asks first, like closing while a sequence runs.
+- **FFGL plugin:** after the update, the existing "FFGL plugin update available · Update…" hint does the rest.
+- **Desktop and console:** the dialog in the desktop app (and the browser UI); `seq-app-cli --check-update` /
+  `--update` for headless setups.
+- **Not the Tauri updater plugin:** it needs a signed update manifest and Tauri's bundles, and we don't use the
+  bundler (M12). A small own implementation with `reqwest` (needs TLS, e.g. rustls; check `cargo deny`) and `zip`.
+
+Tasks (to refine when it starts):
+- [ ] SPEC section: settings, flow, files touched, failure and rollback, privacy.
+- [ ] Update check + download + verification module in `seq-app`, with tests (version compare, hash, zip layout,
+      rollback) against a local fake release server.
+- [ ] Self-replace and restart, cleanup of the old files on the next start.
+- [ ] UI: setting, "Help → Check for updates…", update dialog with notes and progress; CLI flags.
+- [ ] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
+- [ ] Test on Windows: update from the previous release to a test release (signed via test-signing), a failed
+      download, a read-only folder, Resolume running with the plugin loaded.
