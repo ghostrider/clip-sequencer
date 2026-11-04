@@ -43,7 +43,9 @@ const body = lines
 if (!body) fail(`the "## [${version}]" section of CHANGELOG.md is empty`);
 
 const notes = `${body}\n\n---\n\nDownload \`clip-sequencer-${version}-windows-x64.zip\`, check it against \`SHA256SUMS.txt\`, unzip and ` +
-  `run \`seq-app.exe\`. The exe is not code-signed: Windows SmartScreen may ask, choose "More info → Run anyway". ` +
-  `Manual: https://ghostrider.github.io/clip-sequencer/manual/\n`;
+  `run \`seq-app.exe\`. The programs are not code-signed, so your browser may block the download at first ` +
+  `(Chrome: "Dangerous download blocked"; keep it from the downloads list) and Windows SmartScreen may ask when you ` +
+  `start it (choose "More info → Run anyway"). ` +
+  `Installation help: https://ghostrider.github.io/clip-sequencer/manual/installation.html\n`;
 writeFileSync(out, notes);
 console.log(`release-notes: ${header.replace(/^## /, '')} -> ${out}`);

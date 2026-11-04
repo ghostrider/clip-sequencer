@@ -46,6 +46,9 @@ Start with the chips on the top bar and the **Console** tab: most problems show 
 
 ## Windows warnings
 
+- **"Dangerous download blocked" in Chrome** (German: "Gefährlicher Download blockiert"), or a similar warning in
+  another browser: the zip contains programs that aren't code-signed. Keep the download from the browser's
+  downloads list, check it against `SHA256SUMS.txt`, see [Installation](installation.md).
 - **"Windows protected your PC" (SmartScreen):** the app isn't code-signed. **More info → Run anyway**.
 - **"WebView2 Runtime not found":** install the Evergreen WebView2 Runtime from Microsoft, see
   [Installation](installation.md), or use `seq-app-cli.exe`.

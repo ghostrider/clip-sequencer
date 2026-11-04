@@ -25,6 +25,17 @@ The folder contains:
 | `README.md`, `CHANGELOG.md` | Short overview and the list of changes per version. |
 | `LICENSE`, `THIRD_PARTY_LICENSES.md`, `OFL.txt` | Licenses (also in the app under **Help → Licenses**). |
 
+### If the browser blocks the download
+
+The zip contains programs that aren't code-signed, so browsers may block it at first. Chrome says **"Dangerous
+download blocked"** (in German: "Gefährlicher Download blockiert"). To keep it: open the downloads list
+(`chrome://downloads`), find the file and choose the option to keep or download it anyway (the exact wording depends
+on the Chrome version; in newer versions it's behind the ⋮ menu of the download). Edge and Firefox show similar
+warnings.
+
+Check the file before you run anything: the hash from step 3 must match `SHA256SUMS.txt` of the release. Then you
+know it is the file GitHub built from the published source.
+
 ## First start
 
 Double-click **`seq-app.exe`**.
