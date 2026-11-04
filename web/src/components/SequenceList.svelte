@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, SIXTEENTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
+  import { app, EIGHTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
   import type { SequenceView } from '../lib/types';
 
   let deck = $derived(app.viewDeck);
@@ -10,7 +10,7 @@
   let resolumeDecks = $derived([...new Set(app.decks.filter((d) => !d.orphaned).map((d) => d.name))]);
 
   function bars(v: SequenceView) {
-    const b = v.pass_sixteenths / SIXTEENTHS_PER_BAR;
+    const b = v.pass_eighths / EIGHTHS_PER_BAR;
     return Number.isInteger(b) ? `${b}` : b.toFixed(2);
   }
 

@@ -371,8 +371,7 @@ void Renderer::Draw( const View& view, double posTicks, int width, int height, c
 
 	// ---- header: name, deck/length, state ----
 	const float nameW = Text( margin, margin + title * 0.8f, title, L.name, kText, W * 0.6f );
-	const float unitsPerBar = static_cast< float >( std::max< uint32_t >( L.unitsPerBar, 1 ) );
-	const float bars  = L.passUnits / unitsPerBar;
+	const float bars  = L.passEighths / 8.0f;
 	const std::string sub = L.deck + "  \xC2\xB7  " + ( std::fmod( bars, 1.0f ) == 0 ? Format( "%.0f bars", bars ) : Format( "%.1f bars", bars ) );
 	Text( margin + std::min( nameW, W * 0.6f ) + 24 * u, margin + title * 0.8f, 32 * u, sub, kMuted, W * 0.25f );
 	std::string state = "idle";
@@ -396,14 +395,13 @@ void Renderer::Draw( const View& view, double posTicks, int width, int height, c
 	const float headW   = std::min( 260 * u, W * 0.18f );
 	const float x0      = margin + headW;
 	const float x1      = W - margin;
-	const float pass    = static_cast< float >( std::max< uint32_t >( L.passUnits, 1 ) );
-	const float perUnit = ( x1 - x0 ) / pass;
-	const double ticksPerUnit = 96.0 / unitsPerBar; // 24 PPQN, 4/4: 12 per eighth, 6 per sixteenth
+	const float pass    = static_cast< float >( std::max< uint32_t >( L.passEighths, 1 ) );
+	const float perEighth = ( x1 - x0 ) / pass;
 	const float lanesBottom = top + n * rowH + ( n - 1 ) * rowGap;
 
 	Fill( x0, top, x1, lanesBottom, kTrack );
-	for( float e = 0; e <= pass + 0.001f; e += unitsPerBar )
-		Fill( x0 + e * perUnit - 1 * u, top, x0 + e * perUnit + 1 * u, lanesBottom, kLineStrong );
+	for( float e = 0; e <= pass + 0.001f; e += 8 )
+		Fill( x0 + e * perEighth - 1 * u, top, x0 + e * perEighth + 1 * u, lanesBottom, kLineStrong );
 
 	for( size_t li = 0; li < L.lanes.size(); ++li )
 	{
@@ -425,9 +423,9 @@ void Renderer::Draw( const View& view, double posTicks, int width, int height, c
 		for( size_t si = 0; si < lane.steps.size() && e < pass; ++si )
 		{
 			const Step& st = lane.steps[ si ];
-			const float bx0 = x0 + e * perUnit + 2 * u;
-			e += static_cast< float >( st.units );
-			const float bx1 = x0 + std::min( e, pass ) * perUnit - 2 * u;
+			const float bx0 = x0 + e * perEighth + 2 * u;
+			e += static_cast< float >( st.eighths );
+			const float bx1 = x0 + std::min( e, pass ) * perEighth - 2 * u;
 			const float by0 = y0 + 6 * u, by1 = y1 - 6 * u;
 			const bool playing = R.running && ls && ls->state == "playing" && ls->step == static_cast< int >( si );
 			if( st.kind == StepKind::Rest )
@@ -461,7 +459,7 @@ void Renderer::Draw( const View& view, double posTicks, int width, int height, c
 	// ---- playhead ----
 	if( R.running )
 	{
-		const float x = x0 + static_cast< float >( posTicks / ticksPerUnit ) * perUnit;
+		const float x = x0 + static_cast< float >( posTicks / 12.0 ) * perEighth;
 		Fill( x - 2 * u, top - 10 * u, x + 2 * u, lanesBottom, kAccent );
 	}
 

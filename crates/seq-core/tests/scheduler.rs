@@ -673,17 +673,17 @@ fn run_spec_from_sequence_and_resolution() {
                     Step {
                         column: None,
                         clip: named("A"),
-                        length: 16,
+                        length: 8,
                     },
                     Step {
                         column: None,
                         clip: None,
-                        length: 4,
+                        length: 2,
                     },
                     Step {
                         column: None,
                         clip: named("Missing"),
-                        length: 2,
+                        length: 1,
                     },
                 ],
             },
@@ -694,7 +694,7 @@ fn run_spec_from_sequence_and_resolution() {
                 steps: vec![Step {
                     column: None,
                     clip: named("A"),
-                    length: 8,
+                    length: 4,
                 }],
             },
         ],
@@ -821,29 +821,4 @@ fn slot_lookahead_skips_lanes_that_will_not_trigger() {
     }
     let up = s.slot_steps_ahead(4);
     assert_eq!((up[0].step, up[0].column), (0, 1));
-}
-
-#[test]
-fn a_sixteenth_is_six_ticks() {
-    use seq_core::index::CompositionIndex;
-    use seq_core::resolve::resolve_sequence;
-    use seq_core::{Lane, Sequence, Step};
-    let idx = CompositionIndex::new("S".into(), vec![], None, vec![], vec![], vec![]);
-    let sequence = Sequence {
-        id: seq(4),
-        name: "S".into(),
-        start: seq_core::Start::Immediate,
-        repeat: Repeat::Once,
-        after_last_pass: AfterLastPass::Clear,
-        lanes: vec![Lane {
-            layer: "BG".into(),
-            mode: seq_core::LaneMode::Slot,
-            end: LaneEnd::Hold,
-            steps: vec![Step::slot(Some(1), 1), Step::slot(Some(1), 3)],
-        }],
-    };
-    let rs = RunSpec::new(&sequence, &resolve_sequence(&sequence, &idx));
-    let ticks: Vec<_> = rs.lanes[0].steps.iter().map(|s| s.ticks).collect();
-    assert_eq!(ticks, [6, 18]);
-    assert_eq!(rs.pass_ticks(), 24);
 }

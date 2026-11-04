@@ -247,18 +247,16 @@ int PlayheadX( const Frame& f, int y0, int y1 )
 	return -1;
 }
 
-//! The same two-bar view in SEQVIEW 1 (eighths) or, with `sixteenths`, SEQVIEW 2 (sixteenths).
-std::string Response( bool withLayout, uint64_t pos, bool sixteenths = false )
+std::string Response( bool withLayout, uint64_t pos )
 {
-	const int k = sixteenths ? 2 : 1;
-	std::string s = sixteenths ? "SEQVIEW 2\nstatus ok\nrev abc\n" : "SEQVIEW 1\nstatus ok\nrev abc\n";
+	std::string s = "SEQVIEW 1\nstatus ok\nrev abc\n";
 	if( withLayout )
-		s += "layout\nname Loop\ndeck Act 1\npass " + std::to_string( 16 * k ) + "\n"
+		s += "layout\nname Loop\ndeck Act 1\npass 16\n"
 		     "lane ok loop_to_end BG\n"
-		     "step clip " + std::to_string( 8 * k ) + " 7 v1 Tunnel Red\n"
-		     "step rest " + std::to_string( 8 * k ) + " 0 - rest\n"
+		     "step clip 8 7 v1 Tunnel Red\n"
+		     "step rest 8 0 - rest\n"
 		     "lane ok hold FX\n"
-		     "step unresolved " + std::to_string( 16 * k ) + " 0 - Glitch Bars\n"
+		     "step unresolved 16 0 - Glitch Bars\n"
 		     "endlayout\n";
 	s += "run 1 " + std::to_string( pos ) + " 192 2 4 1.3\nlanestate 0 playing 0\nlanestate 1 playing 0\nclock 0 0\nend\n";
 	return s;
@@ -278,10 +276,10 @@ void ParserTests()
 	View v;
 	CHECK( ParseView( Response( true, 48 ), v ), "full response parses" );
 	CHECK( v.status == Status::Ok && v.rev == "abc" && v.hasLayout, "status/rev/layout" );
-	CHECK( v.layout.name == "Loop" && v.layout.deck == "Act 1" && v.layout.passUnits == 16 && v.layout.unitsPerBar == 8, "header fields (deck with a space)" );
+	CHECK( v.layout.name == "Loop" && v.layout.deck == "Act 1" && v.layout.passEighths == 16, "header fields (deck with a space)" );
 	CHECK( v.layout.lanes.size() == 2 && v.layout.lanes[ 0 ].layer == "BG" && v.layout.lanes[ 1 ].end == "hold", "lanes" );
 	const Step& s0 = v.layout.lanes[ 0 ].steps[ 0 ];
-	CHECK( s0.kind == StepKind::Clip && s0.units == 8 && s0.clipId == 7 && s0.thumb == "v1" && s0.label == "Tunnel Red", "clip step" );
+	CHECK( s0.kind == StepKind::Clip && s0.eighths == 8 && s0.clipId == 7 && s0.thumb == "v1" && s0.label == "Tunnel Red", "clip step" );
 	CHECK( v.layout.lanes[ 0 ].steps[ 1 ].kind == StepKind::Rest && v.layout.lanes[ 0 ].steps[ 1 ].thumb.empty(), "rest step" );
 	CHECK( v.layout.lanes[ 1 ].steps[ 0 ].kind == StepKind::Unresolved && v.layout.lanes[ 1 ].steps[ 0 ].label == "Glitch Bars", "unresolved step" );
 	CHECK( v.runtime.running && v.runtime.pos == 48 && v.runtime.passTicks == 192 && v.runtime.pass == 2 && v.runtime.passes == 4 &&
@@ -299,12 +297,6 @@ void ParserTests()
 	View bad;
 	CHECK( !ParseView( "<html>nope</html>", bad ) && bad.status == Status::BadResponse, "foreign response rejected" );
 	CHECK( !ParseView( "SEQVIEW 1\nstatus ok\nlayout\nname x\n", bad ), "truncated response rejected" );
-	// SEQVIEW 2: lengths in sixteenths; the runtime-only update keeps the layout and its unit.
-	View v2;
-	CHECK( ParseView( Response( true, 0, true ), v2 ), "SEQVIEW 2 parses" );
-	CHECK( v2.layout.unitsPerBar == 16 && v2.layout.passUnits == 32 && v2.layout.lanes[ 0 ].steps[ 0 ].units == 16, "SEQVIEW 2 units" );
-	CHECK( ParseView( Response( false, 96, true ), v2 ) && v2.layout.unitsPerBar == 16 && v2.runtime.pos == 96, "SEQVIEW 2 runtime update" );
-	CHECK( !ParseView( "SEQVIEW 3\nstatus ok\nend\n", bad ), "unknown SEQVIEW version rejected" );
 	CHECK( UrlEncode( "\xC2\xA7 a1&b" ) == "%C2%A7%20a1%26b", "url encoding (%s)", UrlEncode( "\xC2\xA7 a1&b" ).c_str() );
 }
 }// namespace
@@ -396,30 +388,6 @@ int main( int argc, char** argv )
 		CHECK( px8 > px4 && std::abs( ( px8 - px4 ) - timeline * 4 / 16 ) < 3, "playhead advanced by a quarter (%d -> %d, expected %.1f)",
 		       px4, px8, timeline * 4 / 16 );
 
-		// The same view as SEQVIEW 2 (sixteenths): identical geometry, the playhead at the same place.
-		seqview::View v16;
-		CHECK( seqview::ParseView( Response( true, 96, true ), v16 ), "SEQVIEW 2 fixture parses" );
-		plugin.InjectForTest( v16, { red } );
-		Frame c = host.Step( plugin, true );
-		SavePreview( outDir / "03b_view_pos8_sixteenths.png", c );
-		const int px8s = PlayheadX( c, 160, H - 60 );
-		CHECK( std::abs( px8s - px8 ) <= 1, "SEQVIEW 2 playhead matches SEQVIEW 1 (%d vs %d)", px8s, px8 );
-		// Compared with the SEQVIEW 1 frame at the same position (b): the blocks are the same size.
-		const size_t red16 = Count( c, 0, 0, W, H / 2 + 60, kRed, 10 ), red8 = Count( b, 0, 0, W, H / 2 + 60, kRed, 10 );
-		CHECK( red8 > 5000 && red16 == red8, "SEQVIEW 2 thumbnail block has the same size (%zu vs %zu)", red16, red8 );
-		// A 1/16 step: 1 of 32 units wide; the playhead at 6 ticks sits one sixteenth in.
-		CHECK( seqview::ParseView( "SEQVIEW 2\nstatus ok\nrev s1\nlayout\nname S\ndeck D\npass 32\nlane ok hold BG\n"
-		                           "step clip 1 7 v1 Tiny\nstep rest 31 0 - rest\nendlayout\n"
-		                           "run 1 6 192 1 1 1.1\nlanestate 0 playing 0\nclock 1 128\nend\n",
-		                           v16 ),
-		       "1/16 view parses" );
-		plugin.InjectForTest( v16, {} );
-		Frame d = host.Step( plugin, true );
-		SavePreview( outDir / "03c_sixteenth_step.png", d );
-		const int px1 = PlayheadX( d, 160, H - 60 );
-		const float x0px = 32 * u + std::min( 260 * u, W * 0.18f );
-		CHECK( std::abs( ( px1 - x0px ) - timeline / 32 ) < 3, "playhead one sixteenth in (%d, expected %.1f)", px1, x0px + timeline / 32 );
-
 		// Not running: no playhead.
 		CHECK( seqview::ParseView( "SEQVIEW 1\nstatus ok\nrev abc\nrun 0\nclock 0 0\nend\n", v ), "stop parses" );
 		plugin.InjectForTest( v, {} );
@@ -451,9 +419,8 @@ int main( int argc, char** argv )
 		std::vector< uint8_t > redPng = EncodePng( SolidRgba( 64, 36, 255, 0, 0 ).data(), 64, 36 );
 		MiniHttp server( [ & ]( const std::string& path ) {
 			MiniResponse r;
-			// The plugin asks for SEQVIEW 2 (lengths in sixteenths).
-			if( path.rfind( "/plugin/v1/view.txt?format=2&name=Loop", 0 ) == 0 )
-				r.body = Response( path.find( "&rev=abc" ) == std::string::npos, 48, true );
+			if( path.rfind( "/plugin/v1/view.txt?name=Loop", 0 ) == 0 )
+				r.body = Response( path.find( "&rev=abc" ) == std::string::npos, 48 );
 			else if( path.rfind( "/thumbs/clip/7.png?v=v1", 0 ) == 0 )
 				r.contentType = "image/png", r.body.assign( redPng.begin(), redPng.end() );
 			else
