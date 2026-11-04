@@ -27,7 +27,19 @@
   {#if rt?.save_error}
     <span style="color:var(--err-text)">save failed: {rt.save_error}</span>
   {/if}
+  {#if app.ffglHint}
+    <button class="statusbar-hint" onclick={() => app.openDialog('ffgl')}
+      title="File → Install FFGL plugin…">
+      {app.ffglHint === 'missing' ? 'FFGL plugin missing · Install…' : 'FFGL plugin update available · Update…'}
+    </button>
+  {/if}
   {#each notices as n, i (i + n)}
     <span style:color={isProblem(n) ? 'var(--err-text)' : 'var(--muted)'}>{n}</span>
   {/each}
 </footer>
+
+<style>
+  .statusbar-hint { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-text); text-decoration: underline;
+    cursor: pointer; }
+  .statusbar-hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+</style>

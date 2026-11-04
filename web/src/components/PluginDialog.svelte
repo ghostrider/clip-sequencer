@@ -51,6 +51,8 @@
 
   $effect(() => {
     load();
+    // Closing the dialog refreshes the status-bar hint (it disappears once the plugin is installed).
+    return () => app.checkFfgl();
   });
 
   function primary() {

@@ -435,7 +435,7 @@ before implementing.
 - [x] **After install:** "Restart Resolume Arena to load the plugin" (Resolume scans plugins at startup).
 - [x] **CLI:** `seq-app --install-ffgl [--ffgl-dir <path>]` does the same without the UI (exit code 0 = done,
       non-zero = error with a message), for scripting and for the NSIS installer to reuse.
-- [ ] **Startup hint (optional, ask Uli):** if the installed plugin is missing or older than the bundled one,
+- [x] **Startup hint (optional, ask Uli):** if the installed plugin is missing or older than the bundled one,
       show a one-line hint in the status bar ("FFGL plugin update available"). No automatic installs.
 - [x] **Uninstall:** a "Remove" button in the same dialog (deletes only the DLL the app installed). The NSIS
       uninstaller removes the DLL only if it installed it.
@@ -449,7 +449,9 @@ before implementing.
       updating, removing, and troubleshooting (plugin not showing up, "file in use").
 - [x] Landing page: list the plugin among the features.
 
-*(2026-11-04, done except the two open items; Windows-only parts written but not run here:*
+*(2026-11-04, done except `SHA256SUMS.txt` (Phase I); Windows-only parts written but not run here. Startup hint: yes
+  (Uli), worded "FFGL plugin missing · Install…" / "FFGL plugin update available · Update…" in the status bar,
+  clickable, release builds only:*
 - *Build: `ffgl/build.ps1` (scripted MSBuild, found via vswhere; `-Tests`, `-CheckDependencies` runs
   `dumpbin /dependents` and fails on any VC++ runtime DLL). Both projects link `/MT`; the SDK's `glew32s.lib` is
   built with `LIBCMT` too, so this also ends a runtime mix. `build_seqview.ps1` (Uli's build + copy) calls it; the

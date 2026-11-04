@@ -436,6 +436,10 @@ removes it in Resolume's plugin folder, so users don't copy files by hand.
 - **CLI:** `seq-app-cli --install-ffgl [--ffgl-dir <path>]` does the same without the UI (creates the folder if
   needed, never downgrades); exit code 0 = installed, 1 = error with a message.
 - Every install, update and removal is logged with the versions, the path and the result.
+- **Status-bar hint** (decided 2026-11-04): in a build that bundles the plugin, the status bar shows
+  "FFGL plugin missing · Install…" when there is no `SeqView.dll` in the target folder, or "FFGL plugin update
+  available · Update…" when ours is older. Clicking it opens the dialog. Checked when the UI connects and when the
+  dialog closes; nothing is installed automatically.
 
 ### 12.2 Requests from other web pages
 

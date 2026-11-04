@@ -2,7 +2,7 @@
 // sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
 
 import type {
-  ClipRef, ClipView, Command, DeckView, EditOp, LogRecord, LogStats, RunView, RuntimeState,
+  ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, LogRecord, LogStats, RunView, RuntimeState,
   SequenceView, StructureState, Uuid, VersionInfo,
 } from './types';
 
@@ -59,6 +59,8 @@ class AppState {
   prefsOpen = $state(false);
   /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
   dialog = $state<InfoDialog | null>(null);
+  /** Status-bar hint about the bundled FFGL plugin (M11 G3): missing in Resolume's folder, or an update. */
+  ffglHint = $state<'missing' | 'update' | null>(null);
   /** Browser UI only: page zoom set from the View menu (the desktop app zooms its window). */
   uiZoom = $state(loadUiZoom());
 
@@ -92,6 +94,7 @@ class AppState {
         })
         .catch(() => {});
       if (this.tab === 'console') this.send({ cmd: 'log_subscribe' });
+      this.checkFfgl();
     };
     ws.onclose = () => {
       this.connected = false;
@@ -115,6 +118,22 @@ class AppState {
 
   edit(op: EditOp) {
     this.send({ cmd: 'edit', op });
+  }
+
+  /** The FFGL plugin hint: only when this build bundles the plugin (a release), and only when it is missing
+   *  in Resolume's plugin folder or older there. Never installs anything by itself. */
+  async checkFfgl() {
+    try {
+      const r = await fetch('/api/ffgl');
+      if (!r.ok) return;
+      const s: FfglStatus = await r.json();
+      if (!s.bundled_version) this.ffglHint = null;
+      else if (!s.installed) this.ffglHint = 'missing';
+      else if (s.installed.ours && s.action === 'update') this.ffglHint = 'update';
+      else this.ffglHint = null;
+    } catch {
+      /* the hint is optional */
+    }
   }
 
   // ---- menus (M11 Phase F) ----

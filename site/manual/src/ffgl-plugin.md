@@ -33,6 +33,11 @@ its own `SeqView.dll`; a different file with that name is left alone and the dia
 If something goes wrong while copying, the previous version is put back, so a half-copied plugin is never left
 behind.
 
+When the plugin isn't installed yet, the status bar at the bottom of the window says
+**FFGL plugin missing · Install…**; after a new version of the sequencer it says
+**FFGL plugin update available · Update…**. Click it to open the dialog. The plugin is optional: if you don't use
+it, you can ignore the hint.
+
 ## Installing from the console
 
 ```powershell
