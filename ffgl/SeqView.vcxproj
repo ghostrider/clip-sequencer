@@ -72,13 +72,13 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <OptimizeReferences>true</OptimizeReferences>
@@ -110,6 +110,11 @@
     <None Include="build_seqview.ps1" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!--
+    C++ runtime: linked statically (/MT, MultiThreaded), so the DLL needs no Visual C++ Redistributable on the user's
+    machine (M11 Phase G3). The SDK's GLEW (glew32s.lib) is built with /MT too (/DEFAULTLIB:LIBCMT).
+    ffgl\build.ps1 -CheckDependencies verifies it with dumpbin.
+  -->
   <!--
     Build info (M11 Phase E), the same values as the app's build.rs: version from [workspace.package] in
     ../Cargo.toml (one version source), build number = git commit count, short commit (+ "-dirty"), UTC build

@@ -23,6 +23,11 @@ Write-Host '==> THIRD_PARTY_LICENSES.md' -ForegroundColor Cyan
 & node scripts\third-party-licenses.mjs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# FFGL plugin (Release x64, static C++ runtime; dumpbin checks there is no VC++ runtime dependency).
+Write-Host '==> FFGL plugin' -ForegroundColor Cyan
+& (Join-Path $PSScriptRoot '..\ffgl\build.ps1') -Configuration Release -CheckDependencies
+if (-not $?) { exit 1 }
+
 Write-Host '==> cargo build --release' -ForegroundColor Cyan
 & cargo build --release -p seq-app
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -41,6 +46,13 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage | Out-Null
 Copy-Item release\seq-app.exe, release\seq-app-cli.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.md, OFL.txt $stage
 if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md $stage }
+# The plugin next to the app: seq-app finds it at <exe folder>\ffgl\SeqView.dll (File > Install FFGL plugin...).
+New-Item -ItemType Directory (Join-Path $stage 'ffgl') | Out-Null
+Copy-Item ffgl\bin\x64\Release\SeqView.dll (Join-Path $stage 'ffgl')
+(Get-Content -Raw ffgl\README.release.txt).Replace('{{VERSION}}', $version) |
+    Set-Content -Encoding utf8 (Join-Path $stage 'ffgl\README.txt')
+# The .pdb is not shipped; keep it next to the zip for crash reports (release.yml uploads it as an artifact).
+Copy-Item ffgl\bin\x64\Release\SeqView.pdb (Join-Path release "SeqView-$version.pdb")
 $zip = Join-Path release "$name.zip"
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
