@@ -31,6 +31,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util = "0.7"
+# FFGL plugin installer (M11 G3): the Documents folder through the Windows Known Folder API.
+dirs = "7"
 # Desktop shell (M12 Phase D), only with the `desktop` feature.
 tauri = { version = "2", optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
@@ -56,6 +58,8 @@ desktop = [
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Console",
+    # FFGL plugin installer: is Resolume running (it locks loaded plugin DLLs)?
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

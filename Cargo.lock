@@ -3590,6 +3590,7 @@ dependencies = [
  "axum",
  "clap",
  "clock-in",
+ "dirs",
  "env_filter",
  "env_logger",
  "font8x8",

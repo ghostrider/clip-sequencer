@@ -405,6 +405,45 @@ Replaces the *Blank* placeholder on `§` clips. Starting/stopping is unchanged (
   composition JSON (`video.sourceparams`) and can be set over the WebSocket, and what happens to
   the custom grid thumbnail.
 
+### 12.1 Installing the plugin (M11 Phase G3, decided 2026-11-04)
+
+The release zip ships the plugin as `ffgl/SeqView.dll` next to the executables. The app installs, updates or
+removes it in Resolume's plugin folder, so users don't copy files by hand.
+
+- **Target folder:** `<Documents>\Resolume Arena\Extra Effects`, with `<Documents>` from the Windows Known Folder
+  API (it may be redirected, e.g. to OneDrive). Order: `--ffgl-dir` for the run, else the folder chosen in the
+  dialog (saved as `ffgl_dir` in `settings.json`), else that default. A missing folder is created on request.
+  Never `C:\Program Files\…` (no admin rights).
+- **Versions:** the DLL's Windows version resource (`FILEVERSION` = major, minor, patch, build number; Phase E).
+  Bundled vs. installed: newer → **Update**, equal → **Reinstall**, older → **Downgrade** (needs confirmation),
+  nothing there → **Install**. An installed `SeqView.dll` without a version resource (an early personal build) counts
+  as older.
+- **Only our file:** an existing `SeqView.dll` is replaced or removed only if it is this plugin (its version
+  resource names "Clip Sequencer for Resolume", or, for early builds, it contains the plugin id `VJSQ` and the name
+  `SeqView`). Anything else is left alone and reported.
+- **Resolume running:** Resolume locks loaded plugin DLLs, so before any change the app checks for a running
+  `Arena.exe` / `Avenue.exe` and refuses with "Quit Resolume Arena to install the plugin". It never ends the process.
+- **Safe copy:** copy to `SeqView.dll.tmp` in the target folder; rename the existing DLL to `SeqView.dll.bak`;
+  rename the temp file to `SeqView.dll`; delete the `.bak`. If a step fails, the `.bak` is renamed back and the
+  temp file removed, so the previous version stays installed. The result says "Restart Resolume Arena to load the
+  plugin".
+- **Remove:** deletes `SeqView.dll` from the target folder (only if it is ours, Resolume not running).
+- **UI:** File → Install FFGL plugin… (native menu and browser menu) opens a dialog with the bundled version, the
+  target folder (editable, Open folder in the desktop app), the installed version or "not installed", and one
+  primary button (Install / Update / Reinstall / Downgrade…) plus Remove.
+- **API** (UI server, JSON): `GET /api/ffgl` status; `POST /api/ffgl/install` `{ "allow_downgrade": bool }`;
+  `POST /api/ffgl/remove`; `POST /api/ffgl/dir` `{ "dir": "<path>" | null }` (null = default).
+- **CLI:** `seq-app-cli --install-ffgl [--ffgl-dir <path>]` does the same without the UI (creates the folder if
+  needed, never downgrades); exit code 0 = installed, 1 = error with a message.
+- Every install, update and removal is logged with the versions, the path and the result.
+
+### 12.2 Requests from other web pages
+
+The UI server answers only on `127.0.0.1`, but a web page open in the user's browser could still send requests to
+it (WebSockets and simple POSTs are not limited by the same-origin policy). Every request that carries an
+`Origin` header whose host and port differ from the request's `Host` is refused (403). The app's own pages are
+same-origin; the FFGL plugin and command-line tools send no `Origin`.
+
 ## 13. Out of scope (for now)
 
 Start quantization, time signatures other than 4/4, per-step parameter automation,
