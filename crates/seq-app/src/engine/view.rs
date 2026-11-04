@@ -83,8 +83,7 @@ pub struct ClipView {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SequenceView {
     pub sequence: Sequence,
-    /// One pass, in sixteenths.
-    pub pass_sixteenths: u64,
+    pub pass_eighths: u64,
     /// Its `§` clip on the SEQ layer of this deck, if the deck's clips are known.
     pub binding: Option<Binding>,
     pub resolution: Option<ResolutionView>,

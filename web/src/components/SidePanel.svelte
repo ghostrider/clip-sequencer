@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, formatLength, layerLabel, isSlotLane, stepLength } from '../lib/app.svelte';
+  import { app, formatLength, layerLabel, isSlotLane } from '../lib/app.svelte';
   import type { ClipView, LayerView } from '../lib/types';
 
   let deck = $derived(app.viewDeck);
@@ -123,12 +123,11 @@
         {/if}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
-        <span class="meta">Length (1/16 bar) · −/+ by 1/8, Shift by 1/16</span>
+        <span class="meta">Length (1/8 bar)</span>
         <div class="stepper">
-          <button class="icon-btn" aria-label="Shorter" disabled={step.length <= 1}
-            onclick={(e) => setLength(stepLength(step.length, -1, e.shiftKey))}>−</button>
+          <button class="icon-btn" aria-label="Shorter" disabled={step.length <= 1} onclick={() => setLength(step.length - 1)}>−</button>
           <output class="mono">{step.length} · {formatLength(step.length)}</output>
-          <button class="icon-btn" aria-label="Longer" onclick={(e) => setLength(stepLength(step.length, 1, e.shiftKey))}>+</button>
+          <button class="icon-btn" aria-label="Longer" onclick={() => setLength(step.length + 1)}>+</button>
         </div>
       </div>
     {:else if view && sel && step}
@@ -163,12 +162,11 @@
         {/if}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
-        <span class="meta">Length (1/16 bar) · −/+ by 1/8, Shift by 1/16</span>
+        <span class="meta">Length (1/8 bar)</span>
         <div class="stepper">
-          <button class="icon-btn" aria-label="Shorter" disabled={step.length <= 1}
-            onclick={(e) => setLength(stepLength(step.length, -1, e.shiftKey))}>−</button>
+          <button class="icon-btn" aria-label="Shorter" disabled={step.length <= 1} onclick={() => setLength(step.length - 1)}>−</button>
           <output class="mono">{step.length} · {formatLength(step.length)}</output>
-          <button class="icon-btn" aria-label="Longer" onclick={(e) => setLength(stepLength(step.length, 1, e.shiftKey))}>+</button>
+          <button class="icon-btn" aria-label="Longer" onclick={() => setLength(step.length + 1)}>+</button>
         </div>
       </div>
     {:else}

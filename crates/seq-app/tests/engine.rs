@@ -338,7 +338,7 @@ async fn manual_trigger_on_an_owned_layer_yields_the_lane() {
     });
     h.runtime(|r| r.running[0].lanes[0].state == "resume_pending")
         .await;
-    // Position 48 + 12 = 60: step 2 of the one-eighth loop (2 sixteenths after migration) (Liquid, column 3).
+    // Position 48 + 12 = 60: step 2 of the 1-eighth loop (Liquid, column 3).
     h.ticks(12);
     assert_eq!(h.osc(1).await, vec![connect(2, 3)]);
     h.runtime(|r| r.running[0].lanes[0].state == "playing")
@@ -788,7 +788,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             step: Step {
                 column: None,
                 clip: Some(clip(TWISTED)),
-                length: 2,
+                length: 1,
             },
         },
         EditOp::InsertStep {
@@ -798,7 +798,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             step: Step {
                 column: None,
                 clip: None,
-                length: 2,
+                length: 1,
             },
         },
     ] {
@@ -1265,7 +1265,7 @@ async fn add_slot_sequence(h: &Harness, repeat: seq_core::Repeat) {
                 seq: SEQ_SLOT,
                 lane: 0,
                 index: i,
-                step: seq_core::Step::slot(Some(col), 16),
+                step: seq_core::Step::slot(Some(col), 8),
             },
         });
     }

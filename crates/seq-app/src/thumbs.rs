@@ -126,7 +126,7 @@ pub enum Cell {
     Unresolved,
 }
 
-/// Cells of a sequence: per lane, (length in sixteenths, what to draw). `thumb` loads a clip
+/// Cells of a sequence: per lane, (length in eighths, what to draw). `thumb` loads a clip
 /// thumbnail by clip id.
 pub async fn mosaic_cells<F, Fut>(view: &SequenceView, thumb: F) -> Vec<Vec<(u32, Cell)>>
 where

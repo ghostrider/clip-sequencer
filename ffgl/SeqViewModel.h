@@ -17,7 +17,7 @@ enum class StepKind
 struct Step
 {
 	StepKind kind = StepKind::Rest;
-	uint32_t units = 1; // length in the layout's units (Layout::unitsPerBar per bar)
+	uint32_t eighths = 1;
 	uint64_t clipId = 0;
 	std::string thumb; // thumbnail version, empty = none
 	std::string label;
@@ -34,9 +34,7 @@ struct Lane
 struct Layout
 {
 	std::string name, deck;
-	uint32_t passUnits = 0;
-	//! Length units per bar: 8 (eighths) for a SEQVIEW 1 response, 16 (sixteenths) for SEQVIEW 2.
-	uint32_t unitsPerBar = 8;
+	uint32_t passEighths = 0;
 	std::vector< Lane > lanes;
 };
 
@@ -76,8 +74,7 @@ struct View
 };
 
 //! Parses a response into `view`. A response without a layout block keeps the previous layout (same revision).
-//! Returns false (and sets Status::BadResponse) if the text is not a SEQVIEW 1 or SEQVIEW 2 response
-//! (SEQVIEW 2: lengths in sixteenths; the plugin asks for it with `format=2`).
+//! Returns false (and sets Status::BadResponse) if the text is not a SEQVIEW 1 response.
 bool ParseView( const std::string& text, View& view );
 
 //! Percent-encodes a query parameter value (UTF-8 bytes).

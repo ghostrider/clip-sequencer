@@ -9,11 +9,8 @@ import type {
 /** Records the Console tab keeps (the app's ring buffer holds as many). */
 export const LOG_LIMIT = 5000;
 
-/** Step lengths count sixteenths (file format v3). */
-export const SIXTEENTHS_PER_BAR = 16;
-export const TICKS_PER_SIXTEENTH = 6;
-/** Resize and length steps: one eighth, or one sixteenth with Shift (SPEC §9.3). */
-export const LENGTH_STEP = 2;
+export const EIGHTHS_PER_BAR = 8;
+export const TICKS_PER_EIGHTH = 12;
 
 /** Identifies a deck tab: its position (deck names need not be unique), or the name of an orphaned deck. */
 export function deckKey(d: DeckView): string {
@@ -41,8 +38,8 @@ class AppState {
   viewDeckKey = $state<string | null>(null);
   selectedSeq = $state<Uuid | null>(null);
   selectedStep = $state<{ lane: number; index: number } | null>(null);
-  /** Pixels per sixteenth in the lane grid. */
-  zoom = $state(7);
+  /** Pixels per eighth in the lane grid. */
+  zoom = $state(14);
   search = $state('');
   /** Waiting for a clip click in the browser to relink the selected step. */
   relinking = $state(false);
@@ -232,17 +229,10 @@ export function layerLabel(l: { name: string; index: number; ambiguous: boolean 
   return l.name;
 }
 
-/** A length in sixteenths: whole bars, else the smallest fraction (`3/8`, `5/16`). */
-export function formatLength(sixteenths: number): string {
-  const bars = sixteenths / SIXTEENTHS_PER_BAR;
-  if (sixteenths % SIXTEENTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
-  if (sixteenths % 2 === 0) return `${sixteenths / 2}/8`;
-  return `${sixteenths}/16`;
-}
-
-/** The next length up or down: by an eighth, or by a sixteenth with Shift; never below 1. */
-export function stepLength(length: number, dir: 1 | -1, fine: boolean): number {
-  return Math.max(1, length + dir * (fine ? 1 : LENGTH_STEP));
+export function formatLength(eighths: number): string {
+  const bars = eighths / EIGHTHS_PER_BAR;
+  if (eighths % EIGHTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
+  return `${eighths}/8`;
 }
 
 export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
