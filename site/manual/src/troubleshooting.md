@@ -61,7 +61,7 @@ Start with the chips on the top bar and the **Console** tab: most problems show 
 - your Windows and Resolume versions, and what sends the MIDI clock;
 - what you did, what you expected, what happened;
 - the log around the problem: **Console** tab → **Copy visible** or **Save log…**, or the files in
-  `%APPDATA%\resolume-sequencer\logs`. Remove clip names or paths you don't want to share.
+  `%APPDATA%\clip-sequencer\logs`. Remove clip names or paths you don't want to share.
 
 Security problems: please report them privately, see
 [SECURITY.md](https://github.com/ghostrider/clip-sequencer/blob/main/SECURITY.md).

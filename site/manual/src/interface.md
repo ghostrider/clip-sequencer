@@ -64,6 +64,8 @@ Below: **Repeat** (Once / × with a number / ∞), the pass counter while it run
 **Lanes.** Each lane has a head on the left:
 
 - the **layer** it plays on (only named layers of the deck; [Setting up Resolume](resolume-setup.md));
+- **Clip | Slot**: whether its steps play particular clips or the clips in columns of the layer
+  ([Slot lanes](slot-lanes.md));
 - **▲ ▼** to reorder lanes (display only) and **×** to delete the lane;
 - the **end behaviour** for when the lane is shorter than the sequence: *Loop to end* (start the lane's steps
   again), *Hold* (keep the last clip playing), *Clear* (clear the layer and stay silent);
@@ -78,6 +80,7 @@ the grid.
 |---|---|
 | clip thumbnail | a clip step |
 | dashed, "rest" | a rest: clears the layer at its start |
+| `col N` | a step of a slot lane; `col N · empty` plays as a rest ([Slot lanes](slot-lanes.md)) |
 | red, "unresolved" | the clip can't be found in the deck; nothing is triggered ([Troubleshooting](troubleshooting.md)) |
 | accent outline | selected |
 | ⚠ | the clip was found on another layer than the lane's; it plays there |
@@ -103,6 +106,8 @@ The **step inspector** shows the selected step:
 - **Relink to clip…**: then click a clip in the browser to use it for this step (Esc cancels);
 - **Make rest**;
 - **Length** in sixteenths, with − / +, and the length in bars.
+
+For a step of a slot lane it shows the column and the clip in it now instead ([Slot lanes](slot-lanes.md)).
 
 ## Status bar
 

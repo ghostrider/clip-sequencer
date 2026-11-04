@@ -21,7 +21,7 @@ Most settings are command-line options. The MIDI clock input is also chosen in t
 | `--strict-port` | | exit with an error instead of trying other ports when the UI port is taken |
 | `--seq-layer <name>` | `SEQ` | the layer that holds the placeholder clips |
 | `--seq-prefix <text>` | `"§ "` | how placeholder clip names start |
-| `--data-dir <folder>` | `%APPDATA%\resolume-sequencer` | where sequences, settings, caches and logs are kept |
+| `--data-dir <folder>` | `%APPDATA%\clip-sequencer` | where sequences, settings, caches and logs are kept |
 | `--no-splash` | | desktop app: no splash screen, the window appears when ready |
 | `--headless` | | no window, UI in the browser (`seq-app-cli.exe` always runs like this) |
 | `--ffgl-dir <folder>` | the one chosen in the app, else `Documents\Resolume Arena\Extra Effects` | Resolume's plugin folder for the FFGL plugin |

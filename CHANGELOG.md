@@ -7,37 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.2.0] - Unreleased
-
-### Added
-
-- **Slot lanes** (positional sequencing): a lane in *Slot* mode plays whatever clip sits in a column of its
-  layer when each step starts, so clips can be swapped in Resolume while the sequence runs. Empty slots act as
-  rests. Lanes switch between *Clip* and *Slot* in the lane header (steps are converted). The slot is read
-  over REST just before its step, because drags in Resolume's own UI are not pushed.
-- Column numbers on the clip browser thumbnails.
-
-### Changed
-
-- Sequence file format **v3** (lane `mode`, step `column`). Version 2 files load unchanged and are kept as
-  `.v2.bak` on their first save; builds before this one cannot read v3.
-- The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%esolume-sequencer` is moved there on
-  first start.
-- Clip thumbnails are refreshed when a slot gets new media (Resolume keeps its change marker then).
-
-### Fixed
-
-- The third-party notices script works when the release script runs under PowerShell.
-
-## [0.1.0] - Unreleased
+## [0.2.0] - 2026-11-04
 
 First public release.
 
 ### Added
 
-- **Sequences:** lanes per Resolume layer, with clips and rests on a 1/16-bar grid (sequence file format v2;
-  version 1 files from earlier builds are migrated on load and the original is kept as `.v1.bak`). Repeat once,
-  ×N or endlessly; lane ends *Loop to end*, *Hold* or *Clear*; after the last pass the layers are cleared or held.
+- **Sequences:** lanes per Resolume layer, with clips and rests on a 1/16-bar grid (sequence file format v3).
+  Repeat once, ×N or endlessly; lane ends *Loop to end*, *Hold* or *Clear*; after the last pass the layers are cleared or held.
 - **Clock:** follows an incoming MIDI clock (any input port), with tempo estimate, clock-loss freeze and resume,
   and automatic reconnection when the port comes back.
 - **Resolume:** triggers over OSC exactly on the tick, confirmed over the WebSocket; reads the composition and
@@ -63,8 +40,19 @@ First public release.
   zip (static C++ runtime, no Visual C++ Redistributable needed) and is installed, updated or removed from the
   app (**File → Install FFGL plugin…**) or with `seq-app-cli --install-ffgl`.
 - The UI server only answers on `127.0.0.1` and refuses requests from other web pages.
-- Logs in daily files (kept 7 days); settings and sequences in `%APPDATA%\resolume-sequencer`.
+- Logs in daily files (kept 7 days); settings and sequences in `%APPDATA%\clip-sequencer`.
+- **Slot lanes** (positional sequencing): a lane in *Slot* mode plays whatever clip sits in a column of its
+  layer when each step starts, so clips can be swapped in Resolume while the sequence runs. Empty slots act as
+  rests. Lanes switch between *Clip* and *Slot* in the lane header (steps are converted). The slot is read
+  over REST just before its step, because drags in Resolume's own UI are not pushed.
+- Column numbers on the clip browser thumbnails.
+
+### Changed
+
+- Sequence file format **v3** (lane `mode`, step `column`). Files from earlier builds (v1, v2) are migrated on
+  load; the original is kept as `.v1.bak` / `.v2.bak` on the first save. Builds before 0.2.0 cannot read v3.
+- The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%\resolume-sequencer` of earlier builds is
+  moved there on first start.
 
 [Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/ghostrider/clip-sequencer/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.1.0
+[0.2.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.2.0

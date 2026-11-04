@@ -13,6 +13,7 @@
 
 - [The interface](interface.md)
 - [Working with decks](decks.md)
+- [Slot lanes](slot-lanes.md)
 - [Playing live](playing-live.md)
 - [Files and data](files.md)
 - [Thumbnails](thumbnails.md)

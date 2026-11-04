@@ -33,6 +33,9 @@
 **SEQ layer**
 : The Resolume layer (named `SEQ`) that holds the placeholder clips.
 
+**Slot lane**
+: A lane whose steps play columns of its layer, whatever clip is in them, instead of particular clips.
+
 **Step**
 : One block in a lane: a clip (or a rest) and a length in sixteenths of a bar.
 

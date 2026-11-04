@@ -61,10 +61,10 @@ open Microsoft's [download page](https://developer.microsoft.com/microsoft-edge/
 3. Start the new `seq-app.exe`.
 
 Your sequences, settings and caches are not in the app folder but in the data folder
-(`%APPDATA%\resolume-sequencer`, see [Files and data](files.md)), so they carry over. Read the
+(`%APPDATA%\clip-sequencer`, see [Files and data](files.md)), so they carry over. Read the
 [changelog](https://github.com/ghostrider/clip-sequencer/blob/main/CHANGELOG.md) for what changed.
 
 ## Uninstalling
 
-Delete the app folder. To remove your sequences and settings too, delete `%APPDATA%\resolume-sequencer` as well;
+Delete the app folder. To remove your sequences and settings too, delete `%APPDATA%\clip-sequencer` as well;
 make a copy of your `.seq.json` files first if you might need them again.

@@ -1,6 +1,6 @@
 #pragma once
 // What the sequencer reports about one sequence (GET /plugin/v1/view.txt, format documented in
-// resolume-sequencer/crates/seq-app/src/plugin_view.rs). Plain data + a parser: no GL, no network, no threads.
+// crates/seq-app/src/plugin_view.rs). Plain data + a parser: no GL, no network, no threads.
 #include <cstdint>
 #include <string>
 #include <vector>

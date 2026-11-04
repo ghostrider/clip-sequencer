@@ -16,6 +16,8 @@ getting started and for building from source.*
 ## Features
 
 - Lanes per Resolume layer with clips and rests on a 1/8 or 1/16-bar grid; repeat once, ×N or endlessly.
+- Slot lanes: a lane can play whatever clip sits in a column of its layer, so clips can be swapped in Resolume
+  while the sequence runs.
 - Locked to an incoming MIDI clock; triggers are confirmed over Resolume's WebSocket.
 - Start and stop from the app or from Resolume (`§ <name>` clips on a `SEQ` layer); manual clip clicks
   take over a lane until you resume it.
@@ -45,7 +47,7 @@ getting started and for building from source.*
 3. Unzip it anywhere (nothing is installed) and double-click `seq-app.exe`.
 
 The executables are not code-signed, so Windows SmartScreen may warn the first time ("Windows protected your
-PC"). Click **More info → Run anyway**. Settings and sequences live in `%APPDATA%\resolume-sequencer`, not in
+PC"). Click **More info → Run anyway**. Settings and sequences live in `%APPDATA%\clip-sequencer`, not in
 the unzipped folder, so a new version can be unzipped next to the old one.
 
 ## Resolume setup (once per composition)
