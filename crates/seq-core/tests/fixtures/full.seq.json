@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "composition": "dev",
   "decks": {
     "1000A Text3D": {
@@ -15,7 +15,7 @@
               "layer": "Layer 1",
               "end": "hold",
               "steps": [
-                { "clip": { "id": 1791619727004, "name": "Clip 01", "file": "Clip 01.mov" }, "length": 32 }
+                { "clip": { "id": 1791619727004, "name": "Clip 01", "file": "Clip 01.mov" }, "length": 64 }
               ]
             },
             {
@@ -36,17 +36,17 @@
               "layer": "Layer 2",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "name": "Clip 02" }, "length": 4 },
-                { "clip": { "file": "Clip 03.mov" }, "length": 4 },
-                { "clip": null, "length": 1 },
-                { "clip": { "id": 1791619727030 }, "length": 7 }
+                { "clip": { "name": "Clip 02" }, "length": 8 },
+                { "clip": { "file": "Clip 03.mov" }, "length": 8 },
+                { "clip": null, "length": 2 },
+                { "clip": { "id": 1791619727030 }, "length": 14 }
               ]
             },
             {
               "layer": "Layer 3",
               "end": "clear",
               "steps": [
-                { "clip": { "name": "1000A Shake" }, "length": 8 }
+                { "clip": { "name": "1000A Shake" }, "length": 16 }
               ]
             }
           ]
@@ -66,8 +66,8 @@
               "layer": "Layer 2",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 16 },
-                { "clip": null, "length": 16 }
+                { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 32 },
+                { "clip": null, "length": 32 }
               ]
             },
             {
@@ -75,9 +75,9 @@
               "mode": "slot",
               "end": "hold",
               "steps": [
-                { "column": 3, "length": 4 },
-                { "column": null, "length": 4 },
-                { "column": 12, "length": 8 }
+                { "column": 3, "length": 8 },
+                { "column": null, "length": 3 },
+                { "column": 12, "length": 16 }
               ]
             }
           ]

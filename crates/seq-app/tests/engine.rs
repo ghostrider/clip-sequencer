@@ -124,6 +124,8 @@ fn start_app_ui(
         },
         ui: ui.map(|addr| std::net::TcpListener::bind(addr).unwrap()),
         shell: None,
+        quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     (app, clock)
@@ -706,7 +708,7 @@ async fn ui_server_protocol_thumbnails_and_push() {
     let t = view("name=Loop".into()).await;
     assert!(
         t.starts_with(
-            "SEQVIEW 1
+            "SEQVIEW 2
 status ok
 rev "
         ),
@@ -718,9 +720,9 @@ rev "
 layout
 name Loop
 deck 2132323
-pass 2
+pass 4
 lane ok loop_to_end L2
-step clip 1 1792956592496 "
+step clip 2 1792956592496 "
         ),
         "{t}"
     );
@@ -788,7 +790,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             step: Step {
                 column: None,
                 clip: Some(clip(TWISTED)),
-                length: 1,
+                length: 2,
             },
         },
         EditOp::InsertStep {
@@ -798,7 +800,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
             step: Step {
                 column: None,
                 clip: None,
-                length: 1,
+                length: 2,
             },
         },
     ] {
@@ -976,6 +978,26 @@ async fn api_version_and_runtime_file_name_the_actual_ui_port() {
     assert_eq!(v["app"], seq_app::APP_ID);
     assert_eq!(v["name"], seq_app::APP_NAME);
     assert_eq!(v["version"], seq_app::VERSION);
+    // Build info (M11 Phase E): the same values as `--version` and the first log line.
+    assert_eq!(v["build"], seq_app::BUILD_NUMBER);
+    assert_eq!(v["commit"], seq_app::GIT_COMMIT);
+    assert_eq!(v["target"], seq_app::TARGET);
+    let date = v["build_date"].as_str().unwrap();
+    assert!(
+        date.len() == 20 && date.ends_with('Z') && date.as_bytes()[10] == b'T',
+        "{date}"
+    );
+    assert!(
+        seq_app::LONG_VERSION.starts_with(&format!(
+            "{} (build {}, {}, {})",
+            seq_app::VERSION,
+            seq_app::BUILD_NUMBER,
+            seq_app::GIT_COMMIT,
+            &date[..10]
+        )),
+        "{}",
+        seq_app::LONG_VERSION
+    );
     assert_eq!(v["ui_port"], ui.port());
     assert_eq!(v["desktop"], false);
     let runtime = dir.path().join("runtime.json");
@@ -1100,6 +1122,8 @@ async fn ui_shell_actions_reach_the_desktop_shell() {
         debounce: DebounceConfig::default(),
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: Some(shell_tx),
+        quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1163,6 +1187,8 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
         debounce: DebounceConfig::default(),
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
+        quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();
@@ -1265,7 +1291,7 @@ async fn add_slot_sequence(h: &Harness, repeat: seq_core::Repeat) {
                 seq: SEQ_SLOT,
                 lane: 0,
                 index: i,
-                step: seq_core::Step::slot(Some(col), 8),
+                step: seq_core::Step::slot(Some(col), 16),
             },
         });
     }
@@ -1294,7 +1320,7 @@ fn slot_states(s: &StructureState) -> Option<Vec<String>> {
     )
 }
 
-/// SPEC §4.5 and notes §14: a drag in Resolume's UI sends no composition push. The slot read
+/// SPEC §4.5 and notes §15: a drag in Resolume's UI sends no composition push. The slot read
 /// before each slot step still sees it: the moved clip plays in its new column, and the slot it
 /// left is a rest.
 #[tokio::test]
@@ -1378,4 +1404,260 @@ async fn media_dropped_on_the_playing_slot_plays_at_its_next_step() {
         .await;
     assert!(s.decks.iter().any(|d| d.live));
     h.app.shutdown().await;
+}
+
+/// M11 Phase F: the browser UI of the headless app can quit it (File → Quit server), and the License
+/// dialog's data is served (MIT text plus the embedded third-party notices or their placeholder).
+#[tokio::test]
+async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::Message;
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let quit = tokio_util::sync::CancellationToken::new();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: Some(quit.clone()),
+        ffgl_dir: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+
+    let v: serde_json::Value = reqwest::get(format!("http://{ui}/api/version"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(v["desktop"], false);
+    assert_eq!(v["repository"], env!("CARGO_PKG_REPOSITORY"));
+    assert_eq!(v["homepage"], env!("CARGO_PKG_HOMEPAGE"));
+    assert_eq!(v["copyright"], seq_app::COPYRIGHT);
+
+    let lic: serde_json::Value = reqwest::get(format!("http://{ui}/api/licenses"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mit = lic["license"].as_str().unwrap();
+    assert!(mit.starts_with("MIT License") && mit.contains(seq_app::COPYRIGHT));
+    let notices = &lic["notices"];
+    assert!(
+        notices["packages"].is_array() && notices["texts"].is_array(),
+        "{notices}"
+    );
+    if notices["placeholder"] != true {
+        // Generated notices: every package points at texts that exist.
+        let texts = notices["texts"].as_array().unwrap().len();
+        for p in notices["packages"].as_array().unwrap() {
+            for t in p["texts"].as_array().unwrap() {
+                assert!((t.as_u64().unwrap() as usize) < texts, "{p}");
+            }
+        }
+    }
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    // The File menu's other commands are accepted: after them an unknown command (the control) must be
+    // the only "bad UI message" (commands are handled in order).
+    for cmd in ["save_now", "reload_composition", "no_such_command"] {
+        ws.send(Message::Text(json!({ "cmd": cmd }).to_string()))
+            .await
+            .unwrap();
+    }
+    let mut rt = app.outputs.runtime.clone();
+    let bad = |r: &seq_app::engine::view::RuntimeState| {
+        r.notices
+            .iter()
+            .filter(|n| n.contains("bad UI message"))
+            .count()
+    };
+    let r = tokio::time::timeout(
+        Duration::from_secs(3),
+        rt.wait_for(|r| r.notices.iter().any(|n| n.contains("no_such_command"))),
+    )
+    .await
+    .expect("the unknown command is reported")
+    .unwrap()
+    .clone();
+    assert_eq!(bad(&r), 1, "{:?}", r.notices);
+    assert!(!quit.is_cancelled());
+    ws.send(Message::Text(
+        json!({"cmd": "shell", "action": "quit"}).to_string(),
+    ))
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(3), quit.cancelled())
+        .await
+        .expect("quit from the UI cancels the headless app's token");
+    app.shutdown().await;
+}
+
+/// SPEC §12.2: a web page from another origin can't use the UI server (HTTP or WebSocket); the app's own
+/// origin and clients without an `Origin` header (the FFGL plugin, tools) can.
+#[tokio::test]
+async fn requests_from_other_web_pages_are_refused() {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: None,
+        ffgl_dir: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let client = reqwest::Client::new();
+    let get = |origin: Option<String>| {
+        let mut r = client.get(format!("http://{ui}/api/version"));
+        if let Some(o) = origin {
+            r = r.header("Origin", o);
+        }
+        r.send()
+    };
+    assert_eq!(
+        get(None).await.unwrap().status(),
+        200,
+        "no Origin (plugin, tools)"
+    );
+    assert_eq!(
+        get(Some(format!("http://{ui}"))).await.unwrap().status(),
+        200,
+        "the app's own page"
+    );
+    for evil in ["https://evil.example", "http://127.0.0.1:1", "null"] {
+        assert_eq!(
+            get(Some(evil.into())).await.unwrap().status(),
+            403,
+            "{evil}"
+        );
+    }
+
+    // WebSocket: a foreign page's handshake is refused, the app's own goes through.
+    let ws = |origin: String| {
+        let mut req = format!("ws://{ui}/ws").into_client_request().unwrap();
+        req.headers_mut().insert("Origin", origin.parse().unwrap());
+        tokio_tungstenite::connect_async(req)
+    };
+    let refused = ws("https://evil.example".into()).await;
+    assert!(
+        matches!(&refused, Err(tokio_tungstenite::tungstenite::Error::Http(r)) if r.status() == 403),
+        "{refused:?}"
+    );
+    assert!(ws(format!("http://{ui}")).await.is_ok());
+    app.shutdown().await;
+}
+
+/// SPEC §12.1: the install dialog's API. The test binary has no bundled plugin, so install reports that; the
+/// folder is validated and saved; a POST from another web page is refused (§12.2).
+#[tokio::test]
+async fn ffgl_install_api() {
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (_clock, clock_rx) = mpsc::unbounded_channel::<ClockEvent>();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::Channel(clock_rx),
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: None,
+        ffgl_dir: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let client = reqwest::Client::new();
+    let post = |path: &str, body: serde_json::Value| {
+        client.post(format!("http://{ui}{path}")).json(&body).send()
+    };
+
+    let s: serde_json::Value = reqwest::get(format!("http://{ui}/api/ffgl"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(s["plugin_name"], "1000A Sequence");
+    assert_eq!(s["dir_source"], "default");
+
+    let r = post("/api/ffgl/dir", json!({ "dir": "relative/folder" }))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 409);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("not a full path"),
+        "{v}"
+    );
+
+    let fx = dir.path().join("Extra Effects");
+    let r = post("/api/ffgl/dir", json!({ "dir": fx.to_string_lossy() }))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(v["status"]["dir_source"], "saved");
+    assert_eq!(v["status"]["dir"], fx.to_string_lossy().as_ref());
+    assert_eq!(
+        seq_app::settings::Settings::load(dir.path()).ffgl_dir,
+        Some(fx.clone())
+    );
+
+    let r = post("/api/ffgl/install", json!({})).await.unwrap();
+    assert_eq!(r.status(), 409);
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("no FFGL plugin"),
+        "{v}"
+    );
+    assert!(!fx.exists(), "nothing created without a plugin to install");
+
+    let r = post("/api/ffgl/remove", json!({})).await.unwrap();
+    assert_eq!(r.status(), 409);
+
+    // Back to the default folder.
+    let r = post("/api/ffgl/dir", json!({ "dir": null })).await.unwrap();
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(v["status"]["dir_source"], "default");
+
+    // Another web page can't trigger an install.
+    let r = client
+        .post(format!("http://{ui}/api/ffgl/install"))
+        .header("Origin", "https://evil.example")
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    app.shutdown().await;
 }

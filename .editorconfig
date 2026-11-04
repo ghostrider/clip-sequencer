@@ -1,0 +1,39 @@
+# Editor settings matching the code as it is (https://editorconfig.org). cargo fmt and svelte-check stay the
+# authority for Rust and the UI; this keeps other editors from fighting them.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Rust, TOML, PowerShell, Python, batch: 4 spaces
+[*.{rs,toml,ps1,py,bat}]
+indent_size = 4
+
+# FFGL plugin (C++) and the Visual Studio solution: tabs, as in the FFGL SDK
+[*.{cpp,h,hpp,sln}]
+indent_style = tab
+indent_size = 4
+
+[.gitmodules]
+indent_style = tab
+
+# Two trailing spaces are a line break in Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+# Generated or vendored: leave as they are
+[{Cargo.lock,web/package-lock.json}]
+indent_size = unset
+# Captured Resolume API output and data derived from it: kept byte for byte
+[{external,third_party,docs/samples}/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset

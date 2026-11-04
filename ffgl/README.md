@@ -24,7 +24,7 @@ Starting and stopping is unchanged: triggering the `§` clip starts the sequence
 |---|---|---|
 | Sequence | text | Sequence name. Set automatically by the sequencer from the clip name; can be typed. |
 | Server | text | Sequencer UI address, default `127.0.0.1:8090` (`seq-app --ui-port`). |
-| Build | text | Build number and date (read-only). |
+| Build | text | Version, build number, commit and date, e.g. `0.1.0 (build 42, abc1234, 2026-11-03)` (read-only; same as the app's `--version`). |
 
 ## How it works
 

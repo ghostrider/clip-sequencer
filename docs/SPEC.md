@@ -8,7 +8,7 @@ timings and samples are in `docs/resolume-api-notes.md` (cited below as *notes �
 
 A live tool and a playback engine for pre-composed clip sequences in Resolume Arena 7.26.
 
-- A **sequence** plays clips on several Resolume layers in parallel, on a 1/8-bar grid,
+- A **sequence** plays clips on several Resolume layers in parallel, on a 1/16-bar grid,
   locked to the show's MIDI clock.
 - Sequences are stored, edited in a browser UI, and started either from the UI or
   from inside Resolume (by triggering a placeholder clip).
@@ -36,8 +36,9 @@ compensates latency itself.
   Messages used: Timing Clock (0xF8). Start (0xFA), Stop (0xFC) and Continue (0xFB)
   are logged but **do not** affect running sequences (the Clock Shifter's resync
   button sends Start; it must not restart sequences).
-- **Grid:** 1/8 bar in 4/4 = one eighth note = **12 ticks**. All step lengths are
-  integers in eighths. Only 4/4 is supported.
+- **Grid:** 1/16 bar in 4/4 = one sixteenth note = **6 ticks**. All step lengths are
+  integers in sixteenths (file format v2, 2026-11-01; v1 counted eighths, see §6). The editor
+  snaps to eighths by default and to sixteenths with Shift (§9.3). Only 4/4 is supported.
 - **No quantization.** A sequence starts at the moment its start is processed. Its
   internal position counts ticks from that moment. Step boundaries fire exactly
   on the tick where they fall.
@@ -126,7 +127,7 @@ Rules for slot lanes:
   column, not a clip. The trigger is sent to the slot's position
   (`/composition/layers/{L}/clips/{column}/connect`, `L` from the current index), so it always plays
   what is in the slot now.
-- The composition index can be stale after drags and drops in Resolume's UI (no push, *notes §14*).
+- The composition index can be stale after drags and drops in Resolume's UI (no push, *notes §15*).
   So a background task fetches the slot (`GET /composition/layers/{L}/clips/{column}`, ~11 ms) about
   150 ms before each slot step starts and reports it to the engine by message (id, empty or not,
   name, file). The engine uses the newest report it has at step start and the index if none
@@ -138,10 +139,10 @@ Rules for slot lanes:
 - Confirmation (§7.5) and manual-override detection (§7.3) work on the slot's clip id at
   trigger time.
 - **Content changed in the playing slot** (new media dropped onto it): Resolume stops the playing
-  clip and does not start the new media (*notes §14*), so the layer goes dark. The sequencer does
+  clip and does not start the new media (*notes §15*), so the layer goes dark. The sequencer does
   not react: the lane is not yielded, keeps its timing and does not re-trigger. The new content
   plays when a step for that slot starts next, as the sequence says.
-- Dragging the playing clip to another slot also stops it in Resolume (*notes §14*); the lane
+- Dragging the playing clip to another slot also stops it in Resolume (*notes §15*); the lane
   carries on the same way.
 - Open (not probed): whether moving a stopped clip into, or dropping a file into, an **empty** slot
   produces a push. The pre-step fetch covers both.
@@ -154,7 +155,7 @@ Rules for slot lanes:
 - **Lane** — targets one layer (by name), in `clip` or `slot` mode (§4.5). Has its own steps and its own length. Lanes can be
   reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
-- **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
+- **Step** — a clip reference (or `null` = rest) and a length in sixteenths. A **rest clears the
   lane's layer** when it starts (silence). If the clip the lane triggered last lives on another
   layer (it plays there) and is still playing, that layer is cleared too: a rest stops what the
   lane started. The same applies to every clear of a lane (lane end `clear`, `after_last_pass`
@@ -177,7 +178,7 @@ automatically. Sequences are grouped by deck name.
 
 ```json
 {
-  "version": 1,
+  "version": 3,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -193,8 +194,8 @@ automatically. Sequences are grouped by deck name.
               "layer": "BG",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
-                { "clip": null, "length": 8 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
+                { "clip": null, "length": 16 }
               ]
             },
             {
@@ -202,9 +203,9 @@ automatically. Sequences are grouped by deck name.
               "mode": "slot",
               "end": "loop_to_end",
               "steps": [
-                { "column": 1, "length": 8 },
-                { "column": 2, "length": 8 },
-                { "column": null, "length": 8 }
+                { "column": 1, "length": 16 },
+                { "column": 2, "length": 16 },
+                { "column": null, "length": 16 }
               ]
             }
           ]
@@ -216,13 +217,18 @@ automatically. Sequences are grouped by deck name.
 ```
 
 - `repeat.mode`: `"once"` | `"count"` | `"infinite"`; `count` only with `"count"`.
-- `length`: integer, in eighths (8 = one bar), ≥ 1.
-- `mode` (lane, version 2): `"clip"` (default when omitted) | `"slot"` (§4.5). Steps of a clip
+- `length`: integer, in sixteenths (16 = one bar), ≥ 1.
+- `mode` (lane, version 3): `"clip"` (default when omitted) | `"slot"` (§4.5). Steps of a clip
   lane have `clip` (object or `null` = rest); steps of a slot lane have `column` (integer ≥ 1,
   or `null` = rest). The other field is not allowed.
-- **Version 2** (M13) adds `mode` and `column`. A version 1 file is migrated on load (all lanes
-  `clip`, nothing else changes) and saved as version 2. A file with a higher version than the app
-  knows is refused, not overwritten.
+- **Version 3** (M13, 2026-11-04) adds `mode` and `column`; lengths as in version 2. Version 2 files
+  load unchanged and are saved as version 3 (older builds cannot read version 3).
+- **Version 2** (2026-11-01) counts `length` in sixteenths.
+- **Version 1** (until 2026-11-01) had the same shape with `length` in eighths. It is still
+  read: lengths are doubled on load, so timing is unchanged. The first save writes the current
+  version and keeps the original as `<file>.v1.bak`.
+- Versions 1 and 2 cannot contain slot lanes. A file with a higher version than the app knows is
+  refused, not overwritten.
 - Writes are atomic (write temp file, rename). Autosave after edits (debounced ~1 s).
 - If a deck name in the file no longer exists in Resolume, its sequences are listed in the
   UI as **orphaned**, with an action "move to deck …".
@@ -338,14 +344,15 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), state pill (`idle` / `playing` / `yielded`; yielded has a
     "Resume lane" action), delete lane.
-  - Ruler: bars numbered, eighth subdivisions; zoom with Ctrl+wheel.
+  - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
     not confirmed (red top edge).
   - Playhead with `bar.beat` label while running.
 - Interactions:
-  - Drag a clip from the browser onto a lane → appends or inserts a step (default length 8).
-  - Drag a block's right edge → resize, snapping to eighths (min 1).
+  - Drag a clip from the browser onto a lane → appends or inserts a step (default length 16 = one bar).
+  - Drag a block's right edge → resize, snapping to eighths (min 1/8); hold Shift to snap to
+    sixteenths (min 1/16).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence. Esc → deselect.
@@ -365,7 +372,7 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   corner, in every lane mode.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
-  in eighths with bars shown. For a slot step instead: column stepper (1 … column count) and the
+  in sixteenths with bars shown. For a slot step instead: column stepper (1 … column count) and the
   clip currently in that slot (or "empty → rest").
 
 ### 9.5 Status bar
@@ -378,13 +385,21 @@ last WebSocket confirmation, yield and error notices.
   and immediately on structural changes. Includes connection status, decks, live deck,
   sequences (from file), runtime state (running, pass, position, lane states, confirmations).
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
-  `edit` operations, `push_thumbnail`). Edits are sent as operations, the engine applies them
-  to the stored model, saves, and echoes the new state.
+  `edit` operations, `push_thumbnail`, and for the browser UI's File menu `reload_composition`,
+  `save_now`). Edits are sent as operations, the engine applies them to the stored model, saves,
+  and echoes the new state.
 - UI → desktop shell: `{"cmd": "shell", "action": "quit" | "zoom_in" | "zoom_out" | "zoom_reset"}`.
   Keys typed into the web content never reach the native menu's shortcuts (WebView2 handles input in
   its own process), so in the desktop app the UI sends Ctrl+Q and Ctrl+= / + / - / 0 this way; the
   server forwards them to the shell. Without a shell (browser) they are ignored and the UI leaves
-  these keys to the browser.
+  these keys to the browser, except `quit`: in the headless app it stops the app like Ctrl+C (the
+  browser UI's File → Quit server, after a confirmation).
+- Menus (M11 Phase F): the desktop app has the native menu (File / View / Help); the browser UI has
+  an HTML menu bar with the same items where they make sense in a browser (no Open data folder; View
+  zooms the page). Help → Keyboard shortcuts, Licenses and About are dialogs in the page in both
+  (the native menu opens them through `window.__seqOpenDialog`); the shortcut list has one source,
+  `web/src/lib/shortcuts.ts`. Licenses come from `GET /api/licenses` (MIT text plus the third-party
+  notices embedded at build time).
 - UI → desktop shell also: `"open_logs"` (Console tab, opens `<data-dir>/logs`).
 - Console tab (M12 Phase E):
   - UI → engine: `{"cmd": "log_subscribe"}` when the Console tab opens, `{"cmd": "log_unsubscribe"}` when it
@@ -455,6 +470,49 @@ Replaces the *Blank* placeholder on `§` clips. Starting/stopping is unchanged (
   previewed / connected on a layer with opacity 0, whether plugin parameters appear in the
   composition JSON (`video.sourceparams`) and can be set over the WebSocket, and what happens to
   the custom grid thumbnail.
+
+### 12.1 Installing the plugin (M11 Phase G3, decided 2026-11-04)
+
+The release zip ships the plugin as `ffgl/SeqView.dll` next to the executables. The app installs, updates or
+removes it in Resolume's plugin folder, so users don't copy files by hand.
+
+- **Target folder:** `<Documents>\Resolume Arena\Extra Effects`, with `<Documents>` from the Windows Known Folder
+  API (it may be redirected, e.g. to OneDrive). Order: `--ffgl-dir` for the run, else the folder chosen in the
+  dialog (saved as `ffgl_dir` in `settings.json`), else that default. A missing folder is created on request.
+  Never `C:\Program Files\…` (no admin rights).
+- **Versions:** the DLL's Windows version resource (`FILEVERSION` = major, minor, patch, build number; Phase E).
+  Bundled vs. installed: newer → **Update**, equal → **Reinstall**, older → **Downgrade** (needs confirmation),
+  nothing there → **Install**. An installed `SeqView.dll` without a version resource (an early personal build) counts
+  as older.
+- **Only our file:** an existing `SeqView.dll` is replaced or removed only if it is this plugin (its version
+  resource names "Clip Sequencer for Resolume", or, for early builds, it contains the plugin id `VJSQ` and the name
+  `SeqView`). Anything else is left alone and reported.
+- **Resolume running:** Resolume locks loaded plugin DLLs, so before any change the app checks for a running
+  `Arena.exe` / `Avenue.exe` and refuses with "Quit Resolume Arena to install the plugin". It never ends the process.
+- **Safe copy:** copy to `SeqView.dll.tmp` in the target folder; rename the existing DLL to `SeqView.dll.bak`;
+  rename the temp file to `SeqView.dll`; delete the `.bak`. If a step fails, the `.bak` is renamed back and the
+  temp file removed, so the previous version stays installed. The result says "Restart Resolume Arena to load the
+  plugin".
+- **Remove:** deletes `SeqView.dll` from the target folder (only if it is ours, Resolume not running).
+- **UI:** File → Install FFGL plugin… (native menu and browser menu) opens a dialog with the bundled version, the
+  target folder (editable, Open folder in the desktop app), the installed version or "not installed", and one
+  primary button (Install / Update / Reinstall / Downgrade…) plus Remove.
+- **API** (UI server, JSON): `GET /api/ffgl` status; `POST /api/ffgl/install` `{ "allow_downgrade": bool }`;
+  `POST /api/ffgl/remove`; `POST /api/ffgl/dir` `{ "dir": "<path>" | null }` (null = default).
+- **CLI:** `seq-app-cli --install-ffgl [--ffgl-dir <path>]` does the same without the UI (creates the folder if
+  needed, never downgrades); exit code 0 = installed, 1 = error with a message.
+- Every install, update and removal is logged with the versions, the path and the result.
+- **Status-bar hint** (decided 2026-11-04): in a build that bundles the plugin, the status bar shows
+  "FFGL plugin missing · Install…" when there is no `SeqView.dll` in the target folder, or "FFGL plugin update
+  available · Update…" when ours is older. Clicking it opens the dialog. Checked when the UI connects and when the
+  dialog closes; nothing is installed automatically.
+
+### 12.2 Requests from other web pages
+
+The UI server answers only on `127.0.0.1`, but a web page open in the user's browser could still send requests to
+it (WebSockets and simple POSTs are not limited by the same-origin policy). Every request that carries an
+`Origin` header whose host and port differ from the request's `Host` is refused (403). The app's own pages are
+same-origin; the FFGL plugin and command-line tools send no `Origin`.
 
 ## 13. Out of scope (for now)
 

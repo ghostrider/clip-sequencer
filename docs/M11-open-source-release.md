@@ -29,7 +29,7 @@ action from Uli. Ask, don't guess.
 - [x] **Manual language:** English only, or English + German. Default: English only (German can follow later).
 - [x] **Site address:** the default GitHub Pages URL `https://<owner>.github.io/<repo>/`, or a custom
       domain (e.g. a subdomain of a domain Uli already owns). Default: the GitHub Pages URL.
-- [ ] **Public contact address** for the site and the manual (a project e-mail address, not a personal
+- [x] **Public contact address** for the site and the manual (a project e-mail address, not a personal
       inbox). It's needed for the contact / legal notice page (Phase G2).
 - [x] **FFGL plugin:** its name, what it does, and where its source currently lives (it was built in a
       separate Claude Code session). Claude reads the plugin's source and README to fill in the details,
@@ -128,8 +128,8 @@ message, author data). Found and rewritten with `git filter-repo` in all history
       repository) **[verify the exact license text from the SDK repo]** and of any other library the plugin
       links or vendors (e.g. GLEW, GLM). Add them to the third-party notices, and include their license texts in
       the release. If the SDK is vendored as a git submodule, pin it to a commit.
-- [ ] Optional: SPDX header `// SPDX-License-Identifier: MIT` at the top of source files.
-      Ask Uli first.
+- [x] Optional: SPDX header `// SPDX-License-Identifier: MIT` at the top of source files.
+      Ask Uli first. *(2026-11-04: not for now, Uli.)*
 
 *(2026-11-01, done:*
 - *`LICENSE` (MIT, Ulrich Staudinger); `[workspace.package]` has authors, repository, homepage, description, readme,
@@ -155,10 +155,10 @@ message, author data). Found and rewritten with `git filter-repo` in all history
 
 ## Phase E — Versioning and build info
 
-- [ ] **Single version source:** `version` lives only in `[workspace.package]`. All crates use
+- [x] **Single version source:** `version` lives only in `[workspace.package]`. All crates use
       `version.workspace = true`. `web/package.json` gets the same version, synced by a small
       script or checked in CI.
-- [ ] **Build info** embedded at compile time via `build.rs` (or `vergen`):
+- [x] **Build info** embedded at compile time via `build.rs` (or `vergen`):
   - `version` (semver from Cargo)
   - `build_number`: the git commit count (`git rev-list --count HEAD`). It's identical in local
     builds, CI and the release workflow, and reproducible from any checkout (CI must check out with
@@ -167,67 +167,121 @@ message, author data). Found and rewritten with `git filter-repo` in all history
   - `git_commit`: short hash, with `-dirty` if the tree has changes
   - `build_date`: UTC, ISO 8601
   - `target`: e.g. `x86_64-pc-windows-msvc`
-- [ ] Expose the build info:
-  - [ ] `seq-app --version` prints `<name> 0.1.0 (build 42, abc1234, 2026-10-27)`
-  - [ ] the first log line at startup
-  - [ ] `GET /api/version` returns JSON with all fields
+- [x] Expose the build info:
+  - [x] `seq-app --version` prints `<name> 0.1.0 (build 42, abc1234, 2026-10-27)`
+  - [x] the first log line at startup
+  - [x] `GET /api/version` returns JSON with all fields
   - [ ] the About screen (Phase F)
-- [ ] **Windows exe metadata:** embed version info (FileVersion, ProductVersion,
+- [x] **Windows exe metadata:** embed version info (FileVersion, ProductVersion,
       CompanyName = copyright holder, LegalCopyright, ProductName) and an app icon via
       `embed-resource` or `winres`. **[Uli]** provides the icon, or Claude makes a simple
       placeholder `.ico`.
-- [ ] **FFGL plugin version:** the plugin gets the same version as the app (monorepo) or its own pinned
+- [x] **FFGL plugin version:** the plugin gets the same version as the app (monorepo) or its own pinned
       version (separate repo). It's embedded in the DLL's Windows version resource (FileVersion, ProductVersion,
       LegalCopyright), and, where the FFGL API allows it, in the plugin's info/about fields shown in Resolume.
       The app must be able to read the version of an installed DLL (needed for "Plugin deployment", Phase G3).
-- [ ] Release tags follow `vMAJOR.MINOR.PATCH`. CI fails if the tag doesn't match the Cargo version.
+- [x] Release tags follow `vMAJOR.MINOR.PATCH`. CI fails if the tag doesn't match the Cargo version.
+
+*(2026-11-03, done; the About screen follows in Phase F:*
+- *Version only in `[workspace.package]`; `scripts/check-version.mjs` checks the crates (`version.workspace`),
+  `web/package.json`, `package-lock.json` and that `tauri.conf.json` sets none; `--tag [vX.Y.Z]` (or
+  `GITHUB_REF_NAME`) also checks the release tag. `check.ps1` runs it; `release.yml` will run it with `--tag` (I2).*
+- *`build.rs` (no `vergen`): build number = `git rev-list --count HEAD` (0 without git), commit (+`-dirty`),
+  UTC build date (ISO 8601, `SOURCE_DATE_EPOCH` honoured), target, and `SEQ_LONG_VERSION`. `--version` prints
+  `seq-app-cli 0.1.0 (build 52, 931e56d, 2026-11-03)` (clap uses the binary's name); the first log line adds target
+  and build time; `/api/version` has `build`, `commit`, `build_date`, `target`; the engine test checks them.*
+- *Exe metadata: Tauri's build step writes ProductName, CompanyName (`publisher`), LegalCopyright, FileVersion /
+  ProductVersion (Cargo version) and the placeholder `§` icon; no `embed-resource`/`winres`. The build number is
+  not put into the fourth FileVersion field (that would need a `TAURI_CONFIG` override; not required).
+  **To verify on Windows:** the properties of `seq-app.exe` and `seq-app-cli.exe`.*
+- *FFGL: `SeqView.vcxproj` reads the version from `Cargo.toml` and build number / commit / date from git (the
+  per-machine `build_number.txt` is gone); `SeqView.rc` gives the DLL a VERSIONINFO (FileVersion
+  `0.1.0.<build>`), which G3 reads; About text and the Build parameter show the long version. The FFGL plugin
+  major/minor integers stay 1.0 (changing them might affect how Resolume matches the plugin; untested).
+  **To verify on Windows:** `ffgl\build_seqview.ps1`, DLL properties, the About/Build text in Resolume.)*
+
 
 ## Phase F — UI: menu bar, About, License, shortcuts
 
 Use only the existing design tokens (`web/src/tokens.css`). Every item opens an existing
 function or a static info dialog. No new behaviour.
 
-- [ ] **Menu bar** at the top of the app, above or merged into the top bar, keyboard-accessible
+- [x] **Menu bar** at the top of the app, above or merged into the top bar, keyboard-accessible
       (Alt or F10 focuses it; arrow keys move; Esc closes):
   - **File:** Reload composition · Save now · Open data folder (only if this is trivial
     via the server; otherwise leave it out) · Quit server (with confirmation)
   - **View:** Zoom in · Zoom out · Reset zoom
   - **Help:** Keyboard shortcuts · User manual (opens the manual on the project site, Phase G2,
     in the system browser) · Report an issue (GitHub issues/new) · Licenses · About
-- [ ] **About dialog:** app name and icon; version, build number, commit, build date (from
+- [x] **About dialog:** app name and icon; version, build number, commit, build date (from
       `/api/version`); `Copyright (c) 2026 <holder>`; "Released under the MIT License"
       linking to the License dialog; GitHub repository link; the disclaimer *"Not affiliated with or
       endorsed by Resolume BV. Resolume is a trademark of Resolume BV."*; *"Provided as is,
       without warranty of any kind."*; links to the project site and the user manual.
-- [ ] **License dialog:** the project's MIT text first, then the third-party notices,
+- [x] **License dialog:** the project's MIT text first, then the third-party notices,
       grouped per package (name, version, license, collapsible full text). Data is served by the app
       from the generated file embedded at build time.
-- [ ] **Keyboard shortcuts dialog:** a list of the shortcuts that already exist (SPEC §9.3).
-- [ ] Each dialog closes with Esc and the close button, traps focus, and returns focus to its menu item.
+- [x] **Keyboard shortcuts dialog:** a list of the shortcuts that already exist (SPEC §9.3).
+- [x] Each dialog closes with Esc and the close button, traps focus, and returns focus to its menu item.
+
+*(2026-11-03, done:*
+- *Menu bar: per the M12 decision the desktop app keeps its native menu (Help now also has User manual, Report an
+  issue, Licenses, About); `web/src/components/MenuBar.svelte` is shown only in browser/headless mode. File:
+  Reload composition, Save now, Preferences…, Quit server… (confirmation; the headless app stops like Ctrl+C).
+  "Open data folder" is left out in the browser: the server would have to open Explorer for a browser that may not
+  sit at that machine. View: page zoom (CSS zoom, remembered per browser), Toggle Console. Help as in the plan.
+  Alt alone or F10 enters the bar; arrows, Home/End, Enter/Space, Esc, Tab follow the ARIA menubar pattern.*
+- *About / Licenses / Keyboard shortcuts are page dialogs in both modes (the native menu opens them through
+  `window.__seqOpenDialog`). Licenses: `GET /api/licenses` = the MIT text + `THIRD_PARTY_LICENSES.json` embedded
+  at build time (placeholder note in dev builds; `release.ps1` now generates the notices before `cargo build`).
+  Shortcuts: one list, `web/src/lib/shortcuts.ts` (the copy in `desktop.rs` is gone).*
+- *Shared `Dialog.svelte`: Esc and ✕ close, Tab is trapped, focus returns to the opener (the menu-bar item).
+  Editor keys (Space, Del, R, …) no longer act inside dialogs or on the menu bar.*
+- *Verified in Chromium against `mock-resolume` + headless `seq-app-cli` (14 checks: keyboard model, dialog
+  contents, focus trap/return, filter and expanding in Licenses, zoom persistence, Quit server Cancel/Quit).
+  **To verify on Windows:** the native Help items in `seq-app.exe` (dialogs open in the window, links in the
+  system browser).)*
+
 
 ## Phase G — Repository documents and security defaults
 
-- [ ] `README.md` (aimed at developers and first-time visitors on GitHub; end users are pointed to the
+- [x] `README.md` (aimed at developers and first-time visitors on GitHub; end users are pointed to the
       project site and manual from Phase G2, which the README links prominently at the top):
-  - [ ] what it does (2–3 sentences) and a screenshot (with neutral demo content, no third-party footage)
-  - [ ] requirements: Windows 10/11, Resolume Arena 7.26+ with the webserver and OSC input enabled,
+  - [x] what it does (2–3 sentences) and a screenshot (with neutral demo content, no third-party footage)
+  - [x] requirements: Windows 10/11, Resolume Arena 7.26+ with the webserver and OSC input enabled,
         a MIDI clock source (e.g. a virtual MIDI port)
-  - [ ] install (download the release zip), run, CLI flags / `seq.toml`, the SEQ-layer convention,
+  - [x] install (download the release zip), run, CLI flags / `seq.toml`, the SEQ-layer convention,
         where data, cache and logs live
-  - [ ] SmartScreen note: the exe is unsigned, so Windows may warn ("More info → Run anyway")
-  - [ ] building from source
-  - [ ] the Resolume trademark disclaimer and a license section
-- [ ] `CHANGELOG.md` in the Keep a Changelog format; first entry `0.1.0` summarises the current feature set.
-- [ ] `CONTRIBUTING.md`: build/test commands, code style (fmt, clippy), PR expectations, and
+  - [x] SmartScreen note: the exe is unsigned, so Windows may warn ("More info → Run anyway")
+  - [x] building from source
+  - [x] the Resolume trademark disclaimer and a license section
+- [x] `CHANGELOG.md` in the Keep a Changelog format; first entry `0.1.0` summarises the current feature set.
+- [x] `CONTRIBUTING.md`: build/test commands, code style (fmt, clippy), PR expectations, and
       that the sequence file format changes only with a version bump and a migration.
-- [ ] `SECURITY.md`: how to report issues privately (GitHub private vulnerability reporting).
-- [ ] **Security default:** the UI server binds to `127.0.0.1` by default. Binding to other
+- [x] `SECURITY.md`: how to report issues privately (GitHub private vulnerability reporting).
+- [x] **Security default:** the UI server binds to `127.0.0.1` by default. Binding to other
       interfaces requires an explicit flag (`--ui-bind 0.0.0.0`) and logs a warning. If the app
       currently binds to all interfaces, this change is part of M11. Document it in the README.
-- [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` (asks for app version/build, Resolume version,
+- [x] `.github/ISSUE_TEMPLATE/bug_report.yml` (asks for app version/build, Resolume version,
       Windows version, MIDI clock source, a log excerpt) and `feature_request.yml`.
-- [ ] `.github/pull_request_template.md` (short checklist: tests, clippy, changelog entry, manual updated if user-facing behaviour changed).
-- [ ] Optional: `.editorconfig`; `CODE_OF_CONDUCT.md` (Contributor Covenant). Ask Uli.
+- [x] `.github/pull_request_template.md` (short checklist: tests, clippy, changelog entry, manual updated if user-facing behaviour changed).
+- [x] Optional: `.editorconfig`; `CODE_OF_CONDUCT.md` (Contributor Covenant). Ask Uli. *(2026-11-04: `.editorconfig`
+      added, matching the existing code; no Code of Conduct for now.)*
+
+*(2026-11-03, done; the optional `.editorconfig` / `CODE_OF_CONDUCT.md` are waiting for Uli:*
+- *README: site / manual / download / changelog links on top; screenshot `docs/images/screenshot.png` of the
+  neutral demo (`docs/samples/demo-composition.json` + `demo.seq.json` in `mock-resolume`, generated abstract
+  thumbnails); features; requirements with any MIDI clock source (no reference to the separate Clock Shifter
+  project); install from the zip with checksum and SmartScreen notes; Resolume setup incl. the SEQ layer; run,
+  options, UI port, logs, data folder (kept from before); security; building from source; license and
+  disclaimer. `seq.toml` is not implemented (`config.rs`), so the README documents CLI flags only.*
+- *Security default: the UI server binds to `127.0.0.1` and there is no option to bind elsewhere (stricter than
+  the plan's opt-in flag; no `--ui-bind` was added, since that would be a new feature nobody needs yet).
+  Documented in README and SECURITY.md.*
+- *CHANGELOG (0.1.0 "Unreleased" until the release sets the date; `[Unreleased]` above it), CONTRIBUTING,
+  SECURITY, issue forms (bug report with version/build, program, Resolume, Windows, clock source, log;
+  feature request; `config.yml` links to the manual and private reporting) and the PR template.)*
+
 
 ## Phase G2 — End-user manual and project site (GitHub Pages)
 
@@ -236,7 +290,7 @@ but not this tool. It's published, together with a small project site, on GitHub
 (configuration in H6, deployment in I5).
 
 ### Structure and tooling
-- [ ] Sources live in `site/`, separate from the developer docs in `docs/`:
+- [x] Sources live in `site/`, separate from the developer docs in `docs/`:
   ```
   site/
     landing/        hand-written static landing page (index.html, CSS, images)
@@ -244,57 +298,57 @@ but not this tool. It's published, together with a small project site, on GitHub
     shared/         tokens.css and the self-hosted fonts, copied from web/ at build time
     build.ps1       assembles landing + manual into site/dist/ (manual under /manual/)
   ```
-- [ ] Tool: **mdBook** for the manual (Rust ecosystem, search built in, works offline as static
+- [x] Tool: **mdBook** for the manual (Rust ecosystem, search built in, works offline as static
       files), plus a hand-written landing page. The landing page uses the app's design tokens, so
       the site and the app look like one product.
-- [ ] Base path: the site is served under `/<repo>/` on the default GitHub Pages URL. Set
+- [x] Base path: the site is served under `/<repo>/` on the default GitHub Pages URL. Set
       `site-url` in `book.toml` accordingly, and use only relative links in the landing page. If a custom
       domain is chosen in Phase A, the base path is `/`.
-- [ ] **No external requests:** no Google Fonts, no CDN, no analytics, no cookies, no embedded videos from
+- [x] **No external requests:** no Google Fonts, no CDN, no analytics, no cookies, no embedded videos from
       third-party hosts. Fonts are self-hosted. (That keeps the site free of tracking and cookie-banner
       obligations under Swiss and EU data-protection law.)
 
 ### Manual content (`site/manual/src/`)
 Write it in the Phase A language. Every page is task-oriented: what you want to do, then the steps.
-- [ ] **Introduction:** what the sequencer does, how it fits next to Resolume and the MIDI clock, requirements.
-- [ ] **Installation:** installer vs. portable zip, WebView2 (after M12), the SmartScreen warning, checksum
+- [x] **Introduction:** what the sequencer does, how it fits next to Resolume and the MIDI clock, requirements.
+- [x] **Installation:** installer vs. portable zip, WebView2 (after M12), the SmartScreen warning, checksum
       verification, updating to a new version, uninstalling (and where the data stays).
-- [ ] **Setting up Resolume:** enable the webserver and OSC input (with the exact preference paths), MIDI clock
+- [x] **Setting up Resolume:** enable the webserver and OSC input (with the exact preference paths), MIDI clock
       sync, Beat Snap **off** for clip triggers, recommended clip transport mode (BPM sync), creating the `SEQ`
       layer with `§ <name>` placeholder clips and an invisible source.
-- [ ] **Setting up the clock:** any MIDI clock source works; selecting the input port; using a virtual MIDI
+- [x] **Setting up the clock:** any MIDI clock source works; selecting the input port; using a virtual MIDI
       port (e.g. loopMIDI); a note on the separate Clock Shifter for projector latency.
-- [ ] **Quick start:** a step-by-step tutorial, from an empty sequence to a 2-lane, 4-bar sequence started from
+- [x] **Quick start:** a step-by-step tutorial, from an empty sequence to a 2-lane, 4-bar sequence started from
       Resolume, with a screenshot per step.
-- [ ] **The interface:** top bar (deck tabs and LIVE, connection chips, Stop all), sequence list, editor (lanes,
+- [x] **The interface:** top bar (deck tabs and LIVE, connection chips, Stop all), sequence list, editor (lanes,
       steps, rests, the 1/8-bar grid, Repeat, lane end behaviour), clip browser, step inspector, status bar,
       Console tab (after M12), menus.
-- [ ] **Working with decks:** sequences belong to one deck; viewing vs. starting; the deck switch on start and its
+- [x] **Working with decks:** sequences belong to one deck; viewing vs. starting; the deck switch on start and its
       confirmation.
-- [ ] **Playing live:** starting and stopping (UI and SEQ clips), edits apply at the next start, manual override and
+- [x] **Playing live:** starting and stopping (UI and SEQ clips), edits apply at the next start, manual override and
       "Resume lane", Stop all, what happens on clock loss.
-- [ ] **Files and data:** the `.seq.json` file next to the composition, backups, moving a show to another machine,
+- [x] **Files and data:** the `.seq.json` file next to the composition, backups, moving a show to another machine,
       orphaned sequences after a deck rename, how clips are re-found after renames (ID → name → file) and what
       red steps mean.
-- [ ] **Thumbnails:** where they come from, cached thumbnails for inactive decks, "Push thumbnail to Resolume".
-- [ ] **Settings reference:** all CLI flags and `seq.toml` keys with defaults, UI port fallback and `--strict-port`,
+- [x] **Thumbnails:** where they come from, cached thumbnails for inactive decks, "Push thumbnail to Resolume".
+- [x] **Settings reference:** all CLI flags and `seq.toml` keys with defaults, UI port fallback and `--strict-port`,
       `--headless`, bind address and its security note.
-- [ ] **Keyboard shortcuts:** generated from, or checked against, the in-app shortcuts dialog (Phase F), so they never diverge.
-- [ ] **Troubleshooting:** no clock / clock not locked; Resolume not reachable; triggers "not confirmed"; red
+- [x] **Keyboard shortcuts:** generated from, or checked against, the in-app shortcuts dialog (Phase F), so they never diverge.
+- [x] **Troubleshooting:** no clock / clock not locked; Resolume not reachable; triggers "not confirmed"; red
       (unresolved) steps; port in use / app already running; SmartScreen; where the logs are and what to attach to a
       bug report.
-- [ ] **FAQ** and **Glossary** (sequence, lane, step, pass, deck, LIVE, yield, SEQ clip).
-- [ ] **About:** version history (links to the changelog), license and third-party notices, the Resolume trademark
+- [x] **FAQ** and **Glossary** (sequence, lane, step, pass, deck, LIVE, yield, SEQ clip).
+- [x] **About:** version history (links to the changelog), license and third-party notices, the Resolume trademark
       disclaimer, how to report bugs.
 
 ### Screenshots
-- [ ] Screenshots show **neutral demo content only** (generated colour clips, no third-party footage, no real show
+- [x] Screenshots show **neutral demo content only** (generated colour clips, no third-party footage, no real show
       names). Use `tools/mock-resolume` with a demo composition.
-- [ ] Optional, ask Uli: a script (Playwright) that starts the app against the mock and regenerates all manual
+- [x] Optional, ask Uli: a script (Playwright) that starts the app against the mock and regenerates all manual
       screenshots, so they stay current after UI changes.
 
 ### Landing page (`site/landing/`)
-- [ ] One page: name and one-line pitch; a hero screenshot (or a short looping GIF/WebM, self-hosted); 4–6 key
+- [x] One page: name and one-line pitch; a hero screenshot (or a short looping GIF/WebM, self-hosted); 4–6 key
       features; requirements; a **Download** button (latest GitHub Release, or the shop link, per the Phase A
       distribution decision); links to the manual, the source on GitHub, the changelog and issues; the license line
       and the Resolume disclaimer in the footer.
@@ -302,36 +356,55 @@ Write it in the Phase A language. Every page is task-oriented: what you want to 
       Phase A. If binaries are sold (distribution (b) or (c)), this page must also meet the Swiss e-commerce
       information duties (clear identity and a contact address, Art. 3 para. 1 lit. s UWG). **[Uli]** reviews the
       wording; this isn't legal advice.
-- [ ] A short **Privacy** note: the site uses no cookies or tracking; GitHub hosts it (link to GitHub's privacy
+- [x] A short **Privacy** note: the site uses no cookies or tracking; GitHub hosts it (link to GitHub's privacy
       statement).
-- [ ] Works at phone width, passes basic accessibility checks (contrast, alt text, keyboard), and has a favicon and
+- [x] Works at phone width, passes basic accessibility checks (contrast, alt text, keyboard), and has a favicon and
       Open Graph tags (title, description, preview image) for link previews.
 
 ### Versioning
 - [ ] The published manual always matches the **latest release**, not `main`. It's deployed by the release
       process (I5), so unreleased features never show up in the public manual.
-- [ ] Each manual page footer shows "Manual for version x.y.z". The version is injected at build time from
+- [x] Each manual page footer shows "Manual for version x.y.z". The version is injected at build time from
       `[workspace.package].version`.
-- [ ] Changes to user-facing behaviour must update the manual in the same PR (add this to `CONTRIBUTING.md` and
+- [x] Changes to user-facing behaviour must update the manual in the same PR (add this to `CONTRIBUTING.md` and
       the PR template checklist).
+
+*(2026-11-03, done except the four open items:*
+- *`site/`: `manual/` (mdBook 0.5, 16 chapters + generated shortcuts page), `landing/` (index, contact, privacy,
+  style), `shared/` (generated: tokens, IBM Plex, icons), `build.mjs` instead of `build.ps1`: one Node script for
+  Windows and the Linux runner (Node is needed for the UI anyway). It generates the shortcuts page from
+  `web/src/lib/shortcuts.json` (now the app's single list), runs mdbook (warnings fail), injects "Manual for
+  version x.y.z", fills `{{…}}` from `site/site.json`, and fails on broken internal links, missing CSS `url()`s
+  and anything loaded from another host. `--release` fails without `contactEmail`.*
+- *Checked in Chromium, served under `/clip-sequencer/` like GitHub Pages: no failed or external requests, IBM
+  Plex loads, search works, no horizontal scroll at 390 px, one h1 per page, alt texts, skip link first in tab
+  order; text contrast ≥ 6.8:1 (WCAG AA) for every colour pair used.*
+- *Screenshots: 14 in `site/manual/src/images/`, from the demo show (`docs/samples/demo-*`, generated thumbnails),
+  no running state (no MIDI clock in the build container).*
+- *Setting up Resolume (decided 2026-11-04): no menu path for MIDI clock sync; the chapter says that Resolume and
+  the sequencer must both receive the same MIDI clock. Clip transport mode: either works (the sequencer only
+  triggers the start).* *Open:* **Contact page:** *`contactEmail` set (2026-11-04); waiting for Uli's review of the wording (and a postal address
+  if the Swiss rules require one); the shop button appears once `shopUrl` is set.* **Latest release only:** *with
+  the deployment (I5).* **Screenshot script:** *`site/screenshots.mjs` is kept (Uli, 2026-11-04). The "Installing the FFGL plugin" chapter follows with G3.)*
+
 
 ## Phase G3 — FFGL plugin in the release
 
 ### Build
-- [ ] The plugin builds from the repo with one command (CMake + MSVC, x64, Release), documented in
+- [x] The plugin builds from the repo with one command (CMake + MSVC, x64, Release), documented in
       `CONTRIBUTING.md`. If it currently only builds through a Visual Studio solution, add a CMake build or a
       scripted `msbuild` call that works on a CI runner.
-- [ ] Link the MSVC runtime **statically** (`/MT`), so the DLL doesn't need the Visual C++ Redistributable on
+- [x] Link the MSVC runtime **statically** (`/MT`), so the DLL doesn't need the Visual C++ Redistributable on
       the user's machine. Verify with `dumpbin /dependents`: only system DLLs and `opengl32.dll`.
-- [ ] Built outputs (`.dll`, `.pdb`, build folders) are git-ignored. The release ships the `.dll` only; `.pdb`
+- [x] Built outputs (`.dll`, `.pdb`, build folders) are git-ignored. The release ships the `.dll` only; `.pdb`
       files are kept as a workflow artifact for debugging crash reports.
-- [ ] Uli's existing personal install script is **not** used by CI or the release. The deployment feature below
+- [x] Uli's existing personal install script is **not** used by CI or the release. The deployment feature below
       replaces it for end users. Claude may read the script to reuse its logic (target folder, overwrite handling).
 
 ### Release contents
-- [ ] The portable zip contains `ffgl/<PluginName>.dll` and `ffgl/README.txt` (what it is, where it goes, the
+- [x] The portable zip contains `ffgl/<PluginName>.dll` and `ffgl/README.txt` (what it is, where it goes, the
       version, a pointer to the manual).
-- [ ] After M12: the NSIS installer gets an optional component, "FFGL plugin for Resolume Arena" (checked by
+- [x] After M12: the NSIS installer gets an optional component, "FFGL plugin for Resolume Arena" (checked by
       default), which installs the DLL into the Resolume plugin folder (see below), using the same logic as the
       in-app deployment.
 - [ ] `SHA256SUMS.txt` (Phase I) includes the DLL.
@@ -341,40 +414,69 @@ New, small feature requested by Uli: the user can install or update the bundled 
 Arena's plugin folder from the app, without copying files by hand. Add it to `docs/SPEC.md` (new section)
 before implementing.
 
-- [ ] **[verify] Target folder:** confirm with Uli's Resolume 7.26 setup where Resolume looks for user FFGL
+- [x] **[verify] Target folder:** confirm with Uli's Resolume 7.26 setup where Resolume looks for user FFGL
       plugins. Expected: the per-user folder `Documents\Resolume Arena\Extra Effects` and any extra folders
       listed under Preferences → Video → plugin folders. Never write into `C:\Program Files\…` (that would need
       admin rights). Record the result in `docs/resolume-api-notes.md`.
-- [ ] **Detection:** resolve the user's Documents folder through the Windows Known Folder API (it may be
+- [x] **Detection:** resolve the user's Documents folder through the Windows Known Folder API (it may be
       redirected, e.g. to OneDrive), not a hard-coded `C:\Users\…\Documents`. If the folder doesn't exist, offer
       to create it. A setting / CLI flag `--ffgl-dir` overrides the detected folder.
-- [ ] **UI:** a menu item **File → Install FFGL plugin…** (native menu after M12, HTML menu otherwise), which
+- [x] **UI:** a menu item **File → Install FFGL plugin…** (native menu after M12, HTML menu otherwise), which
       opens a dialog showing:
   - the bundled plugin name and version
   - the target folder (with "Change…" and "Open folder")
   - the installed version found there, or "not installed"
   - one primary button: **Install**, **Update** (bundled is newer), **Reinstall** (same version) or
     **Downgrade** (bundled is older, with a warning)
-- [ ] **Resolume running:** Resolume locks loaded plugin DLLs. Before copying, check whether `Arena.exe` is running.
+- [x] **Resolume running:** Resolume locks loaded plugin DLLs. Before copying, check whether `Arena.exe` is running.
       If it is, show "Quit Resolume Arena to install the plugin", with a Retry button. Never kill the process.
-- [ ] **Safe copy:** copy to a temp file in the target folder, then rename over the old DLL. Keep the previous
+- [x] **Safe copy:** copy to a temp file in the target folder, then rename over the old DLL. Keep the previous
       version as `<PluginName>.dll.bak` until the copy succeeds. On failure, restore it and show the error.
-- [ ] **After install:** "Restart Resolume Arena to load the plugin" (Resolume scans plugins at startup).
-- [ ] **CLI:** `seq-app --install-ffgl [--ffgl-dir <path>]` does the same without the UI (exit code 0 = done,
+- [x] **After install:** "Restart Resolume Arena to load the plugin" (Resolume scans plugins at startup).
+- [x] **CLI:** `seq-app --install-ffgl [--ffgl-dir <path>]` does the same without the UI (exit code 0 = done,
       non-zero = error with a message), for scripting and for the NSIS installer to reuse.
-- [ ] **Startup hint (optional, ask Uli):** if the installed plugin is missing or older than the bundled one,
+- [x] **Startup hint (optional, ask Uli):** if the installed plugin is missing or older than the bundled one,
       show a one-line hint in the status bar ("FFGL plugin update available"). No automatic installs.
-- [ ] **Uninstall:** a "Remove" button in the same dialog (deletes only the DLL the app installed). The NSIS
+- [x] **Uninstall:** a "Remove" button in the same dialog (deletes only the DLL the app installed). The NSIS
       uninstaller removes the DLL only if it installed it.
-- [ ] **Logging:** every install, update or removal is logged with the source version, target path and result.
-- [ ] **Tests:** unit tests for version comparison and folder resolution (with an injected Documents path);
+- [x] **Logging:** every install, update or removal is logged with the source version, target path and result.
+- [x] **Tests:** unit tests for version comparison and folder resolution (with an injected Documents path);
       an integration test that installs into a temp folder, updates, simulates a locked file, and restores from `.bak`.
 
 ### Manual and site
-- [ ] Manual (Phase G2): a chapter **"Installing the FFGL plugin"**: what the plugin does, installing via the app
+- [x] Manual (Phase G2): a chapter **"Installing the FFGL plugin"**: what the plugin does, installing via the app
       or the installer, manual install from the zip, restarting Resolume, where to find the plugin in Resolume,
       updating, removing, and troubleshooting (plugin not showing up, "file in use").
-- [ ] Landing page: list the plugin among the features.
+- [x] Landing page: list the plugin among the features.
+
+*(2026-11-04, done except `SHA256SUMS.txt` (Phase I); Windows-only parts written but not run here. Startup hint: yes
+  (Uli), worded "FFGL plugin missing · Install…" / "FFGL plugin update available · Update…" in the status bar,
+  clickable, release builds only:*
+- *Build: `ffgl/build.ps1` (scripted MSBuild, found via vswhere; `-Tests`, `-CheckDependencies` runs
+  `dumpbin /dependents` and fails on any VC++ runtime DLL). Both projects link `/MT`; the SDK's `glew32s.lib` is
+  built with `LIBCMT` too, so this also ends a runtime mix. `build_seqview.ps1` (Uli's build + copy) calls it; the
+  release doesn't use the copy script. Outputs and `.pdb` are git-ignored; `release.ps1` keeps
+  `SeqView-<version>.pdb` next to the zip for I2.*
+- *Zip: `ffgl/SeqView.dll` and `ffgl/README.txt` (from `ffgl/README.release.txt`). The NSIS items are dropped
+  (portable only, M12).*
+- *Target folder: `<Documents>\Resolume Arena\Extra Effects`, the folder Uli's install script has always used
+  successfully; recorded in `docs/resolume-api-notes.md`. Documents via `dirs` (Known Folder API); `--ffgl-dir`,
+  else the folder chosen in the dialog (`settings.json` `ffgl_dir`), else the default; created on install.*
+- *Dialog: File → Install FFGL plugin… (native and browser menu). "Change…" is an editable path (the page can't
+  open a native folder picker in the browser; same in both modes), plus "Use default" and, in the desktop app,
+  "Open folder". Resolume check: `Arena.exe`/`Avenue.exe` via a ToolHelp snapshot, "Check again" as the Retry.
+  Remove deletes only our own `SeqView.dll` (identified by its version resource), not tracked per install.*
+- *CLI: on `seq-app-cli` (console flags live there since M12): `--install-ffgl [--ffgl-dir]`, never downgrades.*
+- *Tests: 7 unit tests (version parsing, action table, folder order, install/update/locked DLL/restore from
+  `.bak`/downgrade/remove, foreign DLL) and an API test; an end-to-end run in Chromium against the headless app.
+  The mutation check (removing the restore, removing the "ours" check) makes them fail.*
+- *Also found and fixed on the way: the UI server accepted WebSocket and POST requests from other web pages
+  (SPEC §12.2, now 403); short commands lost their last log lines (`logging::flush`); dialogs didn't close with Esc
+  when focus had left them.*
+- ***To verify on Windows:** `ffgl\build.ps1 -Tests -CheckDependencies`, run `SeqViewTests.exe`, `scripts\release.ps1`
+  (zip contains `ffgl\SeqView.dll`), File → Install FFGL plugin… with Resolume closed and open (the "Quit Resolume"
+  message), the plugin loads in Resolume after a restart.)*
+
 
 ## Phase H — GitHub repository configuration
 
@@ -590,7 +692,7 @@ _(Phase A, 2026-11-01)_
 - Release approval required: **yes** (draft release + protected `release` environment)
 - Manual language: **English only**
 - Site address: **GitHub Pages URL**, `https://ghostrider.github.io/clip-sequencer/` (base path `/clip-sequencer/`)
-- Public contact address: **open**. Uli creates a project address; needed before Phase G2.
+- Public contact address: **ustaudinger@gmail.com** (decided 2026-11-04; set in `site/site.json`).
 - FFGL plugin: **"1000A Sequence"** (`SeqView`, plugin ID `VJSQ`), an FFGL 2.1 source plugin that shows a sequence
   (lanes, steps with thumbnails, playhead, pass counter) on the `§` placeholder clips of the SEQ layer. Source:
   `ffgl/` in this repo (moved from `vj_stuff/ffgl-plugins/seq_view/` on 2026-10-27). It currently builds through

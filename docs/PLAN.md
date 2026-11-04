@@ -96,6 +96,12 @@ Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, c
       FBO, PNG preview); confirmed loading and rendering in Resolume.
 - [ ] Docs: plugin README, sequencer README (setup with the plugin instead of Blank).
 
+## 1/16 grid  ✓ done 2026-11-01
+- [x] File format v2: step lengths in sixteenths (6 ticks); v1 files migrated on load (×2),
+      original kept as `<file>.v1.bak` on the first save (SPEC §3, §6).
+- [x] Editor: resize snaps to 1/8, Shift snaps to 1/16; sixteenth ruler ticks when zoomed in.
+- [x] Plugin protocol `SEQVIEW 2` (lengths in sixteenths); the plugin still reads `SEQVIEW 1`.
+
 ## M12 — Desktop shell (Tauri v2)  ✓ done 2026-11-01
 Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the open-source release in
 `docs/M11-open-source-release.md` (not the "M11" Sequence plugin above).
@@ -112,9 +118,10 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 
 ## M13 — Slot lanes (positional sequencing, SPEC §4.5)  ✓ done 2026-11-03 (live check pending)
 - [x] M13a probe (2026-11-03): UI drag/drop and the playing-slot case, `GET /layers/{L}` and
-      `/layers/{L}/clips/{C}`. Recorded in `resolume-api-notes.md` §14, SPEC §4.5 adjusted.
-- [x] `seq-core` model: lane `mode`, slot steps with `column`; file format version 2 with v1 → v2
-      migration and refusal of unknown higher versions; validation; round-trip + migration tests.
+      `/layers/{L}/clips/{C}`. Recorded in `resolume-api-notes.md` §15, SPEC §4.5 adjusted.
+- [x] `seq-core` model: lane `mode`, slot steps with `column`; file format version 3 (after merging main's
+      v2 = sixteenths); v1/v2 load (v1 lengths doubled), slot lanes need v3, `.v<N>.bak` on first save;
+      validation; round-trip + migration tests.
 - [x] New media dropped onto the playing slot: no yield, no re-trigger; played at its next step (SPEC §4.5).
 - [x] Scheduler: `StepTarget::Slot { column }` in the run snapshot; engine triggers the slot by position at send
       time; empty/out of range → clear. Pre-step slot fetch task (SPEC §4.5) feeding the engine by message. Tests incl.
@@ -128,4 +135,4 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [x] Mock-resolume: slot GET route, silent slot swap and media drop; engine tests for both cases.
 - [ ] Live check in Resolume (Uli): swap clips in slots and drop media onto the playing slot while a
       slot sequence runs; also whether the slot's thumbnail updates after a media drop (Resolume kept
-      its `last_update`, notes §14; the UI keys thumbnails by content as well).
+      its `last_update`, notes §15; the UI keys thumbnails by content as well).

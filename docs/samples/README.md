@@ -23,3 +23,13 @@ Sessions:
 - `ws-05` opacity 0 by param id still reports `connected`; custom thumbnail upload; PNG as clip source.
 - `ws-06` which changes push the composition (renames don't; column add/remove do); WS `post`/`remove`.
 - `ws-07` `get`, `unsubscribe`, error shape for an unknown path; cleanup.
+
+## Demo data (screenshots)
+
+- `demo-composition.json`: a neutral demo composition ("Demo", decks `Act 1` / `Act 2` (live) / `Encore`,
+  layers `Background`, `Mid`, `Front`, `SEQ` with `§` placeholders). Generated from `composition.json` (same
+  structure, every id renumbered, clips renamed; no real media). Run the mock with it:
+  `cargo run -p mock-resolume -- --composition docs/samples/demo-composition.json`.
+- `demo.seq.json`: three sequences for it (`Drop A`, `Intro`, `Build B`); copy it to `<data-dir>/Demo.seq.json`.
+- The thumbnails in `docs/images/screenshot.png` are abstract images generated for the demo and uploaded to the
+  mock (`POST /api/v1/composition/clips/by-id/<id>/thumbnail`); without them every clip shows the sample gradient.

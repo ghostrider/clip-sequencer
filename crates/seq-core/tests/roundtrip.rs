@@ -7,9 +7,10 @@ use seq_core::{
 use serde_json::Value;
 
 const SPEC_EXAMPLE: &str = include_str!("fixtures/spec-example.seq.json");
+/// The same document in format version 1 (lengths in eighths).
+const SPEC_EXAMPLE_V1: &str = include_str!("fixtures/spec-example-v1.seq.json");
 const FULL: &str = include_str!("fixtures/full.seq.json");
 const INVALID: &str = include_str!("fixtures/invalid.seq.json");
-const V1_SPEC_EXAMPLE: &str = include_str!("fixtures/v1-spec-example.seq.json");
 
 /// parse → serialize → parse gives the same model, and the serialized JSON carries exactly the
 /// same data as the fixture (compared as JSON values, so whitespace and key order don't matter).
@@ -37,7 +38,7 @@ fn full_fixture_round_trips() {
 #[test]
 fn spec_example_maps_to_model() {
     let file = from_json(SPEC_EXAMPLE).unwrap();
-    assert_eq!(file.version, 2);
+    assert_eq!(file.version, 3);
     assert_eq!(file.composition, "MyShow");
     let seq = &file.decks["Act 1"].sequences[0];
     assert_eq!(seq.id.to_string(), "6f1c2a9e-0d5b-4c1e-9a0f-2f7d4c1b8e11");
@@ -52,7 +53,7 @@ fn spec_example_maps_to_model() {
     assert_eq!(clip.id, Some(1712345));
     assert_eq!(clip.name.as_deref(), Some("Tunnel Red"));
     assert_eq!(clip.file.as_deref(), Some("tunnel_red.mov"));
-    assert_eq!(lane.steps[0].length, 16);
+    assert_eq!(lane.steps[0].length, 32);
     assert_eq!(lane.steps[1].clip, None);
     assert_eq!(lane.mode, LaneMode::Clip);
     let slot = &seq.lanes[1];
@@ -61,30 +62,25 @@ fn spec_example_maps_to_model() {
     assert_eq!(
         slot.steps,
         [
-            Step::slot(Some(1), 8),
-            Step::slot(Some(2), 8),
-            Step::slot(None, 8)
+            Step::slot(Some(1), 16),
+            Step::slot(Some(2), 16),
+            Step::slot(None, 16)
         ]
     );
-    assert_eq!(seq.pass_length(), 24);
+    assert_eq!(seq.pass_length(), 48);
 }
 
-/// A version 1 file loads as version 2 with clip lanes only, and is written back unchanged apart
-/// from the version (SPEC §6).
 #[test]
-fn v1_file_migrates() {
-    let file = from_json(V1_SPEC_EXAMPLE).unwrap();
-    assert_eq!(file.version, 2);
-    assert!(file
-        .decks
-        .values()
-        .flat_map(|d| &d.sequences)
-        .flat_map(|s| &s.lanes)
-        .all(|l| l.mode == LaneMode::Clip));
-    let mut expected: Value = serde_json::from_str(V1_SPEC_EXAMPLE).unwrap();
-    expected["version"] = 2.into();
-    let written: Value = serde_json::from_str(&to_json(&file)).unwrap();
-    assert_eq!(written, expected);
+fn v1_file_migrates_to_the_current_document() {
+    // Lengths double (eighths -> sixteenths), everything else is unchanged. The v3 example also has
+    // a slot lane, which v1 cannot have: compare without it.
+    let mut current = from_json(SPEC_EXAMPLE).unwrap();
+    for d in current.decks.values_mut() {
+        for s in &mut d.sequences {
+            s.lanes.retain(|l| l.mode == LaneMode::Clip);
+        }
+    }
+    assert_eq!(from_json(SPEC_EXAMPLE_V1).unwrap(), current);
 }
 
 #[test]

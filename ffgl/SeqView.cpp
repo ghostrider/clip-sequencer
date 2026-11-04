@@ -6,10 +6,9 @@
 #include <cstdio>
 #include <string>
 
-//Build number and date, generated into BuildInfo.h by the SeqView.vcxproj GenerateBuildInfo target on every build.
-#define SQV_STR2( x ) #x
-#define SQV_STR( x ) SQV_STR2( x )
-static const char kBuildInfo[] = "Build " SQV_STR( SEQVIEW_BUILD_NUMBER ) " - " SEQVIEW_BUILD_DATE;
+//Version, build number, commit and date ("0.1.0 (build 42, abc1234, 2026-11-03)"), generated into BuildInfo.h by
+//the SeqView.vcxproj GenerateBuildInfo target from Cargo.toml and git: the same values as the app's --version.
+static const char kBuildInfo[] = SEQVIEW_BUILD_INFO;
 
 static_assert( PT_COUNT == 3, "update the constructor when adding parameters" );
 
@@ -23,7 +22,7 @@ static CFFGLPluginInfo PluginInfo(
 	0,                                                                       // Plugin minor version number
 	FF_SOURCE,                                                               // Plugin type
 	"Shows a sequence of the Resolume Clip Sequencer (placeholder for § clips)", // Description
-	"Clip Sequencer SeqView, " SQV_STR( SEQVIEW_BUILD_NUMBER ) " (" SEQVIEW_BUILD_DATE ")" // About
+	"Clip Sequencer SeqView " SEQVIEW_BUILD_INFO                             // About
 );
 
 static std::atomic< int > g_instances{ 0 };

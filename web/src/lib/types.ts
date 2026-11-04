@@ -66,7 +66,8 @@ export interface ResolutionView {
 
 export interface SequenceView {
   sequence: Sequence;
-  pass_eighths: number;
+  /** Length of one pass in sixteenths. */
+  pass_sixteenths: number;
   binding: { column: number; clip_id: number } | null;
   resolution: ResolutionView | null;
   mosaic_key: string;
@@ -181,6 +182,8 @@ export type Command =
   | { cmd: 'edit'; op: EditOp }
   | { cmd: 'undo' }
   | { cmd: 'redo' }
+  | { cmd: 'reload_composition' }
+  | { cmd: 'save_now' }
   | { cmd: 'push_thumbnail'; seq: Uuid }
   | { cmd: 'shell'; action: ShellAction }
   | { cmd: 'log_subscribe' }
@@ -188,7 +191,7 @@ export type Command =
   | { cmd: 'set_midi_port'; port: string | null };
 
 /** Window actions for the desktop shell (ignored in a browser). */
-export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs';
+export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs' | 'open_ffgl_dir';
 
 /** One log record (Console tab, M12 E). */
 export interface LogRecord {
@@ -211,6 +214,73 @@ export interface VersionInfo {
   version: string;
   build: string;
   commit: string;
+  /** UTC build time, ISO 8601. */
+  build_date: string;
+  /** Target triple, e.g. `x86_64-pc-windows-msvc`. */
+  target: string;
+  /** `Copyright (c) 2026 …` (same as LICENSE). */
+  copyright: string;
+  /** GitHub repository URL (Cargo `repository`). */
+  repository: string;
+  /** Project site URL (Cargo `homepage`); the manual is under `manual/`. */
+  homepage: string;
   ui_port: number;
   desktop: boolean;
+}
+
+/** One third-party component in the notices (`THIRD_PARTY_LICENSES.json`, scripts/third-party-licenses.mjs). */
+export interface NoticePackage {
+  name: string;
+  version: string;
+  license: string;
+  part: string;
+  url: string;
+  /** Indexes into `Notices.texts`. */
+  texts: number[];
+}
+
+export interface Notices {
+  /** Set when the notices were not generated for this build (dev builds). */
+  placeholder?: boolean;
+  note?: string;
+  packages: NoticePackage[];
+  texts: string[];
+}
+
+/** `GET /api/licenses`. */
+export interface LicensesInfo {
+  /** The project's MIT license text. */
+  license: string;
+  notices: Notices;
+}
+
+/** `FILEVERSION` of a plugin DLL. */
+export interface DllVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  build: number;
+}
+
+/** `GET /api/ffgl`: the bundled FFGL plugin vs. the one in Resolume's plugin folder (SPEC §12.1). */
+export interface FfglStatus {
+  plugin_name: string;
+  bundled_path: string | null;
+  bundled_version: DllVersion | null;
+  dir: string | null;
+  dir_is_default: boolean;
+  dir_exists: boolean;
+  dir_source: 'command_line' | 'saved' | 'default';
+  installed: { version: DllVersion | null; ours: boolean } | null;
+  action: 'install' | 'update' | 'reinstall' | 'downgrade' | null;
+  resolume_running: boolean;
+  can_detect_resolume: boolean;
+}
+
+/** Result of `POST /api/ffgl/install`, `/remove`, `/dir`. */
+export interface FfglResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+  status: FfglStatus;
 }

@@ -5,15 +5,15 @@
 //! and may contain spaces.
 //!
 //! ```text
-//! SEQVIEW 1
+//! SEQVIEW 2                                  (version 1 counted lengths in eighths)
 //! status ok                                  | status not_found (then only `end` follows)
 //! rev <hex>                                  layout revision
 //! layout                                     only when the request's `rev` differs
 //! name <sequence name>
 //! deck <deck name>
-//! pass <pass length in eighths>
+//! pass <pass length in sixteenths>
 //! lane <ok|missing|ambiguous|seq_layer> <loop_to_end|hold|clear> <layer name>
-//! step <clip|rest|unresolved> <length in eighths> <clip id or 0> <thumbnail version or -> <label>
+//! step <clip|rest|unresolved> <length in sixteenths> <clip id or 0> <thumbnail version or -> <label>
 //! endlayout
 //! run 0                                      | run 1 <pos ticks> <pass ticks> <pass> <passes or 0> <bar.beat>
 //! lanestate <lane> <idle|playing|yielded|resume_pending|taken_over> <step or -1>   (one per lane, when running)
@@ -31,7 +31,7 @@ use crate::engine::view::{DeckView, RuntimeState, SequenceView, StructureState};
 
 /// Builds the response for sequence `name`; `rev` is the layout revision the plugin already has.
 pub fn view_text(s: &StructureState, r: &RuntimeState, name: &str, rev: Option<&str>) -> String {
-    let mut out = String::from("SEQVIEW 1\n");
+    let mut out = String::from("SEQVIEW 2\n");
     // The live deck's sequence wins; otherwise the first deck that has one of that name.
     let found = s
         .decks
@@ -94,7 +94,7 @@ fn layout_text(deck: &DeckView, view: &SequenceView) -> String {
     let s = &view.sequence;
     let _ = writeln!(out, "name {}", one_line(&s.name));
     let _ = writeln!(out, "deck {}", one_line(&deck.name));
-    let _ = writeln!(out, "pass {}", view.pass_eighths);
+    let _ = writeln!(out, "pass {}", view.pass_sixteenths);
     for (li, lane) in s.lanes.iter().enumerate() {
         let res = view.resolution.as_ref().and_then(|r| r.lanes.get(li));
         let end = match lane.end {

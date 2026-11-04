@@ -86,7 +86,7 @@ pub enum Aux {
     },
 }
 
-/// Read one slot over REST (`GET /composition/layers/{layer}/clips/{column}`, notes §14); the
+/// Read one slot over REST (`GET /composition/layers/{layer}/clips/{column}`, notes §15); the
 /// worker answers with [`Aux::SlotRead`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SlotRequest {
@@ -1260,7 +1260,7 @@ impl Engine {
     }
 
     /// Applies a slot read to the index. Resolume moves grid cells by swapping them (notes §2.1,
-    /// §14), so a different id in the slot means that cell and the one the index had there
+    /// §15), so a different id in the slot means that cell and the one the index had there
     /// traded places. A composition push newer than the request wins.
     fn on_slot_read(&mut self, req: SlotRequest, result: Option<(ClipInfo, Option<ClipState>)>) {
         let Some((info, state)) = result else { return };
@@ -1500,7 +1500,7 @@ impl Engine {
                         .iter()
                         .map(|s| SequenceView {
                             sequence: s.clone(),
-                            pass_eighths: s.pass_length(),
+                            pass_sixteenths: s.pass_length(),
                             binding: seq_clips.iter().find(|(n, _, _)| *n == s.name).map(
                                 |(_, column, clip_id)| Binding {
                                     column: *column,

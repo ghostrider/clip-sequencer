@@ -167,7 +167,7 @@ impl State {
 
     /// A drag in Resolume's UI from one slot onto another of the same layer: the two grid cells
     /// trade places, ids and parameters included. A playing clip that is moved stops. Resolume
-    /// sends no composition push for this (notes §14); only the stopped clip's `connected`
+    /// sends no composition push for this (notes §15); only the stopped clip's `connected`
     /// update goes out.
     pub fn swap_slots(&mut self, layer: usize, a: usize, b: usize) -> Changes {
         let mut changes = Changes::default();
@@ -193,7 +193,7 @@ impl State {
 
     /// A media file dropped from Resolume's browser onto a slot: the slot keeps its id and
     /// gets the new media; if it was playing it stops and the new media does not start.
-    /// No composition push (notes §14).
+    /// No composition push (notes §15).
     pub fn replace_media(
         &mut self,
         layer: usize,

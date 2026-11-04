@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User manual
+    url: https://ghostrider.github.io/clip-sequencer/manual/
+    about: Setup, usage and troubleshooting.
+  - name: Report a security vulnerability
+    url: https://github.com/ghostrider/clip-sequencer/security/advisories/new
+    about: Please report security problems privately.

@@ -81,6 +81,8 @@ async fn logs_reach_the_ring_the_file_and_the_console() {
         debounce: DebounceConfig::default(),
         ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
         shell: None,
+        quit: None,
+        ffgl_dir: None,
     })
     .unwrap();
     let ui = app.ui_addr.unwrap();

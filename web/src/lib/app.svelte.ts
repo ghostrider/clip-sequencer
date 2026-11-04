@@ -2,15 +2,39 @@
 // sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
 
 import type {
-  ClipRef, ClipView, Command, DeckView, EditOp, Lane, LogRecord, LogStats, RunView, RuntimeState,
+  ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, RunView, RuntimeState,
   SequenceView, Step, StructureState, Uuid, VersionInfo,
 } from './types';
+
+export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit' | 'ffgl';
+
+const ZOOM_KEY = 'seq.uiZoom';
+function loadUiZoom(): number {
+  try {
+    const z = Number(localStorage.getItem(ZOOM_KEY));
+    return z >= 0.5 && z <= 2 ? z : 1;
+  } catch {
+    return 1;
+  }
+}
+/** CSS zoom on the root (browser UI); remembered per browser. */
+function applyUiZoom(z: number) {
+  document.documentElement.style.zoom = z === 1 ? '' : String(z);
+  try {
+    localStorage.setItem(ZOOM_KEY, String(z));
+  } catch {
+    /* private mode: not remembered */
+  }
+}
 
 /** Records the Console tab keeps (the app's ring buffer holds as many). */
 export const LOG_LIMIT = 5000;
 
-export const EIGHTHS_PER_BAR = 8;
-export const TICKS_PER_EIGHTH = 12;
+/** Step lengths are in sixteenths (file format v2); 4/4 only. */
+export const SIXTEENTHS_PER_BAR = 16;
+export const TICKS_PER_SIXTEENTH = 6;
+/** Default resize snap: an eighth (Shift while dragging snaps to sixteenths). */
+export const SNAP_SIXTEENTHS = 2;
 
 /** Identifies a deck tab: its position (deck names need not be unique), or the name of an orphaned deck. */
 export function deckKey(d: DeckView): string {
@@ -33,13 +57,19 @@ class AppState {
   errorsSeen = $state(0);
   /** Preferences dialog (MIDI clock input). */
   prefsOpen = $state(false);
+  /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
+  dialog = $state<InfoDialog | null>(null);
+  /** Status-bar hint about the bundled FFGL plugin (M11 G3): missing in Resolume's folder, or an update. */
+  ffglHint = $state<'missing' | 'update' | null>(null);
+  /** Browser UI only: page zoom set from the View menu (the desktop app zooms its window). */
+  uiZoom = $state(loadUiZoom());
 
   /** Deck tab being shown (see `deckKey`); `null` = follow the live deck. */
   viewDeckKey = $state<string | null>(null);
   selectedSeq = $state<Uuid | null>(null);
   selectedStep = $state<{ lane: number; index: number } | null>(null);
-  /** Pixels per eighth in the lane grid. */
-  zoom = $state(14);
+  /** Pixels per sixteenth in the lane grid. */
+  zoom = $state(7);
   search = $state('');
   /** Waiting for a clip click in the browser to relink the selected step. */
   relinking = $state(false);
@@ -59,9 +89,12 @@ class AppState {
         .then((v: VersionInfo) => {
           this.version = v;
           this.desktop = v.desktop === true;
+          // The browser UI's zoom from an earlier visit; the desktop window (same origin) zooms itself.
+          document.documentElement.style.zoom = !this.desktop && this.uiZoom !== 1 ? String(this.uiZoom) : '';
         })
         .catch(() => {});
       if (this.tab === 'console') this.send({ cmd: 'log_subscribe' });
+      this.checkFfgl();
     };
     ws.onclose = () => {
       this.connected = false;
@@ -85,6 +118,44 @@ class AppState {
 
   edit(op: EditOp) {
     this.send({ cmd: 'edit', op });
+  }
+
+  /** The FFGL plugin hint: only when this build bundles the plugin (a release), and only when it is missing
+   *  in Resolume's plugin folder or older there. Never installs anything by itself. */
+  async checkFfgl() {
+    try {
+      const r = await fetch('/api/ffgl');
+      if (!r.ok) return;
+      const s: FfglStatus = await r.json();
+      if (!s.bundled_version) this.ffglHint = null;
+      else if (!s.installed) this.ffglHint = 'missing';
+      else if (s.installed.ours && s.action === 'update') this.ffglHint = 'update';
+      else this.ffglHint = null;
+    } catch {
+      /* the hint is optional */
+    }
+  }
+
+  // ---- menus (M11 Phase F) ----
+
+  openDialog(d: InfoDialog) {
+    this.prefsOpen = false;
+    this.dialog = d;
+  }
+
+  /** Project links, from Cargo metadata via `/api/version` (fallbacks until it has loaded). */
+  get links() {
+    const repo = this.version?.repository ?? 'https://github.com/ghostrider/clip-sequencer';
+    const home = this.version?.homepage ?? 'https://ghostrider.github.io/clip-sequencer/';
+    const site = home.endsWith('/') ? home : `${home}/`;
+    return { repo, site, manual: `${site}manual/`, issues: `${repo}/issues/new/choose` };
+  }
+
+  /** View menu of the browser UI: `step` in 10 % steps, `null` resets. */
+  zoomUi(step: number | null) {
+    const z = step === null ? 1 : Math.round((this.uiZoom + step) * 10) / 10;
+    this.uiZoom = Math.min(2, Math.max(0.5, z));
+    applyUiZoom(this.uiZoom);
   }
 
   // ---- console ----
@@ -229,10 +300,12 @@ export function layerLabel(l: { name: string; index: number; ambiguous: boolean 
   return l.name;
 }
 
-export function formatLength(eighths: number): string {
-  const bars = eighths / EIGHTHS_PER_BAR;
-  if (eighths % EIGHTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
-  return `${eighths}/8`;
+/** Length in sixteenths as whole bars, else eighths, else sixteenths: `2 bars`, `3/8`, `5/16`. */
+export function formatLength(sixteenths: number): string {
+  const bars = sixteenths / SIXTEENTHS_PER_BAR;
+  if (sixteenths % SIXTEENTHS_PER_BAR === 0) return `${bars} ${bars === 1 ? 'bar' : 'bars'}`;
+  if (sixteenths % 2 === 0) return `${sixteenths / 2}/8`;
+  return `${sixteenths}/16`;
 }
 
 export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
@@ -245,3 +318,6 @@ export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
 
 // The desktop shell's File > Preferences menu item calls this.
 (window as unknown as { __seqOpenPrefs: () => void }).__seqOpenPrefs = () => (app.prefsOpen = true);
+
+// The desktop shell's Help menu items (About, Licenses, Keyboard shortcuts) call this.
+(window as unknown as { __seqOpenDialog: (d: InfoDialog) => void }).__seqOpenDialog = (d) => app.openDialog(d);

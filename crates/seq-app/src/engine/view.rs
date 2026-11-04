@@ -83,7 +83,7 @@ pub struct ClipView {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SequenceView {
     pub sequence: Sequence,
-    pub pass_eighths: u64,
+    pub pass_sixteenths: u64,
     /// Its `§` clip on the SEQ layer of this deck, if the deck's clips are known.
     pub binding: Option<Binding>,
     pub resolution: Option<ResolutionView>,
@@ -209,7 +209,7 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
 
 /// Version of a clip's thumbnail for the cache and the UI: Resolume's `last_update` plus a
 /// fingerprint of the content. Media dropped onto a slot keeps the slot's id and, as seen in the
-/// M13 probe (notes §14), its `last_update`, so the marker alone would keep the old picture.
+/// M13 probe (notes §15), its `last_update`, so the marker alone would keep the old picture.
 pub fn thumb_version(c: &seq_core::index::ClipInfo) -> String {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();

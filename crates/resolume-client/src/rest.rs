@@ -99,7 +99,7 @@ impl RestClient {
         Ok(parse_composition(&self.composition_text().await?)?)
     }
 
-    /// One slot by position, `GET /composition/layers/{L}/clips/{C}` (1-based, notes §14). Used
+    /// One slot by position, `GET /composition/layers/{L}/clips/{C}` (1-based, notes §15). Used
     /// to read a slot lane's slot just before its step (SPEC §4.5): drags and drops in Resolume's
     /// UI are often not pushed. Not valid during a deck switch (notes §4).
     pub async fn clip_at(

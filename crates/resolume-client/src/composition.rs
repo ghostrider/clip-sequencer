@@ -44,7 +44,7 @@ pub fn parse_composition_value(
     Ok(build(raw))
 }
 
-/// One slot from `GET /composition/layers/{L}/clips/{C}` (notes §14), placed at `layer`/`column`
+/// One slot from `GET /composition/layers/{L}/clips/{C}` (notes §15), placed at `layer`/`column`
 /// (1-based, the request's position). Returns its connection state with it.
 pub fn parse_clip(
     json: &str,

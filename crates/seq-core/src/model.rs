@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// MIDI clock resolution is 24 PPQN; one eighth note (the grid unit) is 12 ticks.
-pub const TICKS_PER_EIGHTH: u32 = 12;
-/// 4/4 only: a bar is 8 eighths.
-pub const EIGHTHS_PER_BAR: u32 = 8;
+/// MIDI clock resolution is 24 PPQN; one sixteenth note (the grid unit, file format v2) is 6 ticks.
+pub const TICKS_PER_SIXTEENTH: u32 = 6;
+/// 4/4 only: a bar is 16 sixteenths.
+pub const SIXTEENTHS_PER_BAR: u32 = 16;
 
 /// One file per composition. Decks are keyed by their Resolume deck name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,7 +63,7 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    /// Length of one pass in eighths: the length of the longest lane.
+    /// Length of one pass in sixteenths: the length of the longest lane.
     pub fn pass_length(&self) -> u64 {
         self.lanes.iter().map(Lane::length).max().unwrap_or(0)
     }
@@ -285,7 +285,7 @@ impl From<Lane> for LaneRepr {
 }
 
 impl Lane {
-    /// Sum of step lengths in eighths.
+    /// Sum of step lengths in sixteenths.
     pub fn length(&self) -> u64 {
         self.steps.iter().map(|s| u64::from(s.length)).sum()
     }
@@ -313,7 +313,7 @@ pub struct Step {
     /// `None` in clip lanes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub column: Option<u32>,
-    /// In eighths, ≥ 1 (checked by validation).
+    /// In sixteenths, ≥ 1 (checked by validation). Version 1 files counted eighths.
     pub length: u32,
 }
 

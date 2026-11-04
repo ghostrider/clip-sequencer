@@ -26,6 +26,10 @@ if ($Fix) {
 }
 Invoke-Step 'clippy' @('clippy', '--workspace', '--all-targets', '--', '-D', 'warnings')
 Invoke-Step 'test' @('test', '--workspace')
+# One version source: Cargo.toml = web/package.json = package-lock.json (M11 Phase E).
+Write-Host '==> version' -ForegroundColor Cyan
+& node scripts\check-version.mjs
+if ($LASTEXITCODE -ne 0) { Write-Host 'FAILED: version' -ForegroundColor Red; exit $LASTEXITCODE }
 # License policy and advisories (deny.toml); CI runs the same check.
 if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
     Invoke-Step 'deny' @('deny', 'check', 'licenses', 'bans', 'advisories', 'sources')

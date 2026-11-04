@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, EIGHTHS_PER_BAR, TICKS_PER_EIGHTH, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
   import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
@@ -17,12 +17,14 @@
     return resize && resize.lane === lane && resize.index === index ? resize.len : step.length;
   }
 
-  let totalEighths = $derived.by(() => {
+  let totalSixteenths = $derived.by(() => {
     const longest = Math.max(0, ...seq.lanes.map((l, li) => l.steps.reduce((a, s, i) => a + len(li, i, s), 0)));
-    const bars = Math.max(4, Math.ceil(longest / EIGHTHS_PER_BAR) + 1);
-    return bars * EIGHTHS_PER_BAR;
+    const bars = Math.max(4, Math.ceil(longest / SIXTEENTHS_PER_BAR) + 1);
+    return bars * SIXTEENTHS_PER_BAR;
   });
-  let bars = $derived(totalEighths / EIGHTHS_PER_BAR);
+  let bars = $derived(totalSixteenths / SIXTEENTHS_PER_BAR);
+  // Sixteenth ticks on the ruler once they are far enough apart to read.
+  let fineRuler = $derived(zoom >= 6);
 
   function stepLabel(step: Step, r: StepResolution | undefined): string {
     const c = app.clip(r?.clip_id);
@@ -63,8 +65,8 @@
     e.preventDefault();
     const index = indexAt(e.currentTarget as HTMLElement, e.clientX, seq.lanes[lane].steps, lane);
     const step: Step = isSlotLane(seq.lanes[lane])
-      ? { column: Number(e.dataTransfer?.getData('application/x-seq-column')), length: 8 }
-      : { clip: JSON.parse(data), length: 8 };
+      ? { column: Number(e.dataTransfer?.getData('application/x-seq-column')), length: SIXTEENTHS_PER_BAR }
+      : { clip: JSON.parse(data), length: SIXTEENTHS_PER_BAR };
     app.edit({ op: 'insert_step', seq: seq.id, lane, index, step });
     app.selectedStep = { lane, index };
   }
@@ -75,9 +77,12 @@
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     resize = { lane, index, startX: e.clientX, startLen: step.length, len: step.length };
   }
+  // Snaps the length to eighths, or to sixteenths while Shift is held (SPEC §9.3).
   function resizeMove(e: PointerEvent) {
     if (!resize) return;
-    resize.len = Math.max(1, resize.startLen + Math.round((e.clientX - resize.startX) / zoom));
+    const snap = e.shiftKey ? 1 : SNAP_SIXTEENTHS;
+    const raw = resize.startLen + (e.clientX - resize.startX) / zoom;
+    resize.len = Math.max(snap, Math.round(raw / snap) * snap);
   }
   function resizeUp() {
     if (!resize) return;
@@ -124,7 +129,7 @@
   function onWheel(e: WheelEvent) {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    app.zoom = Math.min(60, Math.max(4, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+    app.zoom = Math.min(30, Math.max(2, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
   }
 
   function moveLane(from: number, to: number) {
@@ -151,7 +156,7 @@
 </script>
 
 <div class="grid" onwheel={onWheel}>
-  <div class="grid-inner" style:min-width={`calc(var(--lane-head-w) + ${totalEighths * zoom}px)`}>
+  <div class="grid-inner" style:min-width={`calc(var(--lane-head-w) + ${totalSixteenths * zoom}px)`}>
     <div class="lanehead-col">
       <div class="ruler-spacer">bar.beat</div>
       {#each seq.lanes as lane, li (li)}
@@ -203,9 +208,9 @@
     <div class="tracks">
       <div class="ruler">
         {#each Array(bars) as _, b (b)}
-          <div class="bar" style:flex={`0 0 ${EIGHTHS_PER_BAR * zoom}px`}>
+          <div class="bar" style:flex={`0 0 ${SIXTEENTHS_PER_BAR * zoom}px`}>
             <div class="num">{b + 1}</div>
-            <div class="ticks">{#each Array(EIGHTHS_PER_BAR) as _, t (t)}<i></i>{/each}</div>
+            <div class="ticks" class:fine={fineRuler}>{#each Array(fineRuler ? SIXTEENTHS_PER_BAR : SIXTEENTHS_PER_BAR / 2) as _, t (t)}<i></i>{/each}</div>
           </div>
         {/each}
       </div>
@@ -261,7 +266,7 @@
         </div>
       {/each}
       {#if run}
-        {@const x = (run.pos / TICKS_PER_EIGHTH) * zoom}
+        {@const x = (run.pos / TICKS_PER_SIXTEENTH) * zoom}
         <div class="playhead" style:left={`${x}px`}></div>
         <div class="playhead-label" style:left={`${x}px`}>{run.bar_beat}</div>
       {/if}

@@ -2,13 +2,17 @@
 //!
 //! Saves are atomic: the JSON goes to `<file>.tmp`, is flushed to disk, then renamed over the
 //! old file, so a crash never leaves a half-written file. Loading never modifies anything.
+//!
+//! An older file version (v1: lengths in eighths; v2: no slot lanes) is migrated in memory on
+//! load. The first save over it copies it to `<file>.v<N>.bak` first, so the original stays
+//! readable by the builds that wrote it.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use seq_core::{from_json, to_json, validate, LoadError, SeqFile, ValidationError};
+use seq_core::{file_version, from_json, to_json, validate, LoadError, SeqFile, ValidationError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -105,6 +109,7 @@ impl Storage {
             move |source| StorageError::Io { path, source }
         };
         fs::create_dir_all(&self.dir).map_err(io(&self.dir))?;
+        backup_older(&path).map_err(io(&path))?;
         let tmp = tmp_path(&path);
         {
             let mut f = fs::File::create(&tmp).map_err(io(&tmp))?;
@@ -124,10 +129,37 @@ pub fn load_text(path: &Path, text: &str) -> Result<SeqFile, StorageError> {
     })
 }
 
-fn tmp_path(path: &Path) -> PathBuf {
+/// Copies a file of an older version N at `path` to `<path>.vN.bak` before it is overwritten in
+/// the current format. An existing backup is kept (it is the oldest original of that version).
+fn backup_older(path: &Path) -> std::io::Result<()> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let Some(version) = file_version(&text).filter(|v| *v < u64::from(seq_core::FORMAT_VERSION))
+    else {
+        return Ok(());
+    };
+    let backup = suffixed(path, &format!(".v{version}.bak"));
+    if !backup.exists() {
+        fs::write(&backup, text)?;
+        log::info!(
+            "kept the version {version} sequence file as {}",
+            backup.display()
+        );
+    }
+    Ok(())
+}
+
+fn suffixed(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
+    name.push(suffix);
     path.with_file_name(name)
+}
+
+fn tmp_path(path: &Path) -> PathBuf {
+    suffixed(path, ".tmp")
 }
 
 /// On Windows a rename onto a file that another process (virus scanner, indexer, an editor) has
