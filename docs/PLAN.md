@@ -129,3 +129,11 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
 - [ ] Live check in Resolume (Uli): swap clips in slots and drop media onto the playing slot while a
       slot sequence runs; also whether the slot's thumbnail updates after a media drop (Resolume kept
       its `last_update`, notes §14; the UI keys thumbnails by content as well).
+
+## M14 — 1/16 step lengths (file format v3)  ✓ done 2026-11-04 (plugin install in Resolume pending)
+- [x] Format v3: lengths in sixteenths (6 ticks); v1/v2 migrate with lengths doubled; tests and fixtures.
+- [x] Editor: resize snaps the step end to 1/8, to 1/16 with Shift; inspector −/+ by 1/8, Shift by 1/16.
+- [x] Plugin view `format=2` (`SEQVIEW 2`, sixteenths); `SEQVIEW 1` (eighths) kept for older plugins.
+- [x] FFGL plugin reads both; tests built and run (61 checks).
+- [ ] Install the rebuilt plugin (`ffgl\build_seqview.ps1`, Resolume closed) and check it in Resolume.
+- [x] Version 0.2.0.

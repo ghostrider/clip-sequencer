@@ -36,8 +36,9 @@ compensates latency itself.
   Messages used: Timing Clock (0xF8). Start (0xFA), Stop (0xFC) and Continue (0xFB)
   are logged but **do not** affect running sequences (the Clock Shifter's resync
   button sends Start; it must not restart sequences).
-- **Grid:** 1/8 bar in 4/4 = one eighth note = **12 ticks**. All step lengths are
-  integers in eighths. Only 4/4 is supported.
+- **Grid:** 1/16 bar in 4/4 = one sixteenth note = **6 ticks**. All step lengths are
+  integers in sixteenths (file format v3, decided 2026-11-04; before: eighths). The editor snaps
+  to 1/8 and to 1/16 with Shift (§9.3). Only 4/4 is supported.
 - **No quantization.** A sequence starts at the moment its start is processed. Its
   internal position counts ticks from that moment. Step boundaries fire exactly
   on the tick where they fall.
@@ -154,7 +155,7 @@ Rules for slot lanes:
 - **Lane** — targets one layer (by name), in `clip` or `slot` mode (§4.5). Has its own steps and its own length. Lanes can be
   reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
-- **Step** — a clip reference (or `null` = rest) and a length in eighths. A **rest clears the
+- **Step** — a clip reference (or `null` = rest) and a length in sixteenths. A **rest clears the
   lane's layer** when it starts (silence). If the clip the lane triggered last lives on another
   layer (it plays there) and is still playing, that layer is cleared too: a rest stops what the
   lane started. The same applies to every clear of a lane (lane end `clear`, `after_last_pass`
@@ -177,7 +178,7 @@ automatically. Sequences are grouped by deck name.
 
 ```json
 {
-  "version": 1,
+  "version": 3,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -193,8 +194,8 @@ automatically. Sequences are grouped by deck name.
               "layer": "BG",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 16 },
-                { "clip": null, "length": 8 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
+                { "clip": null, "length": 16 }
               ]
             },
             {
@@ -202,9 +203,9 @@ automatically. Sequences are grouped by deck name.
               "mode": "slot",
               "end": "loop_to_end",
               "steps": [
-                { "column": 1, "length": 8 },
-                { "column": 2, "length": 8 },
-                { "column": null, "length": 8 }
+                { "column": 1, "length": 16 },
+                { "column": 2, "length": 16 },
+                { "column": null, "length": 16 }
               ]
             }
           ]
@@ -216,12 +217,16 @@ automatically. Sequences are grouped by deck name.
 ```
 
 - `repeat.mode`: `"once"` | `"count"` | `"infinite"`; `count` only with `"count"`.
-- `length`: integer, in eighths (8 = one bar), ≥ 1.
+- `length`: integer, in sixteenths (16 = one bar), ≥ 1.
 - `mode` (lane, version 2): `"clip"` (default when omitted) | `"slot"` (§4.5). Steps of a clip
   lane have `clip` (object or `null` = rest); steps of a slot lane have `column` (integer ≥ 1,
   or `null` = rest). The other field is not allowed.
-- **Version 2** (M13) adds `mode` and `column`. A version 1 file is migrated on load (all lanes
-  `clip`, nothing else changes) and saved as version 2. A file with a higher version than the app
+- **Version 3** counts `length` in sixteenths. Versions 1 and 2 counted eighths; their lengths are
+  doubled on load.
+- **Version 2** (M13) adds `mode` and `column`. A version 1 file must not use them (all lanes
+  `clip`).
+- Older versions are migrated on load and saved as version 3 (the app writes the file only after an
+  edit). A file with a higher version than the app
   knows is refused, not overwritten.
 - Writes are atomic (write temp file, rename). Autosave after edits (debounced ~1 s).
 - If a deck name in the file no longer exists in Resolume, its sequences are listed in the
@@ -339,13 +344,15 @@ Single screen, dark theme, everything controlled from here (no separate live vie
     (`Loop to end` / `Hold` / `Clear`), state pill (`idle` / `playing` / `yielded`; yielded has a
     "Resume lane" action), delete lane.
   - Ruler: bars numbered, eighth subdivisions; zoom with Ctrl+wheel.
+  - Lengths read as bars, `n/8` or `n/16`.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
     not confirmed (red top edge).
   - Playhead with `bar.beat` label while running.
 - Interactions:
   - Drag a clip from the browser onto a lane → appends or inserts a step (default length 8).
-  - Drag a block's right edge → resize, snapping to eighths (min 1).
+  - Drag a block's right edge → resize: the block's end snaps to the 1/8 grid, or to 1/16 with
+    Shift held (min 1/16).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence. Esc → deselect.
@@ -365,7 +372,7 @@ Single screen, dark theme, everything controlled from here (no separate live vie
   corner, in every lane mode.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
-  in eighths with bars shown. For a slot step instead: column stepper (1 … column count) and the
+  (−/+ by 1/8, by 1/16 with Shift) with bars shown. For a slot step instead: column stepper (1 … column count) and the
   clip currently in that slot (or "empty → rest").
 
 ### 9.5 Status bar
