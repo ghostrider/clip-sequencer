@@ -28,7 +28,9 @@ Starting and stopping is unchanged: triggering the `§` clip starts the sequence
 
 ## How it works
 
-- **Data:** a worker thread polls `GET http://<Server>/plugin/v1/view.txt?name=<Sequence>&rev=<layout revision>`
+- **Data:** a worker thread polls `GET http://<Server>/plugin/v1/view.txt?format=2&name=<Sequence>&rev=<layout revision>`
+  (`format=2`: `SEQVIEW 2`, lengths in sixteenths; an older sequencer answers `SEQVIEW 1` in eighths, which the
+  plugin still reads)
   every 50 ms (format: `../crates/seq-app/src/plugin_view.rs`). The layout is only resent when its
   revision changes. Clip thumbnails come from `/thumbs/clip/<id>.png?v=<version>` and are decoded (stb_image) on the
   worker. HTTP is WinHTTP (system DLL, nothing to deploy).
