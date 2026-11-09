@@ -630,7 +630,9 @@ async fn ui_server_protocol_thumbnails_and_push() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
     ws.send(Message::Text(
-        json!({"cmd":"push_thumbnail","seq": SEQ_A}).to_string(),
+        json!({"cmd":"push_thumbnail","seq": SEQ_A})
+            .to_string()
+            .into(),
     ))
     .await
     .unwrap();
@@ -655,7 +657,7 @@ async fn ui_server_protocol_thumbnails_and_push() {
 
     // Commands over the socket reach the engine.
     ws.send(Message::Text(
-        json!({"cmd":"start","seq": SEQ_B}).to_string(),
+        json!({"cmd":"start","seq": SEQ_B}).to_string().into(),
     ))
     .await
     .unwrap();
@@ -1142,7 +1144,7 @@ async fn ui_shell_actions_reach_the_desktop_shell() {
         .unwrap();
     for action in ["zoom_in", "zoom_out", "zoom_reset", "quit"] {
         ws.send(Message::Text(
-            json!({"cmd": "shell", "action": action}).to_string(),
+            json!({"cmd": "shell", "action": action}).to_string().into(),
         ))
         .await
         .unwrap();
@@ -1207,7 +1209,9 @@ async fn preferences_switch_and_save_the_midi_clock_port() {
         .await
         .unwrap();
     ws.send(Message::Text(
-        json!({"cmd": "set_midi_port", "port": PORT}).to_string(),
+        json!({"cmd": "set_midi_port", "port": PORT})
+            .to_string()
+            .into(),
     ))
     .await
     .unwrap();
@@ -1474,7 +1478,7 @@ async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
     // The File menu's other commands are accepted: after them an unknown command (the control) must be
     // the only "bad UI message" (commands are handled in order).
     for cmd in ["save_now", "reload_composition", "no_such_command"] {
-        ws.send(Message::Text(json!({ "cmd": cmd }).to_string()))
+        ws.send(Message::Text(json!({ "cmd": cmd }).to_string().into()))
             .await
             .unwrap();
     }
@@ -1496,7 +1500,7 @@ async fn headless_ui_quits_through_the_token_and_licenses_are_served() {
     assert_eq!(bad(&r), 1, "{:?}", r.notices);
     assert!(!quit.is_cancelled());
     ws.send(Message::Text(
-        json!({"cmd": "shell", "action": "quit"}).to_string(),
+        json!({"cmd": "shell", "action": "quit"}).to_string().into(),
     ))
     .await
     .unwrap();

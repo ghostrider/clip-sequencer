@@ -92,9 +92,11 @@ async fn logs_reach_the_ring_the_file_and_the_console() {
     let stats = next_of(&mut ws, "log_stats").await;
     let errors_before = stats["errors"].as_u64().unwrap();
 
-    ws.send(Message::Text(json!({"cmd": "log_subscribe"}).to_string()))
-        .await
-        .unwrap();
+    ws.send(Message::Text(
+        json!({"cmd": "log_subscribe"}).to_string().into(),
+    ))
+    .await
+    .unwrap();
     let snapshot = next_of(&mut ws, "log_snapshot").await;
     let records = snapshot["records"].as_array().unwrap();
     assert!(records.iter().any(|r| r["message"] == "a warning"));
@@ -112,9 +114,11 @@ async fn logs_reach_the_ring_the_file_and_the_console() {
     assert_eq!(logging::stats().errors, errors_before + 1);
 
     // Unsubscribed: no more records, but the stats still update (error badge).
-    ws.send(Message::Text(json!({"cmd": "log_unsubscribe"}).to_string()))
-        .await
-        .unwrap();
+    ws.send(Message::Text(
+        json!({"cmd": "log_unsubscribe"}).to_string().into(),
+    ))
+    .await
+    .unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
     log::error!("second error");
     // (A stats message for the first error may still be queued: wait for the new count.)
