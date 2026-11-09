@@ -14,7 +14,7 @@ description = "Milestone 0: explores a running Resolume's REST, WebSocket and OS
 anyhow.workspace = true
 clap.workspace = true
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "multipart"] }
 rosc = "0.11"
 serde_json.workspace = true
 tokio.workspace = true
