@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
             },
             _ = tick.tick() => {
                 n += 1;
-                if tx.send(Message::Ping(n.to_be_bytes().to_vec())).await.is_err() {
+                if tx.send(Message::Ping(n.to_be_bytes().to_vec().into())).await.is_err() {
                     println!("[{:7.2}] ping send failed", t());
                     break;
                 }

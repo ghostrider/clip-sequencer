@@ -96,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
         let id = id.expect("param id");
         println!("subscribe {what} {id}");
         let msg = json!({"action":"subscribe","parameter":format!("/parameter/by-id/{id}")});
-        tx.send(Message::Text(msg.to_string())).await?;
+        tx.send(Message::Text(msg.to_string().into())).await?;
     }
     let pos_id = subs[2].1.unwrap();
 
@@ -146,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
                             println!("[{:6.3}] >>> WS set event {id} true, 100 ms, false", t());
                             for val in [true, false] {
                                 let msg = json!({"action":"set","parameter":format!("/parameter/by-id/{id}"),"value":val});
-                                tx.send(Message::Text(msg.to_string())).await?;
+                                tx.send(Message::Text(msg.to_string().into())).await?;
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
                         }

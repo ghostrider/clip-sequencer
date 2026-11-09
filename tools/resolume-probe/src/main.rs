@@ -256,7 +256,7 @@ async fn session(
             while let Some(msg) = ws_rx.next().await {
                 let now = t();
                 let text = match msg {
-                    Ok(Message::Text(s)) => s,
+                    Ok(Message::Text(s)) => s.to_string(),
                     Ok(Message::Binary(b)) => {
                         println!("[{now:8.1}] recv binary {} bytes", b.len());
                         continue;
@@ -337,7 +337,7 @@ async fn session(
                 };
                 println!("[{:8.1}] send ws {text}", t());
                 mark(json!({"sent": text}));
-                ws_tx.send(Message::Text(text)).await?;
+                ws_tx.send(Message::Text(text.into())).await?;
             }
             "osc" => {
                 let mut parts = rest.split_whitespace();
