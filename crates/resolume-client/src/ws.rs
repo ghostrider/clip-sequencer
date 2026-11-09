@@ -144,7 +144,11 @@ async fn run(
         let (mut tx, mut rx) = ws.split();
         let mut ok = true;
         for id in &subs {
-            if tx.send(Message::Text(subscribe(*id, true))).await.is_err() {
+            if tx
+                .send(Message::Text(subscribe(*id, true).into()))
+                .await
+                .is_err()
+            {
                 ok = false;
                 break;
             }
@@ -185,15 +189,15 @@ async fn run(
                     if last_heard.elapsed() > SILENCE_LIMIT {
                         break format!("no answer for {} s", SILENCE_LIMIT.as_secs());
                     }
-                    ok &= tx.send(Message::Ping(Vec::new())).await.is_ok();
+                    ok &= tx.send(Message::Ping(Vec::new().into())).await.is_ok();
                 },
                 cmd = cmds.recv() => match cmd {
                     Some(WsCommand::SetSubscriptions(new)) => {
                         for id in new.difference(&subs) {
-                            ok &= tx.send(Message::Text(subscribe(*id, true))).await.is_ok();
+                            ok &= tx.send(Message::Text(subscribe(*id, true).into())).await.is_ok();
                         }
                         for id in subs.difference(&new) {
-                            ok &= tx.send(Message::Text(subscribe(*id, false))).await.is_ok();
+                            ok &= tx.send(Message::Text(subscribe(*id, false).into())).await.is_ok();
                         }
                         subs = new;
                     }
@@ -203,11 +207,11 @@ async fn run(
                     }
                     Some(WsCommand::Resubscribe(ids)) => {
                         for id in ids.intersection(&subs) {
-                            ok &= tx.send(Message::Text(subscribe(*id, true))).await.is_ok();
+                            ok &= tx.send(Message::Text(subscribe(*id, true).into())).await.is_ok();
                         }
                     }
                     Some(WsCommand::Raw(text)) => {
-                        ok &= tx.send(Message::Text(text)).await.is_ok();
+                        ok &= tx.send(Message::Text(text.into())).await.is_ok();
                     }
                     None => {
                         let _ = tx.send(Message::Close(None)).await;
