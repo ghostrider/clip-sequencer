@@ -16,6 +16,6 @@ axum = { version = "0.8", features = ["ws", "multipart"] }
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
-rosc = "0.10"
+rosc = "0.11"
 serde_json.workspace = true
 tokio.workspace = true
