@@ -137,6 +137,18 @@ Plan and checkboxes: `docs/M12-desktop-shell.md` (phases A–G). Precedes the op
       slot sequence runs; also whether the slot's thumbnail updates after a media drop (Resolume kept
       its `last_update`, notes §15; the UI keys thumbnails by content as well).
 
+## M15 — Themes (SPEC §9.7)  ✓ done 2026-11-18 (Windows check pending)
+Asked for on 2026-11-18, before M14: a look of its own instead of the typical generated-app look.
+- [x] Direction chosen from a comparison of four looks: Rack (cool slate, cyan accent, square corners,
+      condensed labels, no glow) becomes the default; the mockup's tokens and `web/src/tokens.css` updated.
+- [x] All UI colours through tokens (the last hard-coded ones replaced), corner radii through
+      `--radius-sm/-lg/-pill`, fonts through `--font/--font-label/--font-head/--mono`.
+- [x] Five built-in themes, Preferences → Appearance with live preview, Save / Cancel.
+- [x] Colour and font editor; save as new theme, save changes, delete; stored in `settings.json`,
+      sent to every UI (`appearance`); validated in the app; integration test.
+- [x] Fonts bundled (OFL 1.1) with their notices in the third-party licences; `§ SEQ` logo in Unbounded.
+- [ ] Windows check: desktop window and splash colours, fonts in WebView2, release zip size.
+
 ## M14 — In-app update  (planned 2026-11-04, not started)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.

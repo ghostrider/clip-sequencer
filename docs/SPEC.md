@@ -317,9 +317,10 @@ and is logged as late, and it does not yield the lane (§7.3).
 
 Reference mockup: **`docs/ui/editor-mockup.html`** (open it in a browser). Its layout, design
 tokens (`:root` CSS variables) and visual states are binding; sample data and exact pixel values
-are not. Copy the tokens to `web/src/tokens.css`.
+are not. Copy the tokens to `web/src/tokens.css`. The tokens are the default theme (Rack); other
+themes change token values only, never the layout (§9.7).
 
-Single screen, dark theme, everything controlled from here (no separate live view).
+Single screen, everything controlled from here (no separate live view).
 
 ### 9.1 Top bar
 - `§ SEQ` logo, composition name.
@@ -416,10 +417,41 @@ last WebSocket confirmation, yield and error notices.
 - Preferences (MIDI clock input): `GET /api/midi/ports` → `{ ports, selected }`; UI → engine
   `{"cmd": "set_midi_port", "port": "<name>" | null}` switches the clock input at once and saves it in
   `<data-dir>/settings.json` (`{ "midi_port": ... }`). At startup `--midi-port` wins over the saved port.
+- Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes }` on connect and after every
+  change (to every connected UI). UI → engine `{"cmd": "set_theme", "id": "<id>" | null}` (`null` = default),
+  `{"cmd": "save_theme", "theme": {...}, "select": bool}` (adds, or replaces the one with the same id),
+  `{"cmd": "delete_theme", "id": "<id>"}`. Commands of one UI are applied in the order sent; refused ones
+  (bad id, name or colour, more than 50 saved themes) leave the settings unchanged and show a notice.
 - `GET /api/version`: `{ app, name, version, build, commit, ui_port, desktop }` (`desktop`: running in the
   shell's window). Also used by a second instance to detect a running one (M12 Phase B).
 - Thumbnails: `GET /thumbs/clip/{id}.png`, `GET /thumbs/seq/{uuid}.png`.
 - Every UI page is served with a Content-Security-Policy that allows only the server's own origin.
+
+### 9.7 Themes (decided 2026-11-18)
+- Preferences has two tabs: **MIDI clock** and **Appearance**. Appearance lists the themes as cards (name,
+  sample, colour strip). Clicking one shows it at once on the whole app; **Save** keeps it, **Cancel** (or Esc)
+  goes back to the saved one. The clock chip opens the MIDI clock tab.
+- Five built-in themes, defined in `web/src/lib/themes.ts`: **Rack** (default: cool slate, cyan accent, square
+  corners, Barlow / Barlow Condensed / JetBrains Mono), **Ink & Signal**, **Graphite & Lime**, **Classic Amber**
+  (the look before 2026-11-18) and **Daylight** (light, for bright rooms). Built-in themes cannot be changed.
+- A theme = all colour tokens (the `:root` colours of the mockup) + four fonts (text, uppercase labels, sequence
+  title, numbers/names) + a look (corner radii, title case, label spacing). The meaning of the colour groups
+  stays fixed: accent = running/selected/playhead, info = confirmed by Resolume, ok = connections,
+  err = unresolved/yielded/disconnected.
+- **Change colours and fonts…** opens an editor: every colour token (picker + hex, `#RRGGBB` or `#RRGGBBAA`)
+  grouped as above, and a font per role from the bundled fonts. Changes preview at once. **Save as new theme**
+  (name required) stores it and selects it; for a saved theme also **Save changes** (same id) and
+  **Delete theme…**. A saved theme keeps the look of the theme it was made from (`base`). While there are
+  unsaved changes, the dialog's Save is disabled (save them as a theme, or discard them).
+- Stored by the app in `<data-dir>/settings.json`: `theme` (id; absent = default) and `custom_themes`
+  (`[{ id, name, base, colors: {token: hex}, fonts: {role: font id} }]`, ids start with `custom-`). The app
+  checks only the shape, so a newer UI can add tokens; missing colours or fonts, an unknown `base` or font
+  come from the base theme (or the default). One setting for the desktop window and every browser.
+- The browser remembers the last theme shown (localStorage) and applies it before connecting, so there is no
+  flash of the default theme. The splash screen and the desktop window's first paint use the default theme.
+- Fonts are bundled (no network at the venue): all SIL OFL 1.1, Latin and Latin Extended subsets, with their
+  copyright and licence in the third-party notices (Help → Licenses). The `§ SEQ` logo uses Unbounded in
+  every theme, the `§` in the accent colour.
 
 ## 10. Architecture
 

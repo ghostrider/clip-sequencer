@@ -51,7 +51,10 @@ docs/ui/                editor-mockup.html — the binding UI reference (layout,
 
 ## UI
 Build the UI to match `docs/ui/editor-mockup.html` (open it in a browser; read its CSS).
-Copy its `:root` tokens to `web/src/tokens.css` and use only those variables for colour.
+Copy its `:root` tokens to `web/src/tokens.css` and use only those variables for colour, corner radii
+and fonts. They are the default theme; the other themes (`web/src/lib/themes.ts`, SPEC §9.7) set the same
+variables at runtime, so a new colour needs a token in all three places. Fonts: bundled via @fontsource
+(`web/src/fonts.ts`), OFL only, each listed in `scripts/third-party-licenses.mjs`.
 Interaction rules are in `docs/SPEC.md` §9; where the mockup and the spec disagree, the spec wins.
 
 ## Commands
