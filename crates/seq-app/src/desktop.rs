@@ -49,8 +49,8 @@ const SPLASH_FADE: Duration = Duration::from_millis(150);
 const WINDOW_STATE: StateFlags = StateFlags::SIZE
     .union(StateFlags::POSITION)
     .union(StateFlags::MAXIMIZED);
-/// `--bg` of web/src/tokens.css: shown until the UI has painted (no white flash).
-const BACKGROUND: Color = Color(0x0E, 0x0F, 0x11, 0xFF);
+/// `--bg` of web/src/tokens.css (the default theme): shown until the UI has painted (no white flash).
+const BACKGROUND: Color = Color(0x14, 0x18, 0x1D, 0xFF);
 /// The editor layout needs about this much (Phase D).
 const MIN_SIZE: (f64, f64) = (1100.0, 700.0);
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);

@@ -215,12 +215,12 @@
 <style>
   .mb-bar { display: flex; gap: 2px; padding: 2px 8px; background: var(--panel); border-bottom: 1px solid var(--line-soft); font-size: 12px; }
   .mb-wrap { position: relative; }
-  .mb-top { padding: 4px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font: inherit; cursor: pointer; }
+  .mb-top { padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: inherit; cursor: pointer; }
   .mb-top:hover, .mb-top[aria-expanded="true"], .mb-top:focus-visible { background: var(--control); color: var(--text); }
   .mb-top:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .mb-pop { position: absolute; top: calc(100% + 2px); left: 0; z-index: 20; min-width: 220px; padding: 4px; display: flex; flex-direction: column;
-    background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
-  .mb-item { display: flex; justify-content: space-between; gap: 24px; padding: 6px 10px; border: 0; border-radius: 4px; background: transparent;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: 0 8px 24px var(--scrim); }
+  .mb-item { display: flex; justify-content: space-between; gap: 24px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); background: transparent;
     color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .mb-item:hover, .mb-item:focus-visible { background: var(--accent-bg); color: var(--accent-text); outline: none; }
   .mb-hint { color: var(--muted); font-family: var(--mono); font-size: 11px; }

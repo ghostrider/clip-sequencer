@@ -29,5 +29,5 @@
   th { text-align: left; font-weight: 400; white-space: nowrap; padding: 4px 16px 4px 0; vertical-align: top; width: 1%; }
   td { padding: 4px 0; color: var(--text-2); }
   tr + tr th, tr + tr td { border-top: 1px solid var(--line-soft); }
-  kbd { font: 12px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--control); }
+  kbd { font: 12px var(--mono); padding: 1px 6px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--control); }
 </style>

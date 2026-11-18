@@ -1,43 +1,63 @@
-/* Design tokens, copied verbatim from docs/ui/editor-mockup.html (:root). Use only these for colour. */
+/* Design tokens, copied verbatim from docs/ui/editor-mockup.html (:root). Use only these for colour.
+   These are the default theme (Rack); the theme chosen in Preferences overrides them at runtime
+   (web/src/lib/themes.ts, SPEC §9.7). */
 :root {
   /* surfaces */
-  --bg: #0E0F11;
-  --panel: #131417;
-  --surface: #16181B;
-  --track: #121316;
-  --control: #1C1E22;
-  --line: #26292E;
-  --line-soft: #1F2125;
-  --line-strong: #33373D;
+  --bg: #14181D;
+  --panel: #1B2027;
+  --surface: #222831;
+  --track: #171B21;
+  --control: #29303A;
+  --scrim: #05070ACC;
+  /* lines */
+  --line: #0E1115;
+  --line-soft: #20262D;
+  --line-strong: #3A4450;
+  --step-line: #3A4450;
+  --tick: #252C34;
+  --tick-strong: #38424D;
   /* text */
-  --text: #E6E6E3;
-  --text-2: #C9CCD1;
-  --muted: #9A9EA6;
-  --faint: #7E838B;
+  --text: #EEF2F5;
+  --text-2: #C3CCD5;
+  --muted: #8C98A5;
+  --faint: #6E7A86;
   /* accent = running / selected / playhead */
-  --accent: #F2A33A;
-  --accent-ink: #1A1206;
-  --accent-bg: #2A1E0E;
-  --accent-line: #5A4220;
-  --accent-text: #FFD39A;
+  --accent: #2FD8F0;
+  --accent-ink: #021A1F;
+  --accent-bg: #0F2C34;
+  --accent-line: #1F6273;
+  --accent-text: #A6F2FF;
   /* info = confirmed by Resolume / bindings */
-  --info-text: #9DCBF0;
-  --info-bg: #121C26;
-  --info-line: #2A4A66;
+  --info-text: #B9BCFF;
+  --info-bg: #1B1C33;
+  --info-line: #3D4080;
   /* ok = connections */
-  --ok: #4CC26E;
-  --ok-bg: #13221A;
-  --ok-line: #2F5B3A;
-  --ok-text: #B6E3C2;
+  --ok: #6BD45A;
+  --ok-ink: #0A1A06;
+  --ok-bg: #16241A;
+  --ok-line: #2E5A2A;
+  --ok-text: #C2EDB8;
   /* error = unresolved, yielded, disconnected */
-  --err: #E5484D;
-  --err-bg: #1E1214;
-  --err-line: #7A2A2F;
-  --err-text: #FFB4B7;
+  --err: #FF5A4E;
+  --err-ink: #FFFFFF;
+  --err-bg: #2A1517;
+  --err-line: #7E2F2A;
+  --err-text: #FFB8B0;
 
-  --font: 'IBM Plex Sans', system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --radius: 6px;
+  /* type */
+  --font: 'Barlow', system-ui, sans-serif;
+  --font-label: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-head: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-logo: 'Unbounded', 'Arial Black', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --head-case: uppercase;
+  --label-ls: .12em;
+  /* shape */
+  --radius: 1px;
+  --radius-sm: 1px;
+  --radius-lg: 2px;
+  --radius-pill: 1px;
+  /* layout */
   --lane-h: 88px;
   --ruler-h: 40px;
   --lane-head-w: 168px;
