@@ -1,8 +1,9 @@
 // App state: what the engine sends over /ws, plus local view state (selected deck tab,
 // sequence, step, zoom). Selecting a deck tab only changes the view (SPEC §7.2).
 
+import { applyTheme, resolveTheme } from './themes';
 import type {
-  ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, RunView, RuntimeState,
+  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, RunView, RuntimeState,
   SequenceView, Step, StructureState, Uuid, VersionInfo,
 } from './types';
 
@@ -55,8 +56,14 @@ class AppState {
   logStats = $state<LogStats>({ errors: 0, dropped: 0 });
   /** Error count when the Console tab was last visible (for the badge). */
   errorsSeen = $state(0);
-  /** Preferences dialog (MIDI clock input). */
+  /** Preferences dialog (MIDI clock input, theme). */
   prefsOpen = $state(false);
+  /** Preferences tab shown when it opens (the clock chip opens the MIDI clock tab). */
+  prefsTab = $state<'clock' | 'appearance'>('clock');
+  /** Theme settings from the app (SPEC §9.7). */
+  appearance = $state<Appearance>({ theme: null, custom_themes: [] });
+  /** True while Preferences shows a theme that is not saved yet: updates from the app do not repaint. */
+  themePreview = false;
   /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
   dialog = $state<InfoDialog | null>(null);
   /** Status-bar hint about the bundled FFGL plugin (M11 G3): missing in Resolume's folder, or an update. */
@@ -109,7 +116,16 @@ class AppState {
         this.logStats = msg.data.stats;
       } else if (msg.type === 'log') this.addLogs(msg.data);
       else if (msg.type === 'log_stats') this.logStats = msg.data;
+      else if (msg.type === 'appearance') {
+        this.appearance = msg.data;
+        if (!this.themePreview) this.applySavedTheme();
+      }
     };
+  }
+
+  /** Shows the theme saved in the settings. */
+  applySavedTheme() {
+    applyTheme(resolveTheme(this.appearance.theme, this.appearance.custom_themes));
   }
 
   send(cmd: Command) {

@@ -1,4 +1,5 @@
 // Mirrors crates/seq-app/src/engine/view.rs and the seq-core model (serde JSON shapes).
+import type { CustomTheme } from './themes';
 
 export type Uuid = string;
 
@@ -188,7 +189,17 @@ export type Command =
   | { cmd: 'shell'; action: ShellAction }
   | { cmd: 'log_subscribe' }
   | { cmd: 'log_unsubscribe' }
-  | { cmd: 'set_midi_port'; port: string | null };
+  | { cmd: 'set_midi_port'; port: string | null }
+  | { cmd: 'set_theme'; id: string | null }
+  | { cmd: 'save_theme'; theme: CustomTheme; select: boolean }
+  | { cmd: 'delete_theme'; id: string };
+
+/** Theme settings from the app (`appearance` message, SPEC §9.7). */
+export interface Appearance {
+  /** Selected theme id; `null` = the default. */
+  theme: string | null;
+  custom_themes: CustomTheme[];
+}
 
 /** Window actions for the desktop shell (ignored in a browser). */
 export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs' | 'open_ffgl_dir';
