@@ -20,6 +20,7 @@ use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::logging::{self, LogRecord};
+use crate::settings::{CustomTheme, Settings};
 use uuid::Uuid;
 
 use crate::engine::view::{RuntimeState, SequenceView, StructureState};
@@ -52,6 +53,24 @@ pub struct ServerCtx {
     pub thumbs_ready: Arc<watch::Sender<bool>>,
     /// The MIDI clock input, for the Preferences dialog (`None` in tests with a clock channel).
     pub clock: Option<Arc<crate::app::ClockControl>>,
+    /// Colour theme settings (SPEC §9.7); every UI gets them on connect and on each change.
+    pub appearance: Arc<watch::Sender<Appearance>>,
+}
+
+/// The theme part of the settings, as sent to the UI (`appearance` message).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct Appearance {
+    pub theme: Option<String>,
+    pub custom_themes: Vec<CustomTheme>,
+}
+
+impl From<&Settings> for Appearance {
+    fn from(s: &Settings) -> Self {
+        Appearance {
+            theme: s.theme.clone(),
+            custom_themes: s.custom_themes.clone(),
+        }
+    }
 }
 
 /// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
@@ -289,26 +308,24 @@ async fn ffgl_set_dir(
                 "{} is not a full path (like D:\\Resolume\\Plugins).",
                 d.display()
             )),
-            _ => {
-                let mut settings = crate::settings::Settings::load(&ctx.data_dir);
-                settings.ffgl_dir = dir.clone();
-                settings
-                    .save(&ctx.data_dir)
-                    .map(|()| {
-                        log::info!(
-                            "FFGL plugin folder: {}",
-                            dir.as_ref()
-                                .map_or("default".into(), |d| d.display().to_string())
-                        );
-                        match &ctx.ffgl_dir {
-                            Some(cli) => {
-                                format!("Saved. This run still uses --ffgl-dir {}.", cli.display())
-                            }
-                            None => "Saved.".into(),
-                        }
-                    })
-                    .map_err(|e| format!("Could not save the settings: {e}"))
-            }
+            _ => crate::settings::Settings::update::<std::io::Error>(&ctx.data_dir, |s| {
+                s.ffgl_dir = dir.clone();
+                Ok(())
+            })
+            .map(|_| {
+                log::info!(
+                    "FFGL plugin folder: {}",
+                    dir.as_ref()
+                        .map_or("default".into(), |d| d.display().to_string())
+                );
+                match &ctx.ffgl_dir {
+                    Some(cli) => {
+                        format!("Saved. This run still uses --ffgl-dir {}.", cli.display())
+                    }
+                    None => "Saved.".into(),
+                }
+            })
+            .map_err(|e| format!("Could not save the settings: {e}")),
         };
         ffgl_result(ctx, result)
     })
@@ -353,6 +370,20 @@ enum ClientMsg {
     SetMidiPort {
         port: Option<String>,
     },
+    /// Preferences: use this theme (`null` = the default); saved in the settings.
+    SetTheme {
+        id: Option<String>,
+    },
+    /// Preferences: add or replace a saved theme (same id), and with `select` also use it.
+    SaveTheme {
+        theme: CustomTheme,
+        #[serde(default)]
+        select: bool,
+    },
+    /// Preferences: remove a saved theme (the default theme is used if it was selected).
+    DeleteTheme {
+        id: String,
+    },
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<ServerCtx>) -> Response {
@@ -366,6 +397,7 @@ fn msg(kind: &str, data: &impl serde::Serialize) -> Message {
 async fn session(mut socket: WebSocket, ctx: ServerCtx) {
     let mut structure = ctx.structure.clone();
     let mut runtime = ctx.runtime.clone();
+    let mut appearance = ctx.appearance.subscribe();
     // Log records go out only while this UI shows its Console tab; the stats (error count for
     // the tab's badge, dropped records) always.
     let mut logs: Option<broadcast::Receiver<LogRecord>> = None;
@@ -377,6 +409,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
         msg("structure", &*structure.borrow_and_update()),
         msg("runtime", &*runtime.borrow_and_update()),
         msg("log_stats", &stats),
+        msg("appearance", &*appearance.borrow_and_update()),
     ];
     for m in first {
         if socket.send(m).await.is_err() {
@@ -393,6 +426,10 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                 Ok(()) => msg("runtime", &*runtime.borrow_and_update()),
                 Err(_) => return,
             },
+            r = appearance.changed() => match r {
+                Ok(()) => msg("appearance", &*appearance.borrow_and_update()),
+                Err(_) => return,
+            },
             incoming = socket.recv() => {
                 let Some(Ok(m)) = incoming else { return };
                 let Message::Text(text) = m else { continue };
@@ -406,6 +443,14 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                     Ok(ClientMsg::LogUnsubscribe) => {
                         logs = None;
                         batch.clear();
+                        continue;
+                    }
+                    Ok(
+                        cmd @ (ClientMsg::SetTheme { .. }
+                        | ClientMsg::SaveTheme { .. }
+                        | ClientMsg::DeleteTheme { .. }),
+                    ) => {
+                        theme_command(&ctx, cmd).await;
                         continue;
                     }
                     _ => {
@@ -550,8 +595,88 @@ fn handle(ctx: &ServerCtx, text: &str) {
             }
             return;
         }
+        // Per session, in order (above).
+        ClientMsg::SetTheme { .. }
+        | ClientMsg::SaveTheme { .. }
+        | ClientMsg::DeleteTheme { .. } => return,
     };
     let _ = ctx.commands.send(engine_cmd);
+}
+
+/// Theme commands of one UI, applied in the order it sent them (the session awaits each).
+async fn theme_command(ctx: &ServerCtx, cmd: ClientMsg) {
+    match cmd {
+        ClientMsg::SetTheme { id } => {
+            update_appearance(ctx, move |s| {
+                if let Some(id) = &id {
+                    anyhow::ensure!(
+                        crate::settings::valid_theme_id(id),
+                        "invalid theme id {id:?}"
+                    );
+                }
+                s.theme = id;
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SaveTheme { theme, select } => {
+            update_appearance(ctx, move |s| {
+                let theme = theme.validated().map_err(anyhow::Error::msg)?;
+                let id = theme.id.clone();
+                match s.custom_themes.iter_mut().find(|t| t.id == id) {
+                    Some(t) => *t = theme,
+                    None => {
+                        anyhow::ensure!(
+                            s.custom_themes.len() < crate::settings::MAX_CUSTOM_THEMES,
+                            "at most {} saved themes; delete one first",
+                            crate::settings::MAX_CUSTOM_THEMES
+                        );
+                        s.custom_themes.push(theme);
+                    }
+                }
+                if select {
+                    s.theme = Some(id);
+                }
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::DeleteTheme { id } => {
+            update_appearance(ctx, move |s| {
+                s.custom_themes.retain(|t| t.id != id);
+                if s.theme.as_deref() == Some(id.as_str()) {
+                    s.theme = None;
+                }
+                Ok(())
+            })
+            .await;
+        }
+        _ => {}
+    }
+}
+
+/// Changes the theme settings off the async workers (file IO), then tells every UI. Failures show
+/// as a notice in the UI.
+async fn update_appearance(
+    ctx: &ServerCtx,
+    change: impl FnOnce(&mut Settings) -> anyhow::Result<()> + Send + 'static,
+) {
+    let data_dir = ctx.data_dir.clone();
+    let appearance = ctx.appearance.clone();
+    let commands = ctx.commands.clone();
+    let done = tokio::task::spawn_blocking(move || {
+        match Settings::update::<anyhow::Error>(&data_dir, change) {
+            Ok(saved) => {
+                log::info!("theme settings saved (theme {:?})", saved.theme);
+                appearance.send_replace(Appearance::from(&saved));
+            }
+            Err(e) => {
+                log::warn!("theme settings: {e}");
+                let _ = commands.send(EngineCommand::Notice(format!("Theme: {e}")));
+            }
+        }
+    });
+    let _ = done.await;
 }
 
 /// Thumbnail versions of every clip the UI knows (live and cached decks).

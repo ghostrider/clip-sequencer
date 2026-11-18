@@ -59,9 +59,11 @@ impl ClockControl {
             drop(old);
             let new = chosen.clone().map(|p| ClockIn::spawn(p, this.tx.clone()));
             *this.input.lock().unwrap() = new;
-            let mut settings = crate::settings::Settings::load(&this.data_dir);
-            settings.midi_port = chosen;
-            settings.save(&this.data_dir)
+            crate::settings::Settings::update::<std::io::Error>(&this.data_dir, |s| {
+                s.midi_port = chosen;
+                Ok(())
+            })
+            .map(|_| ())
         })
         .await
         .map_err(|e| e.to_string())?
@@ -228,6 +230,12 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 ffgl_dir: cfg.ffgl_dir.clone(),
                 thumbs_ready: std::sync::Arc::new(thumbs_ready_tx),
                 clock: clock.clone(),
+                appearance: std::sync::Arc::new(
+                    tokio::sync::watch::channel(crate::server::Appearance::from(
+                        &crate::settings::Settings::load(&data_dir),
+                    ))
+                    .0,
+                ),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {

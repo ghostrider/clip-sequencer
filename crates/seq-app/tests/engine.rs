@@ -1665,3 +1665,107 @@ async fn ffgl_install_api() {
     assert_eq!(r.status(), 403);
     app.shutdown().await;
 }
+
+/// Preferences → Appearance (SPEC §9.7): every UI gets the theme settings on connect and on each change;
+/// themes are saved in settings.json; invalid themes are refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn theme_settings_are_saved_and_sent_to_every_ui() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    type Ws = tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >;
+    /// The next `appearance` message that satisfies `ok`.
+    async fn appearance(ws: &mut Ws, ok: impl Fn(&serde_json::Value) -> bool) -> serde_json::Value {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let Some(Ok(Message::Text(t))) = ws.next().await else {
+                    panic!("socket closed")
+                };
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                if v["type"] == "appearance" && ok(&v["data"]) {
+                    return v["data"].clone();
+                }
+            }
+        })
+        .await
+        .expect("appearance message")
+    }
+    async fn send(ws: &mut Ws, v: serde_json::Value) {
+        ws.send(Message::Text(v.to_string().into())).await.unwrap();
+    }
+
+    let mock = start_mock(MockConfig::default()).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let app = app::start(AppConfig {
+        resolume: ResolumeAddr {
+            host: "127.0.0.1".into(),
+            rest_port: mock.rest_addr.port(),
+            osc_port: mock.osc_addr.port(),
+        },
+        storage: Storage::new(dir.path()),
+        engine: EngineConfig::default(),
+        clock: ClockSource::None,
+        debounce: DebounceConfig::default(),
+        ui: Some(std::net::TcpListener::bind("127.0.0.1:0").unwrap()),
+        shell: None,
+        quit: None,
+        ffgl_dir: None,
+    })
+    .unwrap();
+    let ui = app.ui_addr.unwrap();
+    let (mut a, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    let (mut b, _) = tokio_tungstenite::connect_async(format!("ws://{ui}/ws"))
+        .await
+        .unwrap();
+    let first = appearance(&mut a, |_| true).await;
+    assert_eq!(first, json!({"theme": null, "custom_themes": []}));
+
+    let theme = json!({
+        "id": "custom-0a1b", "name": "Club night", "base": "ink",
+        "colors": {"accent": "#FF9900", "scrim": "#000000AA"}, "fonts": {"ui": "manrope"}
+    });
+    send(
+        &mut a,
+        json!({"cmd": "save_theme", "theme": theme, "select": true}),
+    )
+    .await;
+    // The other UI follows.
+    let got = appearance(&mut b, |d| d["theme"] == "custom-0a1b").await;
+    assert_eq!(got["custom_themes"][0]["name"], "Club night");
+    let saved = seq_app::settings::Settings::load(dir.path());
+    assert_eq!(saved.theme.as_deref(), Some("custom-0a1b"));
+    assert_eq!(saved.custom_themes[0].colors["accent"], "#FF9900");
+
+    // Refused: not a saved-theme id, bad colour. Nothing changes.
+    send(
+        &mut a,
+        json!({"cmd": "save_theme", "select": true,
+        "theme": {"id": "rack", "name": "x", "base": "rack", "colors": {}}}),
+    )
+    .await;
+    send(
+        &mut a,
+        json!({"cmd": "save_theme", "select": true,
+        "theme": {"id": "custom-ff", "name": "x", "base": "rack", "colors": {"bg": "url(x)"}}}),
+    )
+    .await;
+    send(&mut a, json!({"cmd": "set_theme", "id": "graphite"})).await;
+    let got = appearance(&mut b, |d| d["theme"] == "graphite").await;
+    assert_eq!(got["custom_themes"].as_array().unwrap().len(), 1, "{got}");
+
+    // Deleting the selected theme falls back to the default.
+    send(&mut a, json!({"cmd": "set_theme", "id": "custom-0a1b"})).await;
+    appearance(&mut b, |d| d["theme"] == "custom-0a1b").await;
+    send(&mut a, json!({"cmd": "delete_theme", "id": "custom-0a1b"})).await;
+    let got = appearance(&mut b, |d| {
+        d["custom_themes"].as_array().unwrap().is_empty()
+    })
+    .await;
+    assert!(got["theme"].is_null(), "{got}");
+    let saved = seq_app::settings::Settings::load(dir.path());
+    assert_eq!((saved.theme, saved.custom_themes.len()), (None, 0));
+    app.shutdown().await;
+}
