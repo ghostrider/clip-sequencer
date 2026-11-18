@@ -116,6 +116,36 @@ for (const [name, pkg] of [
     texts: [ofl],
   });
 }
+// Theme fonts (SPEC §9.7), all SIL OFL 1.1: each with its own copyright line from the package's LICENSE
+// (OFL §2: the copyright notice and the licence travel with every copy of the fonts).
+const fontLicense = (pkg) => {
+  const t = read(`web/node_modules/${pkg}/LICENSE`);
+  const copyright = t.split('\n')[0].replace(/\s+\S+\.ttf:.*$/, '').trim();
+  const at = t.indexOf('This Font Software is licensed under the SIL Open Font License, Version 1.1');
+  if (!copyright.startsWith('Copyright') || at < 0) fail(`unexpected licence text in ${pkg}`);
+  return addText(`${copyright}\n\n${t.slice(at)}`);
+};
+for (const [name, pkg, url] of [
+  ['Barlow', '@fontsource/barlow', 'https://github.com/jpt/barlow'],
+  ['Barlow Condensed', '@fontsource/barlow-condensed', 'https://github.com/jpt/barlow'],
+  ['JetBrains Mono', '@fontsource/jetbrains-mono', 'https://github.com/JetBrains/JetBrainsMono'],
+  ['Manrope', '@fontsource/manrope', 'https://github.com/sharanda/manrope'],
+  ['Chakra Petch', '@fontsource/chakra-petch', 'https://github.com/m4rc1e/Chakra-Petch'],
+  ['Fragment Mono', '@fontsource/fragment-mono', 'https://github.com/weiweihuanghuang/fragment-mono'],
+  ['Archivo', '@fontsource/archivo', 'https://github.com/Omnibus-Type/Archivo'],
+  ['Archivo Narrow', '@fontsource/archivo-narrow', 'https://github.com/Omnibus-Type/ArchivoNarrow'],
+  ['DM Mono', '@fontsource/dm-mono', 'https://github.com/googlefonts/dm-mono'],
+  ['Unbounded', '@fontsource/unbounded', 'https://github.com/googlefonts/unbounded'],
+]) {
+  packages.push({
+    name,
+    version: `@fontsource ${npmVersion(pkg)}`,
+    license: 'OFL-1.1',
+    part: 'Fonts (UI themes)',
+    url,
+    texts: [fontLicense(pkg)],
+  });
+}
 
 let ffglCommit = '';
 try {
@@ -173,6 +203,7 @@ const parts = [
   'Desktop app (Rust)',
   'Web UI (bundled JavaScript)',
   'Fonts (UI and splash screen)',
+  'Fonts (UI themes)',
   'FFGL plugin',
 ];
 packages.sort(
