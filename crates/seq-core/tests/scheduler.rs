@@ -860,3 +860,97 @@ fn slot_lookahead_skips_lanes_that_will_not_trigger() {
     let up = s.slot_steps_ahead(4);
     assert_eq!((up[0].step, up[0].column), (0, 1));
 }
+
+// ---- Resync (SPEC §3.1) ----
+
+#[test]
+fn rewind_jumps_to_step_one_now_and_keeps_counting_from_there() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 3 },
+        AfterLastPass::Clear,
+        vec![
+            lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1)), (8, Clip(2))]),
+            lane(200, LaneEnd::Clear, &[(4, Clip(3))]),
+        ],
+    );
+    s.start(sp, Origin::Ui).unwrap();
+    // Into pass 2, past the clear lane's end.
+    for _ in 0..(2 * BAR + BAR + 5) {
+        s.on_tick();
+    }
+    assert_eq!((s.status()[0].pass, s.status()[0].pos), (2, BAR + 5));
+    let rw = s.rewind_all();
+    assert_eq!(
+        triggers(&rw.iter().cloned().map(|a| (0, a)).collect::<Vec<_>>()),
+        vec![(0, 1), (0, 3)],
+        "step 1 of every lane, the ended clear lane included"
+    );
+    assert!(
+        !rw.iter().any(|a| matches!(a, Action::PassStarted { .. })),
+        "the pass counter is kept"
+    );
+    let st = &s.status()[0];
+    assert_eq!((st.pass, st.pos), (2, 0));
+    // From here on boundaries fall as after a start.
+    let log = run(&mut s, Vec::new(), BAR);
+    assert_eq!(triggers(&log), vec![(BAR, 2)]);
+    assert_eq!(clears(&log), vec![(4 * E, 200)]);
+}
+
+#[test]
+fn rewind_leaves_yielded_and_taken_over_lanes_silent() {
+    let mut s = Scheduler::new();
+    s.start(
+        spec(
+            1,
+            Repeat::Infinite,
+            AfterLastPass::Clear,
+            vec![
+                lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1))]),
+                lane(200, LaneEnd::LoopToEnd, &[(8, Clip(2))]),
+                lane(300, LaneEnd::LoopToEnd, &[(8, Clip(3))]),
+            ],
+        ),
+        Origin::Ui,
+    )
+    .unwrap();
+    s.start(
+        spec(
+            2,
+            Repeat::Infinite,
+            AfterLastPass::Clear,
+            vec![lane(300, LaneEnd::LoopToEnd, &[(8, Clip(9))])],
+        ),
+        Origin::Ui,
+    )
+    .unwrap();
+    for _ in 0..20 {
+        s.on_tick();
+    }
+    s.yield_layer(200);
+    let rw = s.rewind_all();
+    let log: Vec<_> = rw.iter().cloned().map(|a| (0, a)).collect();
+    assert_eq!(
+        triggers(&log),
+        vec![(0, 1), (0, 9)],
+        "lane 2 is yielded, lane 3 belongs to sequence 2 now"
+    );
+    assert!(s.status().iter().all(|r| r.pos == 0));
+    // A yielded lane with a resume pending resumes on the rewind.
+    s.resume_lane(seq(1), 1);
+    let rw = s.rewind_all();
+    assert!(rw.contains(&Action::Trigger {
+        seq: seq(1),
+        lane: 1,
+        step: 0,
+        clip_id: 2,
+        layer_id: 200
+    }));
+}
+
+#[test]
+fn rewind_without_running_sequences_does_nothing() {
+    assert!(Scheduler::new().rewind_all().is_empty());
+}

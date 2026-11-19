@@ -565,6 +565,20 @@ impl Scheduler {
         out
     }
 
+    /// Resync (SPEC §3.1): every running sequence jumps to the start of its current pass, now, as
+    /// if it had just started: step 1 of each lane it still owns is emitted (a yielded lane with a
+    /// resume pending resumes). The pass counter is kept; taken-over lanes stay silent.
+    pub fn rewind_all(&mut self) -> Vec<Action> {
+        let mut out = Vec::new();
+        for run in &mut self.runs {
+            run.pos = 0;
+            for lane in 0..run.lanes.len() {
+                out.extend(boundary(run, lane, Some(0)));
+            }
+        }
+        out
+    }
+
     /// Advances every running sequence by one tick.
     pub fn on_tick(&mut self) -> Vec<Action> {
         let mut out = Vec::new();
