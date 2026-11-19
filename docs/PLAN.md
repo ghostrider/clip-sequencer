@@ -164,7 +164,7 @@ plugin) for every sequence of the deck.
 - [x] Live check with the plugin: clips hold "1000A Sequence" and their `Sequence` parameter is bound.
 - [x] Docs: SPEC §7.6, §9.2, §9.6; notes §16; manual (Setting up Resolume, Playing live); README.
 
-## M17 — Resolume tempo as clock (SPEC §3.1)  ⟵ in progress (live check by eye pending)
+## M17 — Resolume tempo as clock (SPEC §3.1)  ✓ done 2026-11-19
 Asked for on 2026-11-19: follow Resolume's tempo when no MIDI clock is used. Probed: notes §17.
 - [x] Probe: tempo, play state, tap and resync over WebSocket and OSC (notes §17); Resolume has no beat phase.
 - [x] Setting `clock_source` (`midi` | `resolume`) in settings.json, Preferences → Clock, CLI `--clock resolume`.
@@ -178,9 +178,9 @@ Asked for on 2026-11-19: follow Resolume's tempo when no MIDI clock is used. Pro
       kept; unit tests); the release update of a press is ignored; Pause/Stop freeze with their own message.
 - [x] UI: clock source in Preferences → Clock; chip `RESOLUME 128.0 BPM · press Resync` / `· synced` /
       `· paused` / `· stopped` / `RESOLUME TEMPO · not connected`.
-- [ ] Live check (2026-11-19, silent test sequence): tempo changes, 3 resyncs (one jump each), Pause/Play
-      (no jump), Stop/Play (jump) ✓. Still open: line-up with Resolume's beat by eye with real clips; a Resolume
-      restart while following its tempo.
+- [x] Live check (2026-11-19, silent test sequence): tempo changes, 3 resyncs (one jump each), Pause/Play
+      (no jump), Stop/Play (jump). Release build tested with real clips by the user ("works"). A Resolume
+      restart while following its tempo was not checked separately.
 - [x] Docs: SPEC §3, §3.1, §9.6, §10, §11; manual (Setting up the clock, Settings, Playing live,
       Troubleshooting, Glossary, FAQ, Interface, Introduction, Installation, Quick start); README, changelog,
       landing page.
