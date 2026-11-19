@@ -6,6 +6,7 @@
 //! - [`file`]: parse and serialize `.seq.json` text, including the version check.
 //! - [`index`]: the live deck's layers and clips as a plain value (built by `resolume-client`).
 //! - [`resolve`]: step clip and lane layer resolution against an index (SPEC §4.3, §4.4).
+//! - [`seq_sync`]: what "Sync SEQ layer" has to create, add and may clear (SPEC §7.6).
 
 pub mod edit;
 pub mod file;
@@ -13,6 +14,7 @@ pub mod index;
 pub mod model;
 pub mod resolve;
 pub mod scheduler;
+pub mod seq_sync;
 pub mod validate;
 
 pub use file::{file_version, from_json, to_json, LoadError, FORMAT_VERSION};

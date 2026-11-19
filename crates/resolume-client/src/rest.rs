@@ -159,4 +159,46 @@ impl RestClient {
         )
         .await
     }
+
+    /// `POST /composition/clips/by-id/{id}/clear`: the slot becomes `Empty` and keeps its id
+    /// (notes §2.1, §8).
+    pub async fn clear_clip(&self, clip_id: u64) -> Result<(), RestError> {
+        self.post(&format!("/composition/clips/by-id/{clip_id}/clear"), None)
+            .await
+    }
+
+    /// `POST /composition/layers/add` without a body: appends a layer on top (highest index,
+    /// named `"Layer #"`, one empty slot per column); existing ids keep their place (notes §16).
+    pub async fn add_layer(&self) -> Result<(), RestError> {
+        self.post("/composition/layers/add", None).await
+    }
+
+    /// `POST /composition/columns/add` without a body: appends a column at the end; existing
+    /// clips keep their positions (notes §16).
+    pub async fn add_column(&self) -> Result<(), RestError> {
+        self.post("/composition/columns/add", None).await
+    }
+
+    /// One layer's raw JSON, `GET /composition/layers/{L}` (1-based, notes §15).
+    pub async fn layer_json(&self, layer: usize) -> Result<serde_json::Value, RestError> {
+        Ok(self
+            .get(&format!("/composition/layers/{layer}"))
+            .await?
+            .json()
+            .await?)
+    }
+
+    /// Names of the video sources (generators and FFGL source plugins), `GET /sources`
+    /// (notes §7, §16).
+    pub async fn video_sources(&self) -> Result<Vec<String>, RestError> {
+        let v: serde_json::Value = self.get("/sources").await?.json().await?;
+        Ok(v["video"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|s| s["name"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
 }

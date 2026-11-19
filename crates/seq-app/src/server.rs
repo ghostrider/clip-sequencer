@@ -357,6 +357,11 @@ enum ClientMsg {
     /// File menu of the browser UI (the desktop app's native menu sends these directly).
     ReloadComposition,
     SaveNow,
+    /// "Sync SEQ layer" for the live deck (SPEC §7.6).
+    SyncSeqLayer {
+        #[serde(default)]
+        remove_orphans: bool,
+    },
     PushThumbnail {
         seq: Uuid,
     },
@@ -561,6 +566,9 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Redo => EngineCommand::Redo,
         ClientMsg::ReloadComposition => EngineCommand::ReloadComposition,
         ClientMsg::SaveNow => EngineCommand::SaveNow,
+        ClientMsg::SyncSeqLayer { remove_orphans } => {
+            EngineCommand::SyncSeqLayer { remove_orphans }
+        }
         ClientMsg::PushThumbnail { seq } => {
             tokio::spawn(push_thumbnail(ctx.clone(), seq));
             return;

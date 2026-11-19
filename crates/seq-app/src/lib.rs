@@ -13,6 +13,7 @@ pub mod logging;
 pub mod plugin_view;
 pub mod runner;
 pub mod saver;
+pub mod seq_sync;
 pub mod server;
 pub mod settings;
 pub mod storage;

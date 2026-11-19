@@ -48,6 +48,8 @@ pub struct DeckView {
     pub sequences: Vec<SequenceView>,
     /// `§` clips on the SEQ layer whose name matches no sequence of this deck.
     pub unmatched_seq_clips: Vec<String>,
+    /// What "Sync SEQ layer" would do (SPEC §7.6); only for the live deck.
+    pub seq_sync: Option<seq_core::seq_sync::SeqSyncPlan>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -264,6 +266,8 @@ pub struct RuntimeState {
     /// Bumped on every save.
     pub saved: u64,
     pub save_error: Option<String>,
+    /// "Sync SEQ layer" is running (SPEC §7.6).
+    pub seq_sync_busy: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

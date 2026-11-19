@@ -62,6 +62,11 @@ pub enum EngineCommand {
     ClockPortChanged {
         port: Option<String>,
     },
+    /// Give every sequence of the live deck a `§` clip on the SEQ layer, creating the layer if
+    /// needed (SPEC §7.6). With `remove_orphans`, also clear `§` clips without a sequence.
+    SyncSeqLayer {
+        remove_orphans: bool,
+    },
 }
 
 /// Results from worker tasks.
@@ -84,6 +89,8 @@ pub enum Aux {
         request: SlotRequest,
         result: Option<(ClipInfo, Option<ClipState>)>,
     },
+    /// The "Sync SEQ layer" worker finished (SPEC §7.6).
+    SeqSynced(Result<crate::seq_sync::SyncReport, String>),
 }
 
 /// Read one slot over REST (`GET /composition/layers/{layer}/clips/{column}`, notes §15); the
@@ -159,6 +166,10 @@ pub struct Engine {
     scheduler: Scheduler,
     /// Slot reads for upcoming slot lane steps (SPEC §4.5); `None` in tests without a worker.
     slot_reads: Option<mpsc::UnboundedSender<SlotRequest>>,
+    /// The "Sync SEQ layer" worker (SPEC §7.6); `None` in tests without a worker.
+    seq_sync: Option<mpsc::UnboundedSender<crate::seq_sync::SyncRequest>>,
+    /// A sync is running: further requests are refused until it reports.
+    seq_sync_busy: bool,
     /// When the last composition push was applied: slot reads sent before it are stale.
     composition_at: Instant,
     index: Option<CompositionIndex>,
@@ -244,6 +255,8 @@ impl Engine {
             aux_tx,
             scheduler: Scheduler::new(),
             slot_reads: None,
+            seq_sync: None,
+            seq_sync_busy: false,
             composition_at: Instant::now(),
             index: None,
             states: HashMap::new(),
@@ -295,6 +308,51 @@ impl Engine {
     /// Where slot reads for upcoming slot lane steps go (SPEC §4.5). See [`spawn_slot_reader`].
     pub fn set_slot_reader(&mut self, tx: mpsc::UnboundedSender<SlotRequest>) {
         self.slot_reads = Some(tx);
+    }
+
+    /// Where "Sync SEQ layer" requests go (SPEC §7.6). See [`crate::seq_sync::spawn`].
+    pub fn set_seq_sync(&mut self, tx: mpsc::UnboundedSender<crate::seq_sync::SyncRequest>) {
+        self.seq_sync = Some(tx);
+    }
+
+    /// Sends the live deck's sequence names to the sync worker (SPEC §7.6).
+    fn sync_seq_layer(&mut self, remove_orphans: bool) {
+        if self.seq_sync_busy {
+            self.notice("Sync is already running");
+            return;
+        }
+        let Some(tx) = self.seq_sync.clone() else {
+            self.notice("Sync is not available in this app");
+            return;
+        };
+        let Some(deck) = self.index.as_ref().and_then(|i| i.live_deck.clone()) else {
+            self.notice("Sync: no composition from Resolume yet");
+            return;
+        };
+        if self.switch.is_some() {
+            self.notice("Sync: wait until the deck switch is done");
+            return;
+        }
+        let sequences = self.live_sequence_names(&deck);
+        let req = crate::seq_sync::SyncRequest {
+            deck,
+            sequences,
+            layer: self.cfg.seq_layer.clone(),
+            prefix: self.cfg.seq_prefix.clone(),
+            remove_orphans,
+        };
+        if tx.send(req).is_ok() {
+            self.seq_sync_busy = true;
+            self.runtime_dirty = true;
+        }
+    }
+
+    fn live_sequence_names(&self, deck: &str) -> Vec<String> {
+        self.model
+            .as_ref()
+            .and_then(|m| m.decks.get(deck))
+            .map(|d| d.sequences.iter().map(|s| s.name.clone()).collect())
+            .unwrap_or_default()
     }
 
     fn notice(&mut self, text: impl Into<String>) {
@@ -793,6 +851,7 @@ impl Engine {
                 });
                 self.clock_port = port;
             }
+            EngineCommand::SyncSeqLayer { remove_orphans } => self.sync_seq_layer(remove_orphans),
             EngineCommand::ReloadComposition => {
                 self.notice("reloading the composition from Resolume");
                 let _ = self.ws_cmd.send(WsCommand::Reconnect);
@@ -1227,6 +1286,15 @@ impl Engine {
                 self.save_error = Some(e);
             }
             Aux::SlotRead { request, result } => self.on_slot_read(request, result),
+            Aux::SeqSynced(result) => {
+                self.seq_sync_busy = false;
+                self.runtime_dirty = true;
+                let text = match result {
+                    Ok(report) => report.summary(&self.cfg.seq_layer),
+                    Err(e) => format!("Sync {} layer failed: {e}", self.cfg.seq_layer),
+                };
+                self.notice(text);
+            }
         }
     }
 
@@ -1518,7 +1586,18 @@ impl Engine {
                 .filter(|(n, _, _)| !sequences.iter().any(|s| &s.sequence.name == n))
                 .map(|(n, _, _)| n.clone())
                 .collect();
+            let seq_sync = match (live, index) {
+                (true, Some(i)) => Some(seq_core::seq_sync::plan(
+                    i,
+                    &self.cfg.seq_layer,
+                    &self.cfg.seq_prefix,
+                    &self.live_sequence_names(&name),
+                    |id| self.states.get(&id).is_some_and(|s| s.is_connected()),
+                )),
+                _ => None,
+            };
             decks.push(DeckView {
+                seq_sync,
                 orphaned: deck_index.is_none(),
                 ambiguous,
                 index: deck_index,
@@ -1643,6 +1722,7 @@ impl Engine {
             notices: self.notices.iter().cloned().collect(),
             saved: self.saved,
             save_error: self.save_error.clone(),
+            seq_sync_busy: self.seq_sync_busy,
         }
     }
 
