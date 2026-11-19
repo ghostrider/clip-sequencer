@@ -15,8 +15,9 @@ inspector on the right, and a status bar at the bottom.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
   Resolume is playing. Selecting a tab never switches Resolume ([Working with decks](decks.md)). A dashed tab is a
   deck that no longer exists in Resolume but still has sequences; "same name" marks two decks with one name.
-- **Connection chips**: **CLOCK** (MIDI clock, with BPM), **REST**, **WS** and **OSC** (Resolume). Green is fine,
-  red needs attention ([Troubleshooting](troubleshooting.md)). Click the CLOCK chip to choose the MIDI input.
+- **Connection chips**: **CLOCK** (MIDI clock, with BPM; **RESOLUME** when it follows Resolume's tempo), **REST**,
+  **WS** and **OSC** (Resolume). Green is fine, red needs attention ([Troubleshooting](troubleshooting.md)). Click
+  the clock chip to choose the clock ([Setting up the clock](clock.md)).
 - **Stop all** stops every running sequence and clears every layer the sequencer is using.
 
 ## Menus
@@ -24,7 +25,7 @@ inspector on the right, and a status bar at the bottom.
 The **desktop app** has a menu bar in the window frame:
 
 - **File:** Reload composition (read the composition from Resolume again), Save now, Open data folder,
-  Preferences… (MIDI clock input, and the look of the app: [Themes](themes.md)), Install FFGL plugin… ([Installing the FFGL plugin](ffgl-plugin.md)),
+  Preferences… (the clock source and MIDI input, and the look of the app: [Themes](themes.md)), Install FFGL plugin… ([Installing the FFGL plugin](ffgl-plugin.md)),
   Quit (Ctrl+Q).
 - **View:** Zoom in / out / reset (Ctrl+= / Ctrl+- / Ctrl+0), Toggle Console.
 - **Help:** Keyboard shortcuts, User manual, Report an issue, Licenses, About.

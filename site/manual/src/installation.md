@@ -45,7 +45,8 @@ Double-click **`seq-app.exe`**.
 - A **splash screen** shows the startup steps: loading settings, starting the UI, connecting to Resolume and the
   MIDI clock, loading the composition and its thumbnails. If Resolume isn't running or no MIDI port is set yet, you get a warning and
   the app opens anyway; it keeps trying in the background.
-- The first time, choose the MIDI clock input under **File → Preferences…** ([Setting up the clock](clock.md)).
+- The first time, choose the clock under **File → Preferences… → Clock**: a MIDI clock input, or Resolume's tempo
+  ([Setting up the clock](clock.md)).
 
 ### WebView2
 

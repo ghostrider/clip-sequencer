@@ -18,7 +18,8 @@ getting started and for building from source.*
 - Lanes per Resolume layer with clips and rests on a 1/8 or 1/16-bar grid; repeat once, ×N or endlessly.
 - Slot lanes: a lane can play whatever clip sits in a column of its layer, so clips can be swapped in Resolume
   while the sequence runs.
-- Locked to an incoming MIDI clock; triggers are confirmed over Resolume's WebSocket.
+- Locked to an incoming MIDI clock, or without MIDI to Resolume's own tempo (Resync lines it up with Resolume's
+  beat); triggers are confirmed over Resolume's WebSocket.
 - Start and stop from the app or from Resolume (`§ <name>` clips on a `SEQ` layer); manual clip clicks
   take over a lane until you resume it. **Sync SEQ** creates the layer and the missing `§` clips (with the
   FFGL plugin, if installed) for the live deck.
@@ -34,7 +35,7 @@ getting started and for building from source.*
 - Resolume Arena 7.26 or newer (tested with 7.28), with the webserver and OSC input enabled (see below).
 - A MIDI clock on a MIDI input port, e.g. from a virtual MIDI port such as loopMIDI, a DAW, a hardware
   clock, or a separate clock app. On Windows the app can't create virtual ports itself; it connects to an
-  existing port by name.
+  existing port by name. Or no MIDI at all: the app can follow Resolume's tempo (Preferences → Clock).
 - The desktop app (`seq-app.exe`) needs the **Microsoft Edge WebView2 Runtime**. It ships with Windows 11. On
   Windows 10 without it, the app says so and offers the
   [download page](https://developer.microsoft.com/microsoft-edge/webview2/) ("Evergreen" runtime).
@@ -79,8 +80,8 @@ Double-click **`seq-app.exe`** (in the unzipped folder, or `release\` after buil
 - A splash screen shows the startup steps. A missing Resolume or MIDI port only gives a warning; the
   sequencer keeps retrying in the background.
 - Then the window opens with the UI.
-- The first time, pick the MIDI clock input under **File → Preferences…** (or click the CLOCK chip,
-  or press Ctrl+,). It's saved and used on every start.
+- The first time, pick the clock under **File → Preferences… → Clock** (or click the CLOCK chip, or press
+  Ctrl+,): a MIDI clock input, or Resolume's tempo. It's saved and used on every start.
 
 Menu:
 - **File:** Reload composition, Save now, Open data folder, Preferences…, Quit (Ctrl+Q).
@@ -120,6 +121,7 @@ Useful options (`--help` lists all):
 
 | Option | Default | |
 |---|---|---|
+| `--clock midi` / `--clock resolume` | saved in Preferences, else `midi` | Clock source: a MIDI clock, or Resolume's tempo |
 | `--midi-port <name>` | saved in Preferences | MIDI clock input (exact name or a substring) |
 | `--resolume-host`, `--rest-port`, `--osc-port` | `127.0.0.1`, `8080`, `7000` | Where Resolume listens |
 | `--ui-port` | `8090` | UI port (falls back, see above) |

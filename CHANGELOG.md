@@ -14,10 +14,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Optionally clears `§` clips whose sequence no longer exists.
 - **Themes:** Preferences → Appearance with five built-in themes (new default *Rack*) and an editor for your own
   colours and fonts; all fonts are bundled.
+- **Resolume tempo as clock:** no MIDI clock needed. Preferences → Clock (or `--clock resolume`) makes the app
+  follow Resolume's BPM, Play, Pause and Stop; **Resync** in Resolume lines it up with Resolume's beat and jumps
+  playing sequences back to bar 1.
 
 ### Changed
 
 - The release zip holds a single folder, `clip-sequencer`, instead of loose files.
+
+### Fixed
+
+- Dialogs opened from the sequence list (Sync SEQ, delete) were drawn behind the thumbnails of a running sequence.
 
 ## [0.2.0] - 2026-11-04
 

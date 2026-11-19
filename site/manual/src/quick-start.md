@@ -1,8 +1,8 @@
 # Quick start
 
 This walk-through builds a two-lane sequence and starts it, first from the app, then from Resolume. It assumes
-Resolume runs with the webserver and OSC switched on, your layers have names, and a MIDI clock is selected
-([Setting up Resolume](resolume-setup.md), [Setting up the clock](clock.md)).
+Resolume runs with the webserver and OSC switched on, your layers have names, and a clock is set up: a MIDI clock,
+or Resolume's tempo ([Setting up Resolume](resolume-setup.md), [Setting up the clock](clock.md)).
 
 The screenshots use a demo show with the layers `Background`, `Mid` and `Front`; use your own layers and clips.
 

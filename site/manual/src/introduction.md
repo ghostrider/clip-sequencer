@@ -19,13 +19,16 @@ sequence uses simply takes that layer over until you hand it back.
 MIDI clock source ──► Resolume      (tempo, BPM sync)
                  └──► Clip Sequencer (counts the clock)
 
+   or, without MIDI:  Resolume's tempo ──► Clip Sequencer (makes its own clock at that BPM)
+
 Clip Sequencer ──OSC──────► Resolume   triggers the clips, on the tick
 Clip Sequencer ◄─WebSocket─ Resolume   what is playing, deck changes, renames
 Clip Sequencer ──REST─────► Resolume   the composition, thumbnails
 ```
 
-- The sequencer **does not generate a clock**. It follows a MIDI clock that you feed to it and, normally, to
-  Resolume as well, so both run at the same tempo.
+- The sequencer follows a **MIDI clock** that you feed to it and, normally, to Resolume as well, so both run at
+  the same tempo. Without a MIDI clock it can follow **Resolume's tempo** instead and make its own clock at that
+  BPM ([Setting up the clock](clock.md)).
 - It triggers clips over Resolume's **OSC** input and watches Resolume over its **webserver** (WebSocket and REST).
   Both run on the same computer.
 - Sequences are saved per composition, grouped by deck, in the app's data folder.
@@ -35,7 +38,7 @@ Clip Sequencer ──REST─────► Resolume   the composition, thumbnai
 - Windows 10 or 11, on the same computer as Resolume.
 - Resolume Arena 7.26 or newer, with its webserver and OSC input switched on
   ([Setting up Resolume](resolume-setup.md)).
-- A MIDI clock on a MIDI input of that computer ([Setting up the clock](clock.md)).
+- A MIDI clock on a MIDI input of that computer, or Resolume's own tempo ([Setting up the clock](clock.md)).
 - For the desktop app: the Microsoft Edge WebView2 Runtime, which is part of Windows 11
   ([Installation](installation.md)).
 

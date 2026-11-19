@@ -3,6 +3,10 @@
 **Does the sequencer send MIDI to Resolume?**
 No. It only *receives* the MIDI clock. Clips are triggered over OSC, and Resolume is watched over its webserver.
 
+**Do I need a MIDI clock?**
+No. Choose **Resolume tempo** under **File → Preferences… → Clock**, and the sequencer follows Resolume's BPM.
+Press **Resync** in Resolume once to line up with its beat ([Setting up the clock](clock.md)).
+
 **Can a sequence start on the next bar?**
 Not yet: a sequence starts on the next clock tick after you start it. Start it on the beat.
 

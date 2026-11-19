@@ -10,6 +10,18 @@ Start with the chips on the top bar and the **Console** tab: most problems show 
   (not only notes) to that port. `seq-app-cli.exe --clock-debug --midi-port "<name>"` shows what arrives.
 - Sequences don't move without a clock: they wait at their position and continue when it arrives.
 
+## RESOLUME (tempo clock) is red, or off the beat
+
+With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
+
+- **"not connected":** the sequencer can't reach Resolume; see *REST, WS or OSC is red* below.
+- **"paused" / "stopped":** Resolume's tempo transport is paused or stopped. Press **Play** in Resolume's tempo
+  controls.
+- **Steps fall between Resolume's beats:** the sequencer isn't lined up yet (the chip says "press Resync"), or
+  it lost the line-up after a reconnect. Press **Resync** in Resolume.
+- **Sequences keep jumping back to bar 1:** something presses Resync in Resolume (a MIDI or OSC mapping, or
+  Play after Stop). Every Resync restarts the playing sequences.
+
 ## REST, WS or OSC is red
 
 - Resolume isn't running, or its webserver or OSC input is off: see [Setting up Resolume](resolume-setup.md).

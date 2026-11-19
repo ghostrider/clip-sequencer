@@ -32,7 +32,8 @@ compensates latency itself.
 
 ## 3. Clock and timing
 
-- **Input:** MIDI clock at 24 PPQN from a named MIDI input port (configurable).
+- **Input:** MIDI clock at 24 PPQN from a named MIDI input port (configurable), or ticks the app makes at
+  Resolume's tempo (§3.1).
   Messages used: Timing Clock (0xF8). Start (0xFA), Stop (0xFC) and Continue (0xFB)
   are logged but **do not** affect running sequences (the Clock Shifter's resync
   button sends Start; it must not restart sequences).
@@ -56,19 +57,29 @@ For setups without a MIDI clock. The clock source is a setting: **MIDI clock** (
 **Resolume tempo**. Resolume reports its tempo, transport, taps and resync over the WebSocket, but never its
 beat phase (*notes §17*), so the app makes its own ticks.
 
-- **Ticks:** the app generates 24 PPQN at Resolume's current tempo on a dedicated timer thread (Windows
-  sleep granularity is too coarse for ~18 ms ticks without a high-resolution timer). The engine sees the same
-  ticks as from MIDI; scheduler and sequences don't change.
-- **Tempo:** subscribed by parameter id (`tempocontroller.tempo`); a change applies from the next tick.
-- **Transport:** **Pause** and **Stop** freeze the ticks (running sequences freeze as on clock loss, but
-  without the "no clock" warning). **Play** resumes them; Play after **Stop** counts as a resync.
+- **Ticks:** the app generates 24 PPQN at Resolume's current tempo on its own thread (`clock_in::ResolumeClock`;
+  short waits sleep in 1 ms slices, which Rust's `thread::sleep` times with a high-resolution timer on Windows).
+  Each tick is stamped with the time it was due. Measured 2026-11-19: ticks arrive 0.4 ms after that (median),
+  1.5 ms at most, none lost or added (`cargo run --release -p clock-in --example resolume_clock_jitter`). A tick
+  more than 250 ms late is not caught up (the grid restarts from then). The engine sees the same ticks as from
+  MIDI; scheduler and sequences don't change.
+- **Tempo:** `tempo`, `play` and `resync` are subscribed by parameter id (ids from `tempocontroller` in each
+  composition push) whatever the source, so switching needs no new subscriptions. A tempo change applies from
+  the next tick (the rest of the current tick interval is scaled).
+- **Transport:** **Pause** and **Stop** freeze the ticks (running sequences freeze as on clock loss; the
+  message says "Resolume paused" / "Resolume stopped" instead of "no clock"). **Play** after Pause continues;
+  Play after **Stop** counts as a resync. The state in a composition push or a subscription reply (on connect,
+  after a reload) only starts or stops the ticks, without a resync: the phase is unknown then.
 - **Resync:** a Resync press (the `resync` press update, not its release) restarts the tick phase at that
   moment **and jumps every playing sequence to its bar 1**: step 1 of each lane is triggered on the next
   tick, the pass counter is kept. (Different from MIDI Start, which never restarts sequences, see above.)
 - **Taps:** tempo changes from tapping arrive as tempo updates; a tap does not move the phase.
 - **Phase:** until the first Resync (or Play after Stop) the app's beat is not aligned with Resolume's;
-  the UI shows "not synced to Resolume" next to the tempo until then.
-- **Without Resolume:** no ticks (as with no MIDI port); the status shows the reason.
+  the clock chip shows `RESOLUME 128.0 BPM · press Resync` until then, `· synced` after.
+- **Without Resolume:** no ticks (as with no MIDI port); the chip shows `not connected`. After a reconnect
+  the phase is unknown again.
+- **Setting:** Preferences → Clock (`clock_source` in `settings.json`, `midi` by default); `--clock midi|resolume`
+  wins for the run. The MIDI port stays saved while the source is Resolume. Switching takes effect at once.
 
 ## 4. Resolume interface
 
@@ -467,6 +478,11 @@ last WebSocket confirmation, yield and error notices.
 - Preferences (MIDI clock input): `GET /api/midi/ports` → `{ ports, selected }`; UI → engine
   `{"cmd": "set_midi_port", "port": "<name>" | null}` switches the clock input at once and saves it in
   `<data-dir>/settings.json` (`{ "midi_port": ... }`). At startup `--midi-port` wins over the saved port.
+- Preferences (clock source, §3.1): UI → engine `{"cmd": "set_clock_source", "source": "midi" | "resolume"}`,
+  saved as `clock_source`; `--clock` wins at startup. The runtime state's `clock` is
+  `{ source, port, connected, running, bpm, transport, synced }`: with the Resolume source `connected` means
+  the WebSocket is up with a tempo controller, `bpm` is Resolume's tempo, `transport` its `Play`/`Pause`/`Stop`
+  and `synced` true after a resync (`transport` `null` and `synced` false with MIDI).
 - Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes }` on connect and after every
   change (to every connected UI). UI → engine `{"cmd": "set_theme", "id": "<id>" | null}` (`null` = default),
   `{"cmd": "save_theme", "theme": {...}, "select": bool}` (adds, or replaces the one with the same id),
@@ -515,7 +531,8 @@ Cargo workspace (see `CLAUDE.md` for layout).
   mid-run; the engine maps them to the current OSC address at send time. Handles passes, lane end
   behaviours, ownership, yielding. Exhaustively unit-tested with simulated ticks.
 - **`clock-in`**: opens the MIDI port with `midir`, converts bytes to `ClockEvent`, sends them on
-  a channel. Reconnects if the port disappears.
+  a channel. Reconnects if the port disappears. `ResolumeClock` makes the ticks itself at Resolume's tempo
+  instead (§3.1), on its own thread, into the same channel; the engine feeds it tempo, transport and resync.
 - **`resolume-client`**: REST client, WebSocket client (reconnect with backoff, resubscribe),
   OSC sender (one UDP socket), and the composition index builder.
 - **`seq-app`** (binary):
@@ -530,7 +547,7 @@ Cargo workspace (see `CLAUDE.md` for layout).
 ## 11. Configuration
 
 CLI flags (clap) with optional `seq.toml`:
-`--midi-port`, `--resolume-host`, `--rest-port 8080`, `--osc-port 7000`, `--ui-port 8090`,
+`--clock midi|resolume`, `--midi-port`, `--resolume-host`, `--rest-port 8080`, `--osc-port 7000`, `--ui-port 8090`,
 `--seq-layer SEQ`, `--seq-prefix "§ "`, `--data-dir`. Logging via `RUST_LOG`.
 
 ## 12. "Sequence" FFGL source plugin (M11, decided 2026-10-26)

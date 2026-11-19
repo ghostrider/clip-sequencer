@@ -27,8 +27,12 @@
 **Rest**
 : A step without a clip. It clears the lane's layer at its start.
 
+**Resync**
+: Resolume's button that restarts its beat. With Resolume's tempo as the clock it lines the sequencer up with
+  Resolume's beat and jumps every playing sequence back to bar 1 ([Setting up the clock](clock.md)).
+
 **Sequence**
-: Clips on one or more layers, played together on a 1/16-bar grid, locked to the MIDI clock.
+: Clips on one or more layers, played together on a 1/16-bar grid, locked to the clock.
 
 **SEQ layer**
 : The Resolume layer (named `SEQ`) that holds the placeholder clips.
@@ -46,7 +50,8 @@
 : The app's colours and fonts, chosen in Preferences → Appearance. Five come with the app; you can make your own.
 
 **Tick**
-: One MIDI clock pulse: 24 per beat, 6 per sixteenth note, 96 per bar.
+: One clock pulse (from the MIDI clock, or made by the sequencer at Resolume's tempo): 24 per beat, 6 per
+  sixteenth note, 96 per bar.
 
 **Unresolved**
 : A step whose clip, or a lane whose layer, can't be found; it stays silent.

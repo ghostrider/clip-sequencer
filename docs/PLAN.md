@@ -164,21 +164,26 @@ plugin) for every sequence of the deck.
 - [x] Live check with the plugin: clips hold "1000A Sequence" and their `Sequence` parameter is bound.
 - [x] Docs: SPEC §7.6, §9.2, §9.6; notes §16; manual (Setting up Resolume, Playing live); README.
 
-## M17 — Resolume tempo as clock (SPEC §3.1)  ⟵ planned 2026-11-19
+## M17 — Resolume tempo as clock (SPEC §3.1)  ⟵ in progress (live check by eye pending)
 Asked for on 2026-11-19: follow Resolume's tempo when no MIDI clock is used. Probed: notes §17.
 - [x] Probe: tempo, play state, tap and resync over WebSocket and OSC (notes §17); Resolume has no beat phase.
-- [ ] Setting `clock_source` (`midi` | `resolume`) in settings.json, Preferences → Clock, CLI `--clock resolume`.
-- [ ] Tick generator (`clock-in`, own thread, high-resolution waitable timer): 24 PPQN at a given tempo;
-      set tempo, pause, resume, resync (restart the phase now). Unit tests with a fake clock; jitter test.
-- [ ] Resolume side: subscribe tempo, play, resync by id after each composition load (ids from
-      `tempocontroller`), feed the generator; resubscribe after reconnects and composition reloads.
-- [ ] Engine: resync jumps every playing sequence to bar 1 (`seq-core` scheduler: restart position, keep the
-      pass counter; unit tests); Pause/Stop freeze without the "no clock" warning.
-- [ ] UI: clock source in Preferences; status "Resolume tempo · 128.0 BPM", "not synced to Resolume" until the
-      first resync.
-- [ ] Live check: sequences follow tempo changes and taps; Resync jumps to bar 1 and lines up with
-      Resolume's beat by eye; Pause/Stop/Play; Resolume restart.
-- [ ] Docs: SPEC §3.1, §9.6; manual (Settings, Playing live, Troubleshooting, Glossary); README, changelog.
+- [x] Setting `clock_source` (`midi` | `resolume`) in settings.json, Preferences → Clock, CLI `--clock resolume`.
+- [x] Tick generator (`clock_in::ResolumeClock`, own thread; `thread::sleep` in 1 ms slices instead of a
+      waitable timer, Rust's sleep already uses a high-resolution one): 24 PPQN at a given tempo; set tempo,
+      pause, resume, resync. Unit tests on the pure `TickPlanner`; jitter example (0.4 ms median, 1.5 ms max).
+- [x] Resolume side: tempo, play, resync subscribed by id from each composition push (also with the MIDI
+      source), fed to the generator; reconnect stops the ticks until Resolume reports again. Mock Resolume has
+      the tempo controller.
+- [x] Engine: resync jumps every playing sequence to bar 1 (`Scheduler::rewind_all`: position 0, pass counter
+      kept; unit tests); the release update of a press is ignored; Pause/Stop freeze with their own message.
+- [x] UI: clock source in Preferences → Clock; chip `RESOLUME 128.0 BPM · press Resync` / `· synced` /
+      `· paused` / `· stopped` / `RESOLUME TEMPO · not connected`.
+- [ ] Live check (2026-11-19, silent test sequence): tempo changes, 3 resyncs (one jump each), Pause/Play
+      (no jump), Stop/Play (jump) ✓. Still open: line-up with Resolume's beat by eye with real clips; a Resolume
+      restart while following its tempo.
+- [x] Docs: SPEC §3, §3.1, §9.6, §10, §11; manual (Setting up the clock, Settings, Playing live,
+      Troubleshooting, Glossary, FAQ, Interface, Introduction, Installation, Quick start); README, changelog,
+      landing page.
 
 ## M14 — In-app update  (planned 2026-11-04, not started)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the

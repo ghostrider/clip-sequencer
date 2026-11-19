@@ -1,7 +1,7 @@
 # Settings
 
-Most settings are command-line options. The MIDI clock input and the app's look ([Themes](themes.md)) are chosen
-in the app (**File → Preferences…**) and remembered. There is no settings file to edit.
+Most settings are command-line options. The clock source, the MIDI clock input and the app's look
+([Themes](themes.md)) are chosen in the app (**File → Preferences…**) and remembered. There is no settings file to edit.
 
 ## How to pass options
 
@@ -13,6 +13,7 @@ in the app (**File → Preferences…**) and remembered. There is no settings fi
 
 | Option | Default | What it does |
 |---|---|---|
+| `--clock <source>` | the one saved in Preferences, else `midi` | clock source for this run: `midi` (a MIDI clock) or `resolume` (Resolume's tempo, [Setting up the clock](clock.md)) |
 | `--midi-port <name>` | the one saved in Preferences | MIDI clock input for this run; part of the name is enough |
 | `--resolume-host <host>` | `127.0.0.1` | where Resolume runs |
 | `--rest-port <port>` | `8080` | Resolume's webserver port (Preferences → Webserver) |
