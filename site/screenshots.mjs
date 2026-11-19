@@ -5,7 +5,8 @@
 // found through NODE_PATH) and the debug binaries:
 //   cargo build -p mock-resolume -p seq-app --bin mock-resolume --bin seq-app-cli
 //   NODE_PATH=$(npm root -g) node site/screenshots.mjs
-// The MIDI clock is not simulated, so the shots show the app idle (CLOCK chip red).
+// The MIDI clock is not simulated, so the shots show the app idle (CLOCK chip red). The last shots switch the clock
+// source to Resolume's tempo (the mock's tempo controller, 120 BPM) for the clock page.
 
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -147,6 +148,34 @@ await page.keyboard.press('Escape');
 await page.getByRole('tab', { name: /Console/ }).click();
 await sleep(800);
 await shot('console');
+await page.getByRole('tab', { name: /Sequencer/ }).click();
+
+// Clock source (SPEC §3.1): Preferences → Clock with a MIDI input and with Resolume's tempo, then the clock chip
+// before and after a Resync. The MIDI port list is made up, so no port names of this machine appear.
+await page.route('**/api/midi/ports', (r) =>
+  r.fulfill({ json: { ports: ['loopMIDI Port', 'Clock Shifter Out', 'Arturia BeatStep Pro'], selected: 'loopMIDI Port' } }),
+);
+await page.locator('.topbar .chip-btn').click();
+await page.locator('.prefs').waitFor();
+await sleep(300);
+await shot('prefs-clock-midi', page.locator('.prefs'));
+await page.locator('input[name="clock-source"][value="resolume"]').check();
+await shot('prefs-clock-resolume', page.locator('.prefs'));
+await page.getByRole('button', { name: 'Save' }).click();
+const chip = page.locator('.topbar .chip-btn');
+await chip.filter({ hasText: 'press Resync' }).waitFor();
+await shot('clock-chip-resolume', chip);
+// Resync pressed in "Resolume": the mock reports it to the app like Resolume does (notes §17).
+const resyncId = comp.tempocontroller.resync.id;
+const mockWs = new WebSocket(`ws://127.0.0.1:${PORTS.rest}/api/v1`);
+await new Promise((res, rej) => {
+  mockWs.onopen = res;
+  mockWs.onerror = rej;
+});
+mockWs.send(JSON.stringify({ action: 'set', parameter: `/parameter/by-id/${resyncId}`, value: true }));
+await chip.filter({ hasText: 'synced' }).waitFor();
+await shot('clock-chip-synced', chip);
+mockWs.close();
 
 await browser.close();
 rmSync(data, { recursive: true, force: true });
