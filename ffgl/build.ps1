@@ -26,6 +26,10 @@ $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer
 $msbuild = $null
 if (Test-Path $vswhere) {
     $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+    # VS 2026 (18.x) no longer reports Microsoft.Component.MSBuild; retry without the component filter.
+    if (-not $msbuild) {
+        $msbuild = & $vswhere -latest -products * -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+    }
 }
 if (-not $msbuild) {
     $msbuild = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe'
