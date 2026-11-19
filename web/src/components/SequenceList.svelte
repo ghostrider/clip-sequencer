@@ -1,8 +1,12 @@
 <script lang="ts">
   import { app, SIXTEENTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
   import type { SequenceView } from '../lib/types';
+  import SeqSyncDialog from './SeqSyncDialog.svelte';
 
   let deck = $derived(app.viewDeck);
+  let syncOpen = $state(false);
+  /** The live deck's SEQ layer lacks the layer or a § clip (SPEC §7.6). */
+  let needsSync = $derived(!!deck?.seq_sync && deck.seq_sync.layer.state !== 'ambiguous' && !(deck.seq_sync.layer.state === 'exists' && deck.seq_sync.add.length === 0));
   let menu = $state<{ x: number; y: number; view: SequenceView } | null>(null);
   let renaming = $state<string | null>(null);
   let renameText = $state('');
@@ -65,7 +69,18 @@
 <aside class="seqlist">
   <div class="row-between">
     <div class="caps">Sequences · {deck?.name ?? '—'}</div>
-    <button class="btn ghost" disabled={!deck || !!app.structure?.model_error} onclick={() => app.newSequence()}>+ New</button>
+    <div style="display:flex;gap:6px">
+      {#if deck?.live}
+        <button
+          class="btn ghost"
+          class:attention={needsSync}
+          title={`Create the ${app.structure?.seq_layer ?? 'SEQ'} layer and its ${app.structure?.seq_prefix ?? '§ '}clips in Resolume`}
+          disabled={!deck.seq_sync || !!app.runtime?.seq_sync_busy}
+          onclick={() => (syncOpen = true)}>{app.runtime?.seq_sync_busy ? 'Syncing…' : `Sync ${app.structure?.seq_layer ?? 'SEQ'}`}</button
+        >
+      {/if}
+      <button class="btn ghost" disabled={!deck || !!app.structure?.model_error} onclick={() => app.newSequence()}>+ New</button>
+    </div>
   </div>
   {#if deck?.orphaned}
     <div class="hint" style="color:var(--err-text)">Deck "{deck.name}" no longer exists in Resolume. Move its sequences to another deck (right-click).</div>
@@ -156,6 +171,10 @@
   </div>
 {/if}
 
+{#if syncOpen && deck}
+  <SeqSyncDialog {deck} onclose={() => (syncOpen = false)} />
+{/if}
+
 {#if confirmDelete}
   {@const v = confirmDelete}
   <div class="modal-backdrop open" role="presentation" onclick={(e) => e.target === e.currentTarget && (confirmDelete = null)}>
@@ -169,3 +188,8 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* SEQ layer out of sync with the deck (SPEC §7.6). */
+  .btn.ghost.attention { background: var(--accent-bg); }
+</style>

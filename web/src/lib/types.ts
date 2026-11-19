@@ -104,6 +104,19 @@ export interface DeckView {
   columns: number;
   sequences: SequenceView[];
   unmatched_seq_clips: string[];
+  /** What "Sync SEQ layer" would do (SPEC §7.6); only for the live deck. */
+  seq_sync: SeqSyncPlan | null;
+}
+
+/** seq-core/src/seq_sync.rs */
+export interface SeqSyncPlan {
+  layer: { state: 'exists'; index: number } | { state: 'missing' } | { state: 'ambiguous'; count: number };
+  /** Sequence names without a § clip. */
+  add: string[];
+  /** § clips without a sequence; playing ones are never cleared. */
+  orphans: { name: string; clip_id: number; column: number; connected: boolean }[];
+  /** [column, clip id] of empty slots on the SEQ layer. */
+  empty_slots: [number, number][];
 }
 
 export interface StructureState {
@@ -151,6 +164,8 @@ export interface RuntimeState {
   notices: string[];
   saved: number;
   save_error: string | null;
+  /** "Sync SEQ layer" is running (SPEC §7.6). */
+  seq_sync_busy: boolean;
 }
 
 // Edit operations (seq-core/src/edit.rs, tagged by "op").
@@ -185,6 +200,7 @@ export type Command =
   | { cmd: 'redo' }
   | { cmd: 'reload_composition' }
   | { cmd: 'save_now' }
+  | { cmd: 'sync_seq_layer'; remove_orphans: boolean }
   | { cmd: 'push_thumbnail'; seq: Uuid }
   | { cmd: 'shell'; action: ShellAction }
   | { cmd: 'log_subscribe' }
