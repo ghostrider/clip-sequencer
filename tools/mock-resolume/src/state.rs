@@ -467,6 +467,9 @@ impl State {
                         let api = match (k.as_str(), deck) {
                             ("connected", _) => "connect",
                             ("selected", true) => "select",
+                            // Tempo controller paths differ from its JSON keys (notes §17).
+                            ("play_state", _) => "play",
+                            ("tempo_tap", _) => "tempotap",
                             (k, _) => k,
                         };
                         out.push((
@@ -478,6 +481,12 @@ impl State {
                 }
             }
         };
+        scan(
+            &self.comp["tempocontroller"],
+            "/tempocontroller".into(),
+            "/composition/tempocontroller".into(),
+            false,
+        );
         for (i, d) in self.comp["decks"]
             .as_array()
             .into_iter()
@@ -580,8 +589,9 @@ impl State {
         }
         Changes {
             params: vec![id],
-            // Renames are not pushed (notes §5.3); other parameter sets are.
-            push: !path.ends_with("/name"),
+            // Renames are not pushed (notes §5.3), nor tempo controller changes (notes §17);
+            // other parameter sets are.
+            push: !path.ends_with("/name") && !path.starts_with("/composition/tempocontroller/"),
             ..Default::default()
         }
     }

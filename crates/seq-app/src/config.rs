@@ -7,6 +7,10 @@ use clap::Parser;
 #[derive(Debug, Clone, Parser)]
 #[command(name = "seq-app", about = "Resolume clip sequencer", version = crate::LONG_VERSION)]
 pub struct Config {
+    /// Where the clock comes from for this run: a MIDI clock, or Resolume's tempo (SPEC §3.1).
+    /// Default: the source chosen in Preferences, else MIDI.
+    #[arg(long, value_enum, value_name = "SOURCE")]
+    pub clock: Option<crate::settings::ClockSourceKind>,
     /// MIDI input port carrying the clock (substring of the port name).
     #[arg(long)]
     pub midi_port: Option<String>,

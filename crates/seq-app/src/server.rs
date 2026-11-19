@@ -375,6 +375,11 @@ enum ClientMsg {
     SetMidiPort {
         port: Option<String>,
     },
+    /// Preferences: take the clock from a MIDI port or from Resolume's tempo (SPEC §3.1); saved in
+    /// the settings.
+    SetClockSource {
+        source: crate::settings::ClockSourceKind,
+    },
     /// Preferences: use this theme (`null` = the default); saved in the settings.
     SetTheme {
         id: Option<String>,
@@ -598,6 +603,24 @@ fn handle(ctx: &ServerCtx, text: &str) {
                 None => {
                     let _ = commands.send(EngineCommand::Notice(
                         "MIDI clock: this app has no MIDI input to change".into(),
+                    ));
+                }
+            }
+            return;
+        }
+        ClientMsg::SetClockSource { source } => {
+            let commands = ctx.commands.clone();
+            match ctx.clock.clone() {
+                Some(clock) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = clock.set_source(source).await {
+                            let _ = commands.send(EngineCommand::Notice(format!("clock: {e}")));
+                        }
+                    });
+                }
+                None => {
+                    let _ = commands.send(EngineCommand::Notice(
+                        "clock: this app's clock source cannot be changed".into(),
                     ));
                 }
             }

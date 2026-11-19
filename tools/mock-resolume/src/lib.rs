@@ -178,6 +178,20 @@ impl Mock {
             .apply(|s| s.replace_media(layer, column, name, path));
     }
 
+    /// A change made on Resolume's tempo controller (notes §17): `"tempo"` with a BPM,
+    /// `"play_state"` with `"Play"`/`"Pause"`/`"Stop"`, or an event (`"resync"`, `"tempo_tap"`)
+    /// with `Value::Null`, which sends two updates like a press and release. Subscribers get
+    /// `parameter_update`s; nothing is pushed.
+    pub fn tempo_controller(&self, key: &str, value: Value) {
+        let id = self.shared.state.lock().unwrap().comp["tempocontroller"][key]["id"]
+            .as_u64()
+            .expect("tempo controller parameter");
+        let presses = if value.is_null() { 2 } else { 1 };
+        for _ in 0..presses {
+            self.shared.apply(|s| s.set_param(id, value.clone()));
+        }
+    }
+
     /// Mutates the composition JSON directly (e.g. rename a layer for a test) and pushes it.
     pub fn edit(&self, f: impl FnOnce(&mut Value)) {
         self.shared.apply(|s| {

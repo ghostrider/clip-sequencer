@@ -272,10 +272,18 @@ pub struct RuntimeState {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct ClockView {
+    /// `midi` or `resolume` (SPEC §3.1).
+    pub source: crate::settings::ClockSourceKind,
+    /// The MIDI port (also kept while the source is Resolume).
     pub port: Option<String>,
+    /// MIDI: the port is open. Resolume: the WebSocket is connected and reports a tempo controller.
     pub connected: bool,
     pub running: bool,
     pub bpm: Option<f64>,
+    /// Resolume source: `Play`, `Pause` or `Stop`, as Resolume reports it.
+    pub transport: Option<String>,
+    /// Resolume source: in phase with Resolume's beat since the last resync.
+    pub synced: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

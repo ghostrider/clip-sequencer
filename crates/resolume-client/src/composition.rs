@@ -24,11 +24,26 @@ pub enum ParseError {
 }
 
 /// One composition push: structure plus the clips' connection states at that moment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompositionSnapshot {
     pub index: CompositionIndex,
     /// By clip id. Clips whose state string is unknown are left out.
     pub states: HashMap<u64, ClipState>,
+    /// `tempocontroller` (notes §17); `None` if the composition JSON has none.
+    pub tempo: Option<TempoController>,
+}
+
+/// The composition's tempo controller (notes §17): parameter ids to subscribe to and the values at
+/// the time of the push. Subscribe by id; Resolume refuses its paths.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TempoController {
+    pub tempo_param: u64,
+    pub bpm: f64,
+    /// `play_state` in REST, `…/tempocontroller/play` over the WebSocket: `Play`, `Pause`, `Stop`.
+    pub play_param: u64,
+    pub play: String,
+    /// A `ParamEvent`: one update on press and one on release, no value.
+    pub resync_param: u64,
 }
 
 pub fn parse_composition(json: &str) -> Result<CompositionSnapshot, ParseError> {
@@ -139,9 +154,22 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
         }
     }
 
+    let tempo = raw.tempocontroller.and_then(|t| {
+        let tempo = t.tempo?;
+        let play = t.play_state?;
+        let resync = t.resync?;
+        (tempo.id != 0 && play.id != 0 && resync.id != 0).then_some(TempoController {
+            tempo_param: tempo.id,
+            bpm: tempo.value,
+            play_param: play.id,
+            play: play.value,
+            resync_param: resync.id,
+        })
+    });
     CompositionSnapshot {
         index: CompositionIndex::new(raw.name.value, decks, live_deck, layers, columns, clips),
         states,
+        tempo,
     }
 }
 
@@ -156,6 +184,24 @@ struct RawComposition {
     layers: Vec<RawLayer>,
     #[serde(default)]
     columns: Vec<RawColumn>,
+    #[serde(default)]
+    tempocontroller: Option<RawTempoController>,
+}
+
+#[derive(Deserialize)]
+struct RawTempoController {
+    #[serde(default)]
+    tempo: Option<Param<f64>>,
+    #[serde(default)]
+    play_state: Option<Param<String>>,
+    #[serde(default)]
+    resync: Option<RawEvent>,
+}
+
+#[derive(Deserialize)]
+struct RawEvent {
+    #[serde(default)]
+    id: u64,
 }
 
 #[derive(Deserialize)]

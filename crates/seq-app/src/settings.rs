@@ -73,8 +73,28 @@ pub fn valid_theme_id(id: &str) -> bool {
     is_key(id, 64)
 }
 
+/// Where the clock comes from (SPEC §3, §3.1).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockSourceKind {
+    /// MIDI clock on `midi_port`.
+    #[default]
+    Midi,
+    /// Ticks made by the app at Resolume's tempo.
+    Resolume,
+}
+
+impl ClockSourceKind {
+    fn is_midi(&self) -> bool {
+        *self == Self::Midi
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
+    /// Clock source chosen in Preferences (default MIDI).
+    #[serde(default, skip_serializing_if = "ClockSourceKind::is_midi")]
+    pub clock_source: ClockSourceKind,
     /// MIDI input carrying the clock (substring of the port name, like `--midi-port`).
     #[serde(default)]
     pub midi_port: Option<String>,
@@ -141,6 +161,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(Settings::load(dir.path()), Settings::default());
         let s = Settings {
+            clock_source: ClockSourceKind::Resolume,
             midi_port: Some("Default App Loopback (B)".into()),
             ffgl_dir: Some(PathBuf::from("D:/Resolume/plugins")),
             theme: Some("custom-1a2b".into()),
@@ -176,8 +197,22 @@ mod tests {
         .unwrap();
         let s = Settings::load(dir.path());
         assert_eq!(s.midi_port.as_deref(), Some("Clock Shifter"));
+        assert_eq!(s.clock_source, ClockSourceKind::Midi);
         assert_eq!(s.theme, None);
         assert!(s.custom_themes.is_empty());
+    }
+
+    #[test]
+    fn clock_source_is_saved_only_when_not_midi() {
+        let s = Settings::default();
+        assert!(!serde_json::to_string(&s).unwrap().contains("clock_source"));
+        let s = Settings {
+            clock_source: ClockSourceKind::Resolume,
+            ..Settings::default()
+        };
+        assert!(serde_json::to_string(&s)
+            .unwrap()
+            .contains(r#""clock_source":"resolume""#));
     }
 
     #[test]

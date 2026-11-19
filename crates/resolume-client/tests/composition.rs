@@ -385,3 +385,27 @@ fn seq_plugin_parameters_are_read_from_sourceparams() {
         .filter(|c| c.layer != seq)
         .all(|c| c.sequence_param.is_none()));
 }
+
+#[test]
+fn tempo_controller_ids_and_values() {
+    let t = parse_composition(DECK2).unwrap().tempo.unwrap();
+    assert_eq!(
+        t,
+        resolume_client::composition::TempoController {
+            tempo_param: 1792956569748,
+            bpm: 120.0,
+            play_param: 1792956569749,
+            play: "Play".into(),
+            resync_param: 1792956569756,
+        }
+    );
+    // A composition without (or with an incomplete) tempo controller has none.
+    let mut v: Value = serde_json::from_str(DECK2).unwrap();
+    v["tempocontroller"]
+        .as_object_mut()
+        .unwrap()
+        .remove("resync");
+    assert_eq!(parse_composition_value(&v).unwrap().tempo, None);
+    v.as_object_mut().unwrap().remove("tempocontroller");
+    assert_eq!(parse_composition_value(&v).unwrap().tempo, None);
+}

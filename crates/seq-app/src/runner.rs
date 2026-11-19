@@ -19,6 +19,7 @@ use crate::config::Config;
 use crate::engine::{EngineCommand, EngineConfig, Outputs};
 use crate::saver::DebounceConfig;
 use crate::server::ShellAction;
+use crate::settings::ClockSourceKind;
 use crate::storage::Storage;
 use crate::ui_port::{bind_ui, BindError, UiBind};
 
@@ -111,11 +112,10 @@ pub async fn run(
         path: data_dir.display().to_string(),
         reason: e.to_string(),
     })?;
-    // The MIDI port: --midi-port for this run, else the one picked in Preferences.
-    let midi_port = config
-        .midi_port
-        .clone()
-        .or_else(|| crate::settings::Settings::load(&data_dir).midi_port);
+    // The clock source and MIDI port: --clock / --midi-port for this run, else Preferences.
+    let settings = crate::settings::Settings::load(&data_dir);
+    let clock_source = config.clock.unwrap_or(settings.clock_source);
+    let midi_port = config.midi_port.clone().or(settings.midi_port);
     let storage = Storage::new(data_dir);
     log::info!("sequence files in {}", storage.dir().display());
 
@@ -157,9 +157,12 @@ pub async fn run(
             seq_prefix: config.seq_prefix.clone(),
             ..EngineConfig::default()
         },
-        clock: match &midi_port {
-            Some(p) => app::ClockSource::Midi(p.clone()),
-            None => app::ClockSource::None,
+        clock: match (clock_source, &midi_port) {
+            (ClockSourceKind::Resolume, _) => app::ClockSource::Resolume {
+                midi_port: midi_port.clone(),
+            },
+            (ClockSourceKind::Midi, Some(p)) => app::ClockSource::Midi(p.clone()),
+            (ClockSourceKind::Midi, None) => app::ClockSource::None,
         },
         debounce: DebounceConfig::default(),
         ui: Some(listener),
@@ -171,8 +174,14 @@ pub async fn run(
     let mut runtime = app.outputs.runtime.clone();
     let mut structure = app.outputs.structure.clone();
 
-    // 3. MIDI clock.
+    // 3. Clock.
     match &midi_port {
+        _ if clock_source == ClockSourceKind::Resolume => report(
+            &progress,
+            3,
+            "Clock: following Resolume's tempo (press Resync in Resolume to line up)",
+            false,
+        ),
         Some(name) => {
             report(
                 &progress,

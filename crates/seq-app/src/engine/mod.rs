@@ -9,8 +9,8 @@ pub mod view;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use clock_in::{ClockEvent, ClockMsg, TempoEstimator};
-use resolume_client::composition::CompositionSnapshot;
+use clock_in::{ClockEvent, ClockMsg, ResolumeClock, TempoEstimator, Transport};
+use resolume_client::composition::{CompositionSnapshot, TempoController};
 use resolume_client::osc::OscSender;
 use resolume_client::ws::{ParamMsg, WsCommand, WsEvent};
 use seq_core::edit::EditOp;
@@ -24,6 +24,7 @@ use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 use crate::saver::SaverHandle;
+use crate::settings::ClockSourceKind;
 use crate::storage::{Storage, StorageError};
 use view::*;
 
@@ -61,6 +62,10 @@ pub enum EngineCommand {
     /// The clock input now listens to this MIDI port (Preferences); `None` = no clock input.
     ClockPortChanged {
         port: Option<String>,
+    },
+    /// The clock now comes from this source (Preferences, SPEC §3.1).
+    ClockSourceChanged {
+        source: ClockSourceKind,
     },
     /// Give every sequence of the live deck a `§` clip on the SEQ layer, creating the layer if
     /// needed (SPEC §7.6). With `remove_orphans`, also clear `§` clips without a sequence.
@@ -134,7 +139,15 @@ enum ParamTarget {
     ClipConnected(u64),
     ClipName(u64),
     LayerName(u64),
+    /// The tempo controller (notes §17, SPEC §3.1).
+    Tempo,
+    TempoPlay,
+    TempoResync,
 }
+
+/// Resolume sends two `resync` updates per press (press and release, ~100 ms apart, no value;
+/// notes §17): the second one within this time is the release.
+const RESYNC_RELEASE: Duration = Duration::from_millis(300);
 
 struct Pending {
     seq: Uuid,
@@ -209,6 +222,15 @@ pub struct Engine {
     clock_port: Option<String>,
     clock_connected: bool,
     clock_running: bool,
+    /// Where ticks come from (SPEC §3, §3.1).
+    clock_source: ClockSourceKind,
+    /// The tick generator for the Resolume source; fed while that source is selected.
+    resolume_clock: Option<ResolumeClock>,
+    /// Ids and last known values of Resolume's tempo controller.
+    tempo_ctl: Option<TempoController>,
+    /// True after a resync: the tick grid is in phase with Resolume's beat.
+    phase_synced: bool,
+    last_resync: Option<Instant>,
     ws_connected: bool,
     rest_ok: bool,
     osc_ok: bool,
@@ -283,6 +305,11 @@ impl Engine {
             clock_port: None,
             clock_connected: false,
             clock_running: false,
+            clock_source: ClockSourceKind::Midi,
+            resolume_clock: None,
+            tempo_ctl: None,
+            phase_synced: false,
+            last_resync: None,
             ws_connected: false,
             rest_ok: false,
             osc_ok: true,
@@ -303,6 +330,52 @@ impl Engine {
 
     pub fn set_clock_port(&mut self, port: Option<String>) {
         self.clock_port = port;
+    }
+
+    /// The clock source at startup and the Resolume tick generator (`None` in tests that feed
+    /// clock events themselves).
+    pub fn set_clock_source(&mut self, source: ClockSourceKind, clock: Option<ResolumeClock>) {
+        self.clock_source = source;
+        self.resolume_clock = clock;
+        self.feed_resolume_state();
+    }
+
+    fn follows_resolume(&self) -> bool {
+        self.clock_source == ClockSourceKind::Resolume
+    }
+
+    /// Hands Resolume's current tempo and transport to the generator, without a resync (SPEC §3.1):
+    /// at startup, after a reconnect or reload, and when the source changes. Stops it while the
+    /// source is MIDI or Resolume is not connected.
+    fn feed_resolume_state(&mut self) {
+        let Some(clock) = &self.resolume_clock else {
+            return;
+        };
+        let now = Instant::now();
+        match (
+            &self.tempo_ctl,
+            self.follows_resolume() && self.ws_connected,
+        ) {
+            (Some(t), true) => {
+                clock.tempo(t.bpm);
+                clock.set_state(
+                    Transport::from_resolume(&t.play).unwrap_or(Transport::Stop),
+                    now,
+                );
+            }
+            _ => clock.set_state(Transport::Stop, now),
+        }
+    }
+
+    /// Resync (SPEC §3.1): `at` is beat 1; every running sequence jumps to its start.
+    fn on_resync(&mut self, at: Instant) {
+        self.phase_synced = true;
+        let running = self.scheduler.running().count();
+        log::info!("resync from Resolume: {running} running sequence(s) back to bar 1");
+        self.request_upcoming_slots(at);
+        let actions = self.scheduler.rewind_all();
+        self.execute(actions);
+        self.runtime_dirty = true;
     }
 
     /// Where slot reads for upcoming slot lane steps go (SPEC §4.5). See [`spawn_slot_reader`].
@@ -386,6 +459,7 @@ impl Engine {
                 }
             }
             ClockEvent::Msg { msg, .. } => log::info!("MIDI {msg:?} (ignored by sequences)"),
+            ClockEvent::Resync { at } => self.on_resync(at),
             ClockEvent::Connected { port } => {
                 self.clock_connected = true;
                 self.clock_port = Some(port);
@@ -417,6 +491,9 @@ impl Engine {
                     self.notice("Resolume WebSocket disconnected");
                 }
                 self.ws_connected = false;
+                // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
+                self.phase_synced = false;
+                self.feed_resolume_state();
                 self.runtime_dirty = true;
             }
             WsEvent::Composition { snapshot, .. } => self.on_composition(*snapshot),
@@ -478,11 +555,22 @@ impl Engine {
 
     fn on_composition(&mut self, snap: CompositionSnapshot) {
         self.composition_at = Instant::now();
-        let CompositionSnapshot { index, states } = snap;
+        let CompositionSnapshot {
+            index,
+            states,
+            tempo,
+        } = snap;
         let old_live = self.index.as_ref().and_then(|i| i.live_deck.clone());
         let new_live = index.live_deck.clone();
-        let structural = self.index.as_ref() != Some(&index);
+        let tempo_ids = |t: &Option<TempoController>| {
+            t.as_ref()
+                .map(|t| (t.tempo_param, t.play_param, t.resync_param))
+        };
+        let structural =
+            self.index.as_ref() != Some(&index) || tempo_ids(&self.tempo_ctl) != tempo_ids(&tempo);
         self.states = states;
+        self.tempo_ctl = tempo;
+        self.feed_resolume_state();
 
         if self.composition.as_deref() != Some(index.composition.as_str()) {
             self.change_composition(index.composition.clone());
@@ -606,6 +694,13 @@ impl Engine {
             self.params
                 .insert(l.name_param, ParamTarget::LayerName(l.id));
         }
+        // Always followed (cheap: Resolume only sends changes), so switching the clock source
+        // needs no new subscriptions.
+        if let Some(t) = &self.tempo_ctl {
+            self.params.insert(t.tempo_param, ParamTarget::Tempo);
+            self.params.insert(t.play_param, ParamTarget::TempoPlay);
+            self.params.insert(t.resync_param, ParamTarget::TempoResync);
+        }
         self.params.remove(&0);
         let ids: BTreeSet<u64> = self.params.keys().copied().collect();
         self.unacked.retain(|id| ids.contains(id));
@@ -679,6 +774,56 @@ impl Engine {
                     self.structure_dirty = true;
                 }
                 self.index = Some(new);
+            }
+            ParamTarget::Tempo => {
+                let Some(bpm) = value.as_f64() else { return };
+                if let Some(t) = &mut self.tempo_ctl {
+                    t.bpm = bpm;
+                }
+                if self.follows_resolume() {
+                    if let Some(clock) = &self.resolume_clock {
+                        clock.tempo(bpm);
+                    }
+                }
+                self.runtime_dirty = true;
+            }
+            ParamTarget::TempoPlay => {
+                let Some(play) = value.as_str() else { return };
+                let Some(transport) = Transport::from_resolume(play) else {
+                    return;
+                };
+                let changed = self.tempo_ctl.as_ref().is_some_and(|t| t.play != play);
+                if let Some(t) = &mut self.tempo_ctl {
+                    t.play = play.to_owned();
+                }
+                if self.follows_resolume() {
+                    if let Some(clock) = &self.resolume_clock {
+                        // A subscription reply only reports the state; an update is a press.
+                        if kind == ParamMsg::Update && changed {
+                            clock.transport(transport, at);
+                        } else {
+                            clock.set_state(transport, at);
+                        }
+                    }
+                }
+                self.runtime_dirty = true;
+            }
+            ParamTarget::TempoResync => {
+                if kind != ParamMsg::Update {
+                    return;
+                }
+                if self
+                    .last_resync
+                    .is_some_and(|t| at.saturating_duration_since(t) < RESYNC_RELEASE)
+                {
+                    return; // the release of the same press
+                }
+                self.last_resync = Some(at);
+                if self.follows_resolume() {
+                    if let Some(clock) = &self.resolume_clock {
+                        clock.resync(at);
+                    }
+                }
             }
         }
     }
@@ -840,6 +985,31 @@ impl Engine {
                         }
                     });
                 }
+            }
+            EngineCommand::ClockSourceChanged { source } => {
+                if source != self.clock_source {
+                    self.clock_source = source;
+                    self.clock_connected = false;
+                    self.clock_running = false;
+                    self.phase_synced = false;
+                    self.tempo = TempoEstimator::new();
+                    self.feed_resolume_state();
+                    self.notice(match source {
+                        ClockSourceKind::Resolume => {
+                            "clock: following Resolume's tempo (press Resync in Resolume to line up)"
+                                .to_owned()
+                        }
+                        ClockSourceKind::Midi => match &self.clock_port {
+                            Some(p) => format!("clock: MIDI clock on \"{p}\""),
+                            None => "clock: MIDI clock, no port selected".to_owned(),
+                        },
+                    });
+                }
+            }
+            EngineCommand::ClockPortChanged { port } if self.follows_resolume() => {
+                // Only remembered for switching back to MIDI.
+                self.clock_port = port;
+                self.runtime_dirty = true;
             }
             EngineCommand::ClockPortChanged { port } => {
                 self.clock_connected = false;
@@ -1446,7 +1616,13 @@ impl Engine {
         // Clock loss (SPEC §3).
         if self.clock_running && self.tempo.is_lost(now) {
             self.clock_running = false;
-            self.notice("no clock: sequences frozen");
+            let play = self.tempo_ctl.as_ref().map(|t| t.play.as_str());
+            self.notice(match (self.follows_resolume(), self.ws_connected, play) {
+                (true, true, Some("Pause")) => "Resolume paused: sequences frozen",
+                (true, true, Some("Stop")) => "Resolume stopped: sequences frozen",
+                (true, false, _) => "Resolume not connected: sequences frozen",
+                _ => "no clock: sequences frozen",
+            });
         }
         // Deck switch timeout (SPEC §7.2).
         if self.switch.as_ref().is_some_and(|s| now > s.deadline) {
@@ -1701,11 +1877,27 @@ impl Engine {
             })
             .collect();
         RuntimeState {
-            clock: ClockView {
-                port: self.clock_port.clone(),
-                connected: self.clock_connected,
-                running: self.clock_running,
-                bpm: self.clock_running.then(|| self.tempo.bpm()).flatten(),
+            clock: if self.follows_resolume() {
+                let ctl = self.tempo_ctl.as_ref().filter(|_| self.ws_connected);
+                ClockView {
+                    source: self.clock_source,
+                    port: self.clock_port.clone(),
+                    connected: ctl.is_some(),
+                    running: self.clock_running,
+                    bpm: ctl.map(|t| t.bpm),
+                    transport: ctl.map(|t| t.play.clone()),
+                    synced: self.phase_synced,
+                }
+            } else {
+                ClockView {
+                    source: self.clock_source,
+                    port: self.clock_port.clone(),
+                    connected: self.clock_connected,
+                    running: self.clock_running,
+                    bpm: self.clock_running.then(|| self.tempo.bpm()).flatten(),
+                    transport: None,
+                    synced: false,
+                }
             },
             ws: self.ws_connected,
             ws_synced: self.ws_connected && self.index.is_some() && self.unacked.is_empty(),

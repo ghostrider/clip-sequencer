@@ -10,6 +10,7 @@ use seq_app::app::{self, App, AppConfig, ClockSource};
 use seq_app::engine::view::{RuntimeState, StructureState};
 use seq_app::engine::{EngineCommand, EngineConfig};
 use seq_app::saver::DebounceConfig;
+use seq_app::settings::ClockSourceKind;
 use seq_app::storage::Storage;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -47,6 +48,12 @@ fn sequence(
 }
 
 async fn harness() -> Harness {
+    harness_with(false).await
+}
+
+/// `resolume_clock`: ticks from the app's own Resolume tempo clock (SPEC §3.1) instead of the
+/// injected channel.
+async fn harness_with(resolume_clock: bool) -> Harness {
     let mock = start_mock(MockConfig::default()).await.unwrap();
     // Unique layer names (unnamed layers are all "Layer #"), and a § clip on SEQ column 1.
     mock.edit(|v| {
@@ -85,7 +92,7 @@ async fn harness() -> Harness {
     )
     .unwrap();
 
-    let (app, clock) = start_app(&mock, dir.path());
+    let (app, clock) = start_app_clock(&mock, dir.path(), None, resolume_clock);
     let h = Harness {
         mock,
         app,
@@ -108,6 +115,15 @@ fn start_app_ui(
     dir: &std::path::Path,
     ui: Option<std::net::SocketAddr>,
 ) -> (App, mpsc::UnboundedSender<ClockEvent>) {
+    start_app_clock(mock, dir, ui, false)
+}
+
+fn start_app_clock(
+    mock: &Mock,
+    dir: &std::path::Path,
+    ui: Option<std::net::SocketAddr>,
+    resolume_clock: bool,
+) -> (App, mpsc::UnboundedSender<ClockEvent>) {
     let (clock, clock_rx) = mpsc::unbounded_channel();
     let app = app::start(AppConfig {
         resolume: ResolumeAddr {
@@ -117,7 +133,11 @@ fn start_app_ui(
         },
         storage: Storage::new(dir),
         engine: EngineConfig::default(),
-        clock: ClockSource::Channel(clock_rx),
+        clock: if resolume_clock {
+            ClockSource::Resolume { midi_port: None }
+        } else {
+            ClockSource::Channel(clock_rx)
+        },
         debounce: DebounceConfig {
             quiet: Duration::from_millis(50),
             max_wait: Duration::from_millis(200),
@@ -1768,4 +1788,96 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     let saved = seq_app::settings::Settings::load(dir.path());
     assert_eq!((saved.theme, saved.custom_themes.len()), (None, 0));
     app.shutdown().await;
+}
+
+// ---- Resolume tempo as clock (SPEC §3.1) ----
+
+fn resolume_clock_ready(r: &RuntimeState) -> bool {
+    r.clock.source == ClockSourceKind::Resolume
+        && r.clock.connected
+        && r.clock.bpm == Some(120.0)
+        && r.clock.transport.as_deref() == Some("Play")
+}
+
+#[tokio::test]
+async fn resolume_tempo_drives_sequences_and_resync_jumps_to_bar_one() {
+    let h = harness_with(true).await;
+    let r = h.runtime(resolume_clock_ready).await;
+    assert!(!r.clock.synced, "not in phase before the first resync");
+
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    // The app's own ticks move it on.
+    h.runtime(|r| r.clock.running && r.running.first().is_some_and(|s| s.pos > 10))
+        .await;
+
+    // Resync (press and release): step 1 again at once, and only once.
+    h.mock.clear_osc_log();
+    h.mock.tempo_controller("resync", serde_json::Value::Null);
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    let r = h.runtime(|r| r.clock.synced).await;
+    assert!(r.running[0].pos < 24, "back at bar 1: {}", r.running[0].pos);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        h.mock.osc_log().len(),
+        2,
+        "the release is not a second resync"
+    );
+    h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn resolume_tempo_and_transport_changes_are_followed() {
+    let h = harness_with(true).await;
+    h.runtime(resolume_clock_ready).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.clock.running && !r.running.is_empty())
+        .await;
+
+    h.mock.tempo_controller("tempo", json!(140.0));
+    h.runtime(|r| r.clock.bpm == Some(140.0)).await;
+
+    // Pause freezes the sequence (it keeps running, without ticks) with its own message.
+    h.mock.tempo_controller("play_state", json!("Pause"));
+    let r = h
+        .runtime(|r| !r.clock.running && r.notices.iter().any(|n| n.contains("Resolume paused")))
+        .await;
+    let frozen = r.running[0].pos;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let r = h.runtime(|_| true).await;
+    assert_eq!(r.running[0].pos, frozen, "no ticks while paused");
+    assert_eq!(r.clock.transport.as_deref(), Some("Pause"));
+
+    // Play after Pause continues without a resync; Play after Stop is one.
+    h.mock.tempo_controller("play_state", json!("Play"));
+    h.runtime(|r| r.clock.running).await;
+    assert!(!h.runtime(|_| true).await.clock.synced);
+    h.mock.tempo_controller("play_state", json!("Stop"));
+    h.runtime(|r| r.clock.transport.as_deref() == Some("Stop"))
+        .await;
+    h.mock.tempo_controller("play_state", json!("Play"));
+    h.runtime(|r| r.clock.synced && r.clock.running).await;
+    h.app.shutdown().await;
+}
+
+#[tokio::test]
+async fn switching_the_clock_source_stops_the_resolume_ticks() {
+    let h = harness_with(true).await;
+    h.runtime(resolume_clock_ready).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.clock.running).await;
+    h.cmd(EngineCommand::ClockSourceChanged {
+        source: ClockSourceKind::Midi,
+    });
+    let r = h
+        .runtime(|r| r.clock.source == ClockSourceKind::Midi && !r.clock.running)
+        .await;
+    let pos = r.running[0].pos;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(h.runtime(|_| true).await.running[0].pos, pos);
+    // A resync means nothing without the Resolume source.
+    h.mock.tempo_controller("resync", serde_json::Value::Null);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!h.runtime(|_| true).await.clock.synced);
+    h.app.shutdown().await;
 }

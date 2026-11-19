@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use clock_in::{ClockEvent, ClockIn};
+use clock_in::{ClockEvent, ClockIn, ResolumeClock};
 use resolume_client::osc::OscSender;
 use resolume_client::rest::RestClient;
 use resolume_client::{ws, ResolumeAddr};
@@ -12,11 +12,17 @@ use tokio::task::JoinHandle;
 
 use crate::engine::{self, Aux, Engine, EngineCommand, EngineConfig, Outputs};
 use crate::saver::{self, DebounceConfig, SaveEvent};
+use crate::settings::ClockSourceKind;
 use crate::storage::Storage;
 
 pub enum ClockSource {
     /// MIDI input port name (substring).
     Midi(String),
+    /// Ticks made at Resolume's tempo (SPEC §3.1). `midi_port` is kept for switching back to MIDI
+    /// in Preferences.
+    Resolume {
+        midi_port: Option<String>,
+    },
     /// Events from elsewhere (tests, simulations).
     Channel(mpsc::UnboundedReceiver<ClockEvent>),
     None,
@@ -38,27 +44,76 @@ pub struct AppConfig {
     pub ffgl_dir: Option<std::path::PathBuf>,
 }
 
-/// Owns the MIDI clock input and switches it to another port at runtime (Preferences dialog).
+/// Owns the MIDI clock input and switches the clock source and the MIDI port at runtime
+/// (Preferences dialog). The Resolume tempo clock itself belongs to the engine, which feeds it.
 pub struct ClockControl {
     tx: mpsc::UnboundedSender<ClockEvent>,
     input: std::sync::Mutex<Option<ClockIn>>,
+    /// The source and the MIDI port (kept while the source is Resolume).
+    state: std::sync::Mutex<(ClockSourceKind, Option<String>)>,
     commands: mpsc::UnboundedSender<EngineCommand>,
     data_dir: std::path::PathBuf,
 }
 
 impl ClockControl {
+    pub fn source(&self) -> ClockSourceKind {
+        self.state.lock().unwrap().0
+    }
+
+    /// Switches between the MIDI clock and Resolume's tempo (SPEC §3.1), tells the engine and saves
+    /// the choice in the settings.
+    pub async fn set_source(
+        self: &std::sync::Arc<Self>,
+        source: ClockSourceKind,
+    ) -> Result<(), String> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let port = {
+                let mut st = this.state.lock().unwrap();
+                st.0 = source;
+                st.1.clone()
+            };
+            this.restart_input(port.filter(|_| source == ClockSourceKind::Midi));
+            crate::settings::Settings::update::<std::io::Error>(&this.data_dir, |s| {
+                s.clock_source = source;
+                Ok(())
+            })
+            .map(|_| ())
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("saving the settings failed: {e}"))?;
+        log::info!("clock source set to {source:?}");
+        let _ = self
+            .commands
+            .send(EngineCommand::ClockSourceChanged { source });
+        Ok(())
+    }
+
+    /// Replaces the MIDI input (`None` = none). Blocking: dropping the old input joins its thread,
+    /// so call it off the async workers.
+    fn restart_input(&self, port: Option<String>) {
+        let old = self.input.lock().unwrap().take();
+        drop(old);
+        let new = port.map(|p| ClockIn::spawn(p, self.tx.clone()));
+        *self.input.lock().unwrap() = new;
+    }
+
     /// Listens to `port` from now on (`None` = no clock input), tells the engine and saves the
-    /// choice in the settings.
+    /// choice in the settings. With the Resolume source the port is only remembered.
     pub async fn set_port(self: &std::sync::Arc<Self>, port: Option<String>) -> Result<(), String> {
         let port = port.map(|p| p.trim().to_owned()).filter(|p| !p.is_empty());
         let this = self.clone();
         let chosen = port.clone();
         tokio::task::spawn_blocking(move || {
-            // Dropping the old input joins its thread: keep that off the async workers.
-            let old = this.input.lock().unwrap().take();
-            drop(old);
-            let new = chosen.clone().map(|p| ClockIn::spawn(p, this.tx.clone()));
-            *this.input.lock().unwrap() = new;
+            let midi = {
+                let mut st = this.state.lock().unwrap();
+                st.1 = chosen.clone();
+                st.0 == ClockSourceKind::Midi
+            };
+            if midi {
+                this.restart_input(chosen.clone());
+            }
             crate::settings::Settings::update::<std::io::Error>(&this.data_dir, |s| {
                 s.midi_port = chosen;
                 Ok(())
@@ -129,25 +184,32 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     let osc = OscSender::new(&cfg.resolume.osc_target())?;
 
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-    let (clock_rx, clock, port) = match cfg.clock {
-        ClockSource::Channel(rx) => (rx, None, None),
+    let (clock_rx, clock, port, source, resolume_clock) = match cfg.clock {
+        ClockSource::Channel(rx) => (rx, None, None, ClockSourceKind::Midi, None),
         source => {
             let (tx, rx) = mpsc::unbounded_channel();
-            let port = match source {
-                ClockSource::Midi(port) => Some(port),
-                _ => {
-                    log::warn!("no MIDI clock port selected (Preferences, or --midi-port): sequences will not advance");
-                    None
-                }
+            let (kind, port) = match source {
+                ClockSource::Midi(port) => (ClockSourceKind::Midi, Some(port)),
+                ClockSource::Resolume { midi_port } => (ClockSourceKind::Resolume, midi_port),
+                _ => (ClockSourceKind::Midi, None),
             };
-            let input = port.clone().map(|p| ClockIn::spawn(p, tx.clone()));
+            if kind == ClockSourceKind::Midi && port.is_none() {
+                log::warn!("no MIDI clock port selected (Preferences, or --midi-port): sequences will not advance");
+            }
+            let input = port
+                .clone()
+                .filter(|_| kind == ClockSourceKind::Midi)
+                .map(|p| ClockIn::spawn(p, tx.clone()));
+            let resolume_clock = ResolumeClock::spawn(tx.clone());
             let control = ClockControl {
                 tx,
                 input: std::sync::Mutex::new(input),
+                state: std::sync::Mutex::new((kind, port.clone())),
                 commands: cmd_tx.clone(),
                 data_dir: cfg.storage.dir().to_path_buf(),
             };
-            (rx, Some(std::sync::Arc::new(control)), port)
+            let control = std::sync::Arc::new(control);
+            (rx, Some(control), port, kind, Some(resolume_clock))
         }
     };
 
@@ -179,6 +241,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         aux_tx,
     );
     engine.set_clock_port(port);
+    engine.set_clock_source(source, resolume_clock);
     engine.set_slot_reader(engine::spawn_slot_reader(
         RestClient::new(cfg.resolume.rest_base()),
         slot_aux,
