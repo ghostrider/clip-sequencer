@@ -150,8 +150,25 @@ export interface RunView {
   edited: boolean;
 }
 
+/** Where the clock comes from (SPEC §3, §3.1). */
+export type ClockSource = 'midi' | 'resolume';
+
+export interface ClockView {
+  source: ClockSource;
+  /** The MIDI port (kept while the source is Resolume). */
+  port: string | null;
+  /** MIDI: the port is open. Resolume: connected and a tempo controller is known. */
+  connected: boolean;
+  running: boolean;
+  bpm: number | null;
+  /** Resolume source: `Play`, `Pause` or `Stop`. */
+  transport: string | null;
+  /** Resolume source: in phase with Resolume's beat since the last Resync. */
+  synced: boolean;
+}
+
 export interface RuntimeState {
-  clock: { port: string | null; connected: boolean; running: boolean; bpm: number | null };
+  clock: ClockView;
   ws: boolean;
   ws_synced: boolean;
   rest: boolean;
@@ -206,6 +223,7 @@ export type Command =
   | { cmd: 'log_subscribe' }
   | { cmd: 'log_unsubscribe' }
   | { cmd: 'set_midi_port'; port: string | null }
+  | { cmd: 'set_clock_source'; source: ClockSource }
   | { cmd: 'set_theme'; id: string | null }
   | { cmd: 'save_theme'; theme: CustomTheme; select: boolean }
   | { cmd: 'delete_theme'; id: string };

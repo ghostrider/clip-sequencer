@@ -5,10 +5,24 @@
   let clockOk = $derived(!!rt?.clock.connected && !!rt?.clock.running);
   let clockText = $derived.by(() => {
     if (!rt) return 'CLOCK';
-    if (!rt.clock.connected) return 'CLOCK · no port';
-    if (!rt.clock.running) return 'CLOCK · no clock';
-    return `CLOCK ${rt.clock.bpm?.toFixed(1) ?? '—'} BPM · locked`;
+    const c = rt.clock;
+    if (c.source === 'resolume') {
+      // SPEC §3.1: ticks made at Resolume's tempo; "synced" once a Resync lined them up.
+      if (!c.connected) return 'RESOLUME TEMPO · not connected';
+      const bpm = `${c.bpm?.toFixed(1) ?? '—'} BPM`;
+      if (c.transport === 'Pause') return `RESOLUME ${bpm} · paused`;
+      if (c.transport === 'Stop') return `RESOLUME ${bpm} · stopped`;
+      return `RESOLUME ${bpm} · ${c.synced ? 'synced' : 'press Resync'}`;
+    }
+    if (!c.connected) return 'CLOCK · no port';
+    if (!c.running) return 'CLOCK · no clock';
+    return `CLOCK ${c.bpm?.toFixed(1) ?? '—'} BPM · locked`;
   });
+  let clockTitle = $derived(
+    rt?.clock.source === 'resolume'
+      ? `Following Resolume's tempo${rt.clock.synced ? '' : '; press Resync in Resolume to line up with its beat'} · click to change (Ctrl+,)`
+      : (rt?.clock.port ?? 'no MIDI port selected') + ' · click to choose (Ctrl+,)',
+  );
 </script>
 
 <header class="topbar">
@@ -46,7 +60,7 @@
   </div>
   <div class="spacer"></div>
   <div class="chips">
-    <button class="chip chip-btn" class:bad={!clockOk} title={(rt?.clock.port ?? 'no MIDI port selected') + ' · click to choose (Ctrl+,)'}
+    <button class="chip chip-btn" class:bad={!clockOk} title={clockTitle}
       onclick={() => { app.prefsTab = 'clock'; app.prefsOpen = true; }}>{clockText}</button>
     <span class="chip" class:bad={!rt?.rest}>REST</span>
     <span class="chip" class:bad={!rt?.ws}>WS</span>

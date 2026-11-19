@@ -53,7 +53,7 @@
       },
       {
         "keys": "Ctrl+,",
-        "what": "Preferences (MIDI clock input)"
+        "what": "Preferences (clock source, MIDI input, theme)"
       },
       {
         "keys": "Alt or F10",

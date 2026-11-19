@@ -1,12 +1,17 @@
 <script lang="ts">
-  // Preferences: which MIDI input carries the clock, and the colour theme (SPEC §9.7). Saved by the app in
-  // <data-dir>/settings.json; `--midi-port` on the command line still wins for the run it is given in.
+  // Preferences: where the clock comes from (a MIDI input, or Resolume's tempo, SPEC §3.1) and the colour
+  // theme (SPEC §9.7). Saved by the app in <data-dir>/settings.json; `--clock` and `--midi-port` on the
+  // command line still win for the run they are given in.
   import { app } from '../lib/app.svelte';
   import { DEFAULT_THEME_ID } from '../lib/themes';
+  import type { ClockSource } from '../lib/types';
   import ThemeSettings from './ThemeSettings.svelte';
 
   let ports = $state<string[]>([]);
   let choice = $state<string | null>(null);
+  let source = $state<ClockSource>('midi');
+  /** The source when the dialog opened: only a change is sent. */
+  let loadedSource: ClockSource = 'midi';
   /** The port as loaded: the clock input is only switched (and restarted) when this changes. */
   let loadedChoice: string | null | undefined = undefined;
   let theme = $state(DEFAULT_THEME_ID);
@@ -37,6 +42,8 @@
   $effect(() => {
     if (app.prefsOpen) {
       loadedChoice = undefined;
+      loadedSource = app.runtime?.clock.source ?? 'midi';
+      source = loadedSource;
       theme = app.appearance.theme ?? DEFAULT_THEME_ID;
       app.themePreview = true;
       load();
@@ -54,6 +61,7 @@
 
   function save() {
     if (loadedChoice !== undefined && choice !== loadedChoice) app.send({ cmd: 'set_midi_port', port: choice });
+    if (source !== loadedSource) app.send({ cmd: 'set_clock_source', source });
     if (theme !== (app.appearance.theme ?? DEFAULT_THEME_ID)) {
       app.send({ cmd: 'set_theme', id: theme === DEFAULT_THEME_ID ? null : theme });
       app.appearance = { ...app.appearance, theme: theme === DEFAULT_THEME_ID ? null : theme };
@@ -73,20 +81,44 @@
       <h2 id="prefs-title">Preferences</h2>
       <div class="tabs" role="tablist" aria-label="Preferences">
         <button class="tab" role="tab" aria-selected={app.prefsTab === 'clock'} aria-controls="prefs-clock"
-          onclick={() => (app.prefsTab = 'clock')}>MIDI clock</button>
+          onclick={() => (app.prefsTab = 'clock')}>Clock</button>
         <button class="tab" role="tab" aria-selected={app.prefsTab === 'appearance'} aria-controls="prefs-appearance"
           onclick={() => (app.prefsTab = 'appearance')}>Appearance</button>
       </div>
       <div class="prefs-body">
-      <div class="prefs-group" id="prefs-clock" role="tabpanel" aria-label="MIDI clock" hidden={app.prefsTab !== 'clock'}>
+      <div class="prefs-group" id="prefs-clock" role="tabpanel" aria-label="Clock" hidden={app.prefsTab !== 'clock'}>
+        <div class="caps">Clock source</div>
+        <div class="prefs-ports" role="radiogroup" aria-label="Clock source">
+          <label class="prefs-port">
+            <input type="radio" name="clock-source" value="midi" bind:group={source} />
+            <span>MIDI clock <span class="meta">· from a MIDI input, e.g. the Clock Shifter's virtual port</span></span>
+          </label>
+          <label class="prefs-port">
+            <input type="radio" name="clock-source" value="resolume" bind:group={source} />
+            <span>Resolume tempo <span class="meta">· no MIDI needed; follows Resolume's BPM, Play, Pause and Stop</span></span>
+          </label>
+        </div>
+        {#if source === 'resolume'}
+          <p class="meta">
+            Resolume doesn't report where its beat is, only its tempo. Press <strong>Resync</strong> in Resolume once to
+            line the sequencer up with Resolume's beat; a Resync also jumps every playing sequence back to bar 1.
+            {#if current?.source === 'resolume'}
+              Now: {#if !current.connected}Resolume not connected{:else}<span class="mono">{current.bpm?.toFixed(1) ?? '—'} BPM</span>
+                · {current.transport ?? '—'} · {current.synced ? 'lined up' : 'not lined up yet'}{/if}
+            {/if}
+          </p>
+        {:else}
         <div class="caps">MIDI clock input</div>
         <p class="meta">
           The sequencer follows the MIDI clock on this input (e.g. the Clock Shifter's virtual port).
-          {#if current?.port}
+          {#if current?.port && current.source === 'midi'}
             Now: <span class="mono">{current.port}</span> · {current.connected ? (current.running ? 'clock running' : 'connected, no clock') : 'not found'}
           {/if}
         </p>
-        {#if error}
+        {/if}
+        {#if source === 'resolume'}
+          <!-- The MIDI input list is kept (and saved) for switching back. -->
+        {:else if error}
           <p class="prefs-error">{error}</p>
         {:else if loading && !ports.length}
           <p class="meta">Looking for MIDI inputs…</p>
@@ -121,7 +153,7 @@
       </div>
       </div>
       <div class="actions">
-        {#if app.prefsTab === 'clock'}
+        {#if app.prefsTab === 'clock' && source === 'midi'}
           <button class="btn" onclick={load} disabled={loading}>Refresh MIDI inputs</button>
         {/if}
         {#if themeDirty}<span class="meta">Theme changes not saved yet: save them as a theme, or discard them.</span>{/if}

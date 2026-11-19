@@ -56,9 +56,9 @@ class AppState {
   logStats = $state<LogStats>({ errors: 0, dropped: 0 });
   /** Error count when the Console tab was last visible (for the badge). */
   errorsSeen = $state(0);
-  /** Preferences dialog (MIDI clock input, theme). */
+  /** Preferences dialog (clock source and MIDI input, theme). */
   prefsOpen = $state(false);
-  /** Preferences tab shown when it opens (the clock chip opens the MIDI clock tab). */
+  /** Preferences tab shown when it opens (the clock chip opens the Clock tab). */
   prefsTab = $state<'clock' | 'appearance'>('clock');
   /** Theme settings from the app (SPEC §9.7). */
   appearance = $state<Appearance>({ theme: null, custom_themes: [] });
