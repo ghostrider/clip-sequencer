@@ -289,3 +289,30 @@ Consequences for slot lanes (SPEC §4.5):
   step. This is not a connect, so it does not look like a manual override (SPEC §7.3).
 - Not probed: dragging a **stopped** clip into an empty slot, and dropping a file into an
   **empty** slot (push or not).
+
+
+## 16. Building the SEQ layer (probed for M16, 2026-11-18, Arena 7.29.0)
+
+For "Sync SEQ layer" (SPEC §7.6). Unsaved scratch composition, deck `Gradient`, 3 layers, 12 columns; every
+change was undone afterwards. Logs: `docs/samples/m16-0*.jsonl` (`resolume-probe session`).
+
+| Call | Result | Status |
+|---|---|---|
+| `POST /composition/layers/add`, **no body** | `204` in ~73 ms. The new layer is appended **on top** (highest index, here 4), named `"Layer #"`, one empty slot per column with new ids. Existing layer and clip ids keep their indexes. A composition push follows. | ✅ `m16-01` |
+| WS `set` `/composition/layers/{L}/name` | renames the layer (`parameter_set` carries the old `"Layer #"`) | ✅ `m16-02` |
+| `POST /composition/clips/by-id/{id}/open`, body `source:///video/Blank`, into an empty slot of the new layer | `204`; the clip is named `Blank` | ✅ (as §7) |
+| WS `set` clip name, by path `/composition/layers/{L}/clips/{C}/name` **and** by id `/parameter/by-id/<clip name param id>` | both rename the clip; UTF-8 (`§`, `C2 A7`) is stored as sent | ✅ `m16-02` |
+| WS `set` `/parameter/by-id/<layer video.opacity id>` value `0.0` | sets the new layer's opacity (id from `GET /composition/layers/{L}` → `video.opacity.id`, as §5.2: by id, not by path) | ✅ `m16-03` |
+| WS `{"action":"remove","id":…,"path":"/composition/layers/{L}"}` | `{"id":…,"error":null}`, the layer is gone (probe clean-up; the app doesn't remove layers) | ✅ `m16-03` |
+| `POST /composition/columns/add`, **no body** | `204` in ~70 ms; the column is appended **at the end**, existing clips keep their positions | ✅ `m16-04` |
+| WS `remove` `/composition/columns/{n}` | removes the column (as §5.2) | ✅ `m16-05` |
+| `GET /sources` → `video[].name` | lists generators and FFGL source plugins by display name (`Blank`; a plugin only when Resolume loaded it at start-up, §14) | ✅ |
+| `GET /sources` entry of the plugin | `{"idstring":"VJSQ","name":"1000A Sequence","category":"Video Sources",…}` (probed 2026-11-19, plugin 0.2.0 build 133) | ✅ |
+| `POST …/open` with `source:///video/1000A%20Sequence` (display name, space as `%20`), into an empty slot | `204` in ~165 ms; the clip is named `1000A Sequence`, `video.sourceparams` holds the plugin's `Sequence`, `Server`, `Build` parameters (`Sequence` empty until the engine binds it, §14). Opening the **last** column's slot made Resolume append an empty column. | ✅ |
+
+End-to-end with the app (`seq-app-cli`, scratch data folder, 2 sequences in the live deck): Sync created
+layer 4 `SEQ` at opacity 0 with `§ Intro`, `§ Drop` (Blank, plugin not installed); after renaming a
+sequence and syncing with orphan removal, the old `§` clip was cleared and its slot (same id) reused; a
+third sync changed nothing. With the plugin installed (2026-11-19, deck `Downloads`, existing empty SEQ
+layer): Sync loaded "1000A Sequence" into `§ Verse` and `§ Chorus`, the engine set their `Sequence`
+parameters to `Verse` and `Chorus`, and a second sync reported "already in sync".

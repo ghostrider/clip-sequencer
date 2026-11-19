@@ -33,3 +33,5 @@ Sessions:
 - `demo.seq.json`: three sequences for it (`Drop A`, `Intro`, `Build B`); copy it to `<data-dir>/Demo.seq.json`.
 - The thumbnails in `docs/images/screenshot.png` are abstract images generated for the demo and uploaded to the
   mock (`POST /api/v1/composition/clips/by-id/<id>/thumbnail`); without them every clip shows the sample gradient.
+- `m16-01-layer-add.jsonl` … `m16-05-column-remove.jsonl`: building the SEQ layer for "Sync SEQ layer" (notes §16): add a
+  layer and a column without a body, rename a layer and a clip, set opacity by id, remove both again.

@@ -149,6 +149,21 @@ Asked for on 2026-11-18, before M14: a look of its own instead of the typical ge
 - [x] Fonts bundled (OFL 1.1) with their notices in the third-party licences; `§ SEQ` logo in Unbounded.
 - [ ] Windows check: desktop window and splash colours, fonts in WebView2, release zip size.
 
+## M16 — Sync SEQ layer (SPEC §7.6)  ✓ done 2026-11-19
+Asked for on 2026-11-18: a button that creates the SEQ layer if needed and adds a `§` clip (with the FFGL
+plugin) for every sequence of the deck.
+- [x] Probe: add layer / column without a body, rename layer and clip, opacity by id (notes §16).
+- [x] Probe: load the "1000A Sequence" source by URL (needs the plugin installed, Resolume restarted).
+- [x] `seq_core::seq_sync::plan` (pure, unit tests): layer state, missing clips, orphans, empty slots.
+- [x] REST: `add_layer`, `add_column`, `clear_clip`, `layer_json`, `video_sources`.
+- [x] Worker `seq_app::seq_sync` (fresh REST read, re-plan, act, verify; reports by `Aux::SeqSynced`);
+      engine command `SyncSeqLayer`, plan in the live `DeckView`, `seq_sync_busy` in the runtime state.
+- [x] UI: `Sync SEQ` button in the sequence list header (live deck), dialog with the plan and the
+      "remove `§` clips without a sequence" option.
+- [x] Live check with Blank (plugin not installed): create layer, add clips, orphan removal, no-op re-run.
+- [x] Live check with the plugin: clips hold "1000A Sequence" and their `Sequence` parameter is bound.
+- [x] Docs: SPEC §7.6, §9.2, §9.6; notes §16; manual (Setting up Resolume, Playing live); README.
+
 ## M14 — In-app update  (planned 2026-11-04, not started)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.

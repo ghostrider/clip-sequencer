@@ -299,6 +299,34 @@ A confirmation that arrives after the timeout (seen once at ~700 ms with a busy 
 counts as the sequencer's own trigger, up to 5 s or the lane's next trigger: it clears the red mark
 and is logged as late, and it does not yield the lane (§7.3).
 
+### 7.6 Sync SEQ layer (M16, decided 2026-11-18)
+A button sets up the SEQ layer in Resolume so that every sequence of the **live deck** has its `§` clip
+(§7.1), instead of the user building the placeholders by hand.
+- **Where:** `Sync SEQ` in the sequence list header (§9.2), shown for the live deck only (Resolume's
+  API reads and writes only the live deck, *notes §2*). It is highlighted when the layer or a `§` clip
+  is missing. It opens a dialog with the plan; nothing changes in Resolume before **Sync** is pressed.
+- **Plan** (`seq_core::seq_sync`, pure): the layer (exists / missing / several layers with the name),
+  the sequences without a `§` clip, the `§` clips whose name matches no sequence ("orphans"), and the
+  empty slots of the layer. The engine shows it for the live deck; the worker computes it again from
+  a fresh REST read before acting, because the pushed composition can be stale (*notes §15*).
+- **Steps** (worker task, never on the timing path; each call in *notes §16*):
+  1. Layer missing: add a layer (it goes on top), name it like the SEQ layer setting, set its opacity
+     to 0 so the placeholders don't show on the output. Several layers with the name: stop with a
+     message (rename all but one).
+  2. Only with **Remove `§` clips without a sequence** ticked (off by default): clear the orphans that
+     are not playing. Playing ones are kept and reported. Their slots are reused.
+  3. Not enough empty slots: add the missing columns at the end.
+  4. Fill empty slots, left to right, in sequence list order: load the "1000A Sequence" source if
+     Resolume lists it (§12), else `Blank`; then name each clip `<prefix><sequence name>`. The
+     engine then binds the plugin's `Sequence` parameter as usual (§12).
+- Other clips on the SEQ layer, other layers and other decks are never touched. A second sync with
+  nothing missing changes nothing. Running sequences keep running; a sync is refused during a deck
+  switch, and it stops (with a message) if another deck becomes live while it runs.
+- **Result:** one line in the status bar, e.g. `Sync SEQ: created layer SEQ; added 2 clips (1000A
+  Sequence)`, or `Sync SEQ layer failed: …`. One sync at a time; the button reads `Syncing…` meanwhile.
+- Not in scope: syncing decks that are not live (that needs a deck switch), renaming `§` clips when a
+  sequence is renamed (the old clip becomes an orphan and a new one is added), reordering clips.
+
 ## 8. Thumbnails
 
 - **Clip thumbnails** are fetched via REST for the active deck and cached on disk, keyed by clip
@@ -335,6 +363,7 @@ Single screen, everything controlled from here (no separate live view).
 - Per card: ▶ / ■ button. On a non-live deck, the button shows the deck name (`▶ Act 2`)
   and switching follows 7.2.
 - Click selects the sequence for editing. `+ New` creates one in the selected deck.
+- `Sync SEQ` (live deck only): creates the SEQ layer and the missing `§` clips in Resolume (§7.6).
 - Context menu: rename, duplicate, delete (with confirmation).
 
 ### 9.3 Center: sequence editor
@@ -386,8 +415,9 @@ last WebSocket confirmation, yield and error notices.
   and immediately on structural changes. Includes connection status, decks, live deck,
   sequences (from file), runtime state (running, pass, position, lane states, confirmations).
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
-  `edit` operations, `push_thumbnail`, and for the browser UI's File menu `reload_composition`,
-  `save_now`). Edits are sent as operations, the engine applies them to the stored model, saves,
+  `edit` operations, `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), and for the
+  browser UI's File menu `reload_composition`, `save_now`). The live deck's `seq_sync` plan comes with
+  the decks, `seq_sync_busy` with the runtime state. Edits are sent as operations, the engine applies them to the stored model, saves,
   and echoes the new state.
 - UI → desktop shell: `{"cmd": "shell", "action": "quit" | "zoom_in" | "zoom_out" | "zoom_reset"}`.
   Keys typed into the web content never reach the native menu's shortcuts (WebView2 handles input in
