@@ -59,8 +59,10 @@ switches Resolume to that deck, then starts ([Working with decks](decks.md)).
 
 ## 6. Start it from Resolume
 
-1. In Resolume, on the `SEQ` layer, add a clip with the *Blank* source and name it `§ Drop B`.
-2. In the app, the sequence's card now shows `§ Drop B · col N` instead of the red "no SEQ clip in deck".
+1. In the app, click **Sync SEQ** above the sequence list, then **Sync**. The app adds the `SEQ` layer (if
+   there is none) and a clip `§ Drop B` on it. (By hand: on the `SEQ` layer, add a clip with the *Blank* source
+   and name it `§ Drop B`.)
+2. The sequence's card now shows `§ Drop B · col N` instead of the red "no SEQ clip in deck".
 3. Click the `§ Drop B` clip in Resolume: the sequence starts. Clear the SEQ layer to stop it.
 
 Next: [The interface](interface.md) explains every part of the window, [Playing live](playing-live.md) what

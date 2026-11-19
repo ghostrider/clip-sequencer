@@ -56,6 +56,13 @@ start Resolume.
 
 ## Using it in Resolume
 
+The easy way: click **Sync SEQ** in the app ([Setting up Resolume](resolume-setup.md#the-quick-way-sync-seq)). It
+puts a clip with the plugin on the `SEQ` layer for every sequence of the live deck that has none yet. Existing
+placeholders with the *Blank* source stay as they are; to switch one to the plugin, clear it in Resolume and
+sync again.
+
+By hand:
+
 1. In Resolume's **Sources**, find **1000A Sequence**.
 2. Drag it onto the `SEQ` layer, into an empty slot.
 3. Name the clip `§ ` plus the sequence name, for example `§ Drop A`.

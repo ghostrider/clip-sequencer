@@ -18,6 +18,7 @@
 - [Files and data](files.md)
 - [Thumbnails](thumbnails.md)
 - [Installing the FFGL plugin](ffgl-plugin.md)
+- [Themes](themes.md)
 
 # Reference
 

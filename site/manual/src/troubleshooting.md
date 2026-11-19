@@ -32,7 +32,11 @@ Start with the chips on the top bar and the **Console** tab: most problems show 
 ## Starting from Resolume doesn't work
 
 - The card says "no SEQ clip in deck": the placeholder's name must be `§ ` plus the sequence name exactly (with the
-  space), on the layer named `SEQ`, in the same deck.
+  space), on the layer named `SEQ`, in the same deck. **Sync SEQ** above the sequence list adds the missing ones
+  ([Setting up Resolume](resolume-setup.md#the-quick-way-sync-seq)).
+- **Sync SEQ** says several layers are named `SEQ`: rename all but one in Resolume, then sync again.
+- **Sync SEQ** used *Blank* instead of the plugin: Resolume didn't load "1000A Sequence" at start-up. Install it
+  ([Installing the FFGL plugin](ffgl-plugin.md)), restart Resolume, clear the Blank placeholders and sync again.
 - The `§` clip starts the sequence of that name **in the live deck** only.
 - You started it from the app while its `§` clip was still playing: see "one place at a time" in
   [Playing live](playing-live.md). Clear the SEQ layer, then start it again.

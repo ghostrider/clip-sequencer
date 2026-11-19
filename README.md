@@ -20,9 +20,11 @@ getting started and for building from source.*
   while the sequence runs.
 - Locked to an incoming MIDI clock; triggers are confirmed over Resolume's WebSocket.
 - Start and stop from the app or from Resolume (`§ <name>` clips on a `SEQ` layer); manual clip clicks
-  take over a lane until you resume it.
+  take over a lane until you resume it. **Sync SEQ** creates the layer and the missing `§` clips (with the
+  FFGL plugin, if installed) for the live deck.
 - Works per deck, follows renames, re-finds clips by id, name or file.
 - Desktop app (one window, splash, live Console tab) and a headless mode with the UI in a browser.
+- Five themes and an editor for your own colours and fonts (Preferences → Appearance).
 - Optional FFGL source plugin "1000A Sequence" ([`ffgl/`](ffgl/README.md)) that shows the sequence timeline
   on the `§` clip in Resolume; it ships in the zip and is installed from the app (**File → Install FFGL plugin…**).
 

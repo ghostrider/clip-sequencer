@@ -24,7 +24,7 @@ inspector on the right, and a status bar at the bottom.
 The **desktop app** has a menu bar in the window frame:
 
 - **File:** Reload composition (read the composition from Resolume again), Save now, Open data folder,
-  Preferences… (MIDI clock input), Install FFGL plugin… ([Installing the FFGL plugin](ffgl-plugin.md)),
+  Preferences… (MIDI clock input, and the look of the app: [Themes](themes.md)), Install FFGL plugin… ([Installing the FFGL plugin](ffgl-plugin.md)),
   Quit (Ctrl+Q).
 - **View:** Zoom in / out / reset (Ctrl+= / Ctrl+- / Ctrl+0), Toggle Console.
 - **Help:** Keyboard shortcuts, User manual, Report an issue, Licenses, About.
@@ -44,6 +44,10 @@ The sequences of the deck shown. Each card has:
 - lanes, length in bars, and repeat (`once`, `×4`, `∞`);
 - its **placeholder** on the SEQ layer (`§ Drop A · col 1`), or in red "no SEQ clip in deck";
 - **▶ / ■** to start and stop it.
+
+For the live deck, **Sync SEQ** next to **+ New** creates the SEQ layer and the missing placeholders in Resolume
+([Setting up Resolume](resolume-setup.md#the-quick-way-sync-seq)); it is highlighted while a placeholder is
+missing.
 
 Click a card to edit the sequence. **+ New** adds a sequence to the deck shown. Right-click a card for **Rename**,
 **Duplicate** and **Delete…**; a double-click on the name renames it too.

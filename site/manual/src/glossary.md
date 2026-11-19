@@ -39,6 +39,12 @@
 **Step**
 : One block in a lane: a clip (or a rest) and a length in sixteenths of a bar.
 
+**Sync SEQ**
+: The button that creates the SEQ layer and the missing placeholders of the live deck in Resolume.
+
+**Theme**
+: The app's colours and fonts, chosen in Preferences → Appearance. Five come with the app; you can make your own.
+
 **Tick**
 : One MIDI clock pulse: 24 per beat, 6 per sixteenth note, 96 per bar.
 

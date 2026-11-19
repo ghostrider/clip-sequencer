@@ -1,7 +1,7 @@
 # Settings
 
-Most settings are command-line options. The MIDI clock input is also chosen in the app
-(**File → Preferences…**) and remembered. There is no settings file to edit.
+Most settings are command-line options. The MIDI clock input and the app's look ([Themes](themes.md)) are chosen
+in the app (**File → Preferences…**) and remembered. There is no settings file to edit.
 
 ## How to pass options
 

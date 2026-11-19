@@ -7,6 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Sync SEQ:** a button above the sequence list creates the `SEQ` layer in Resolume if needed and adds a
+  `§ <name>` clip for every sequence of the live deck, with the "1000A Sequence" plugin (or *Blank* without it).
+  Optionally clears `§` clips whose sequence no longer exists.
+- **Themes:** Preferences → Appearance with five built-in themes (new default *Rack*) and an editor for your own
+  colours and fonts; all fonts are bundled.
+
 ### Changed
 
 - The release zip holds a single folder, `clip-sequencer`, instead of loose files.
