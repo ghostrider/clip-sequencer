@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
 ### Added
 
 - **Sync SEQ:** a button above the sequence list creates the `SEQ` layer in Resolume if needed and adds a
@@ -73,5 +75,6 @@ First public release.
 - The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%\resolume-sequencer` of earlier builds is
   moved there on first start.
 
-[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.2.0
