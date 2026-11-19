@@ -316,3 +316,28 @@ sequence and syncing with orphan removal, the old `§` clip was cleared and its 
 third sync changed nothing. With the plugin installed (2026-11-19, deck `Downloads`, existing empty SEQ
 layer): Sync loaded "1000A Sequence" into `§ Verse` and `§ Chorus`, the engine set their `Sequence`
 parameters to `Verse` and `Chorus`, and a second sync reported "already in sync".
+
+
+## 17. Tempo controller (probed for a Resolume tempo clock, 2026-11-19, Arena 7.29.0)
+
+Can the sequencer follow Resolume's own tempo instead of a MIDI clock? Read-only: the user made every
+change in Resolume while `resolume-probe session` listened. Logs: `docs/samples/m17-0*.jsonl`.
+
+| Question | Result | Status |
+|---|---|---|
+| `GET /composition` → `tempocontroller` | `tempo` (`ParamRange` 20–500, e.g. `152.389…`), `play_state` (`ParamChoice` `Play`/`Pause`/`Stop`), events `tempo_tap`, `resync`, `tempo_push`, `tempo_pull` (`ParamEvent`). **No beat or bar position** anywhere in it. | ✅ |
+| WS `subscribe` by path `/composition/tempocontroller/tempo` | `{"error":"Invalid parameter path"}` | ❌ `m17-01` |
+| WS `subscribe` `/parameter/by-id/<id>` (ids from REST) | `parameter_subscribed` with the value. The logical paths it reports differ from the REST keys: `…/tempocontroller/play` (REST `play_state`), `…/tempocontroller/tempotap` (REST `tempo_tap`). Silent while nothing changes. | ✅ `m17-02` |
+| Tempo typed or dragged in Resolume | one `parameter_update` per change, full precision (e.g. `130.574…` → `131.574…` while dragging, ~150–300 ms apart) | ✅ `m17-03` |
+| Tap tempo | **two** `parameter_update`s on `tempotap` per tap (press and release, ~90–120 ms apart; no value), and from the 3rd tap on a new `tempo` in the same millisecond as the press (127.9 → 126.4 → 128.0 → 129.6) | ✅ `m17-03`, `m17-04` |
+| Pause / Stop / Play | `parameter_update` on `play` with `value` and `index` each time; **Stop** was followed by a full composition push | ✅ `m17-03` |
+| Resync | **two** `parameter_update`s on `…/tempocontroller/resync` per press (press and release, ~100 ms apart; no value). In `m17-03` it was not pressed. | ✅ `m17-04` |
+| OSC output (Preferences → OSC → Output, 127.0.0.1:7001; off by default here) | only changes, each message **sent twice**: `/composition/tempocontroller/tempo` **normalised 0–1** over 20–500 BPM (`0.22993` = 130.37), `…/tempotap` and `…/resync` as `1` (press) / `0` (release), and the playing clip's `…/transport/position` (also as `/composition/selectedclip/…`, ~frame rate). **No beat or bar message**, also not over 20 s of steady tempo (~40 beats). | ✅ (logs not kept: `osc-m17*.jsonl` in the session scratchpad) |
+| Ableton Link state | not probed | ❓ |
+
+Result: Resolume reports **tempo, transport, taps and resync**, over the WebSocket and over OSC, but never its
+**beat phase**. A tempo clock built on this runs its own beat grid at Resolume's BPM (start on Play, freeze
+on Pause, reset on Stop) and takes its phase from events: a **Resync** press marks bar 1, a tap press marks
+a beat (both arrive within WebSocket latency). Until the first resync the grid is not in phase with
+Resolume's beat. Still open: whether Resolume's own beat restarts at bar 1 on Resync (check by eye), and
+Ableton Link.

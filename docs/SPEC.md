@@ -50,6 +50,26 @@ compensates latency itself.
   When ticks resume, sequences continue from where they froze.
 - **Data model is ready for quantization later:** `start` field, currently only `"immediate"`.
 
+### 3.1 Resolume tempo as clock (M17, decided 2026-11-19)
+
+For setups without a MIDI clock. The clock source is a setting: **MIDI clock** (as above, default) or
+**Resolume tempo**. Resolume reports its tempo, transport, taps and resync over the WebSocket, but never its
+beat phase (*notes §17*), so the app makes its own ticks.
+
+- **Ticks:** the app generates 24 PPQN at Resolume's current tempo on a dedicated timer thread (Windows
+  sleep granularity is too coarse for ~18 ms ticks without a high-resolution timer). The engine sees the same
+  ticks as from MIDI; scheduler and sequences don't change.
+- **Tempo:** subscribed by parameter id (`tempocontroller.tempo`); a change applies from the next tick.
+- **Transport:** **Pause** and **Stop** freeze the ticks (running sequences freeze as on clock loss, but
+  without the "no clock" warning). **Play** resumes them; Play after **Stop** counts as a resync.
+- **Resync:** a Resync press (the `resync` press update, not its release) restarts the tick phase at that
+  moment **and jumps every playing sequence to its bar 1**: step 1 of each lane is triggered on the next
+  tick, the pass counter is kept. (Different from MIDI Start, which never restarts sequences, see above.)
+- **Taps:** tempo changes from tapping arrive as tempo updates; a tap does not move the phase.
+- **Phase:** until the first Resync (or Play after Stop) the app's beat is not aligned with Resolume's;
+  the UI shows "not synced to Resolume" next to the tempo until then.
+- **Without Resolume:** no ticks (as with no MIDI port); the status shows the reason.
+
 ## 4. Resolume interface
 
 ### 4.1 Channels
