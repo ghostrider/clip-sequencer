@@ -9,7 +9,7 @@ timings and samples are in `docs/resolume-api-notes.md` (cited below as *notes ย
 A live tool and a playback engine for pre-composed clip sequences in Resolume Arena 7.26.
 
 - A **sequence** plays clips on several Resolume layers in parallel, on a 1/16-bar grid,
-  locked to the show's MIDI clock.
+  locked to the show's MIDI clock or to Resolume's tempo (ยง3.1).
 - Sequences are stored, edited in a browser UI, and started either from the UI or
   from inside Resolume (by triggering a placeholder clip).
 - Clips are **not** triggered via MIDI. MIDI is used only to receive the clock.
@@ -496,7 +496,7 @@ last WebSocket confirmation, yield and error notices.
 ### 9.7 Themes (decided 2026-11-18)
 - Preferences has two tabs: **MIDI clock** and **Appearance**. Appearance lists the themes as cards (name,
   sample, colour strip). Clicking one shows it at once on the whole app; **Save** keeps it, **Cancel** (or Esc)
-  goes back to the saved one. The clock chip opens the MIDI clock tab.
+  goes back to the saved one. The clock chip opens the Clock tab.
 - Five built-in themes, defined in `web/src/lib/themes.ts`: **Rack** (default: cool slate, cyan accent, square
   corners, Barlow / Barlow Condensed / JetBrains Mono), **Ink & Signal**, **Graphite & Lime**, **Classic Amber**
   (the look before 2026-11-18) and **Daylight** (light, for bright rooms). Built-in themes cannot be changed.

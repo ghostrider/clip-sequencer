@@ -1,6 +1,6 @@
 # Introduction
 
-**Clip Sequencer for Resolume** plays sequences of clips in Resolume Arena, locked to your show's MIDI clock.
+**Clip Sequencer for Resolume** plays sequences of clips in Resolume Arena, locked to your show's MIDI clock or to Resolume's own tempo.
 
 A **sequence** is a short arrangement: on each Resolume layer it uses (a **lane**), clips and rests follow each
 other on a 1/16-bar grid. You might build "Drop A": a background clip for two bars, then another; on the middle

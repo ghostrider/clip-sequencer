@@ -3,7 +3,7 @@
 **[Website](https://ghostrider.github.io/clip-sequencer/) · [User manual](https://ghostrider.github.io/clip-sequencer/manual/) ·
 [Download](https://github.com/ghostrider/clip-sequencer/releases/latest) · [Changelog](CHANGELOG.md)**
 
-Plays multi-layer clip sequences in Resolume Arena, locked to the show's MIDI clock. You build sequences
+Plays multi-layer clip sequences in Resolume Arena, locked to the show's MIDI clock or to Resolume's own tempo. You build sequences
 (clips and rests on lanes, one lane per layer, on a 1/16-bar grid) in the app and start them from the app or from
 Resolume itself by clicking a `§` placeholder clip. Clips are triggered over OSC exactly on the tick, and the
 app follows Resolume over its WebSocket and REST API.

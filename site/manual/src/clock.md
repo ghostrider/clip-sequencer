@@ -1,18 +1,41 @@
 # Setting up the clock
 
-The sequencer moves its sequences forward on a clock of 24 pulses per beat. It takes that clock from one of two
-sources:
+The sequencer moves its sequences forward on a clock of 24 pulses per beat. Without a clock, nothing advances. It
+takes that clock from one of two sources:
 
-- **MIDI clock** (the default): it counts the MIDI clock on a MIDI input. Use this when your show already has a
-  clock (a DAW, a clock tool, hardware).
+- **MIDI clock** (the default): it counts the MIDI clock on a MIDI input.
 - **Resolume tempo**: no MIDI needed. The sequencer makes its own clock at Resolume's BPM and follows its Play,
-  Pause, Stop and Resync. See [Following Resolume's tempo](#following-resolumes-tempo).
+  Pause, Stop and Resync.
 
-Without a clock, nothing advances.
+## Which one to use
 
-Choose the source under **File → Preferences… → Clock** (or click the clock chip on the top bar, or press Ctrl+,),
-then **Save**. It switches at once and is remembered. For one run, `--clock resolume` or `--clock midi` wins over
-the saved choice ([Settings](settings.md)).
+**Use the MIDI clock when your show already has one**, from a DAW, a clock or BPM-detection tool, or hardware, and
+Resolume follows that clock too. Both then get the same pulses, so the sequencer is on the beat from the first
+pulse, keeps it through restarts, and you can delay the clock for projector latency.
+
+**Use Resolume tempo when there is no MIDI clock**: you set the tempo in Resolume itself, by typing the BPM or
+tapping. Nothing else to install or connect. The catch: Resolume tells the sequencer its tempo, but not where its
+beat is, so you press **Resync** in Resolume once to line the two up.
+
+| | MIDI clock | Resolume tempo |
+|---|---|---|
+| Needs | a MIDI clock source and a MIDI input (often a virtual port such as loopMIDI) | nothing but Resolume |
+| Tempo comes from | the clock source | Resolume's BPM (typed, dragged or tapped) |
+| On the beat | always, from the first pulse | after you press **Resync** in Resolume; again after a reconnect |
+| Resolume's Resync | doesn't touch running sequences | jumps every playing sequence back to bar 1 |
+| Resolume's Pause / Stop | ignored by the sequencer | freezes running sequences |
+| Latency compensation | yes: delay the clock for both | no |
+| Good for | shows with a DAW or a band clock, tight sync to music | quick setups, rehearsal, VJ sets on Resolume's own tempo |
+
+If Resolume itself follows an external clock, give the sequencer that same clock as **MIDI clock**: following
+Resolume's tempo would only copy the BPM, not the beat.
+
+## Choosing the source
+
+Open **File → Preferences…** and the **Clock** tab (or click the clock chip on the top bar, or press Ctrl+,). Pick
+the source under **Clock source**, then click **Save**. The sequencer switches at once and remembers it for the
+next start. For one run, `--clock midi` or `--clock resolume` on the command line wins over the saved choice
+([Settings](settings.md)).
 
 ## MIDI clock
 
@@ -41,6 +64,8 @@ shifted clock** as Resolume. The sequencer never compensates latency itself; it 
    source.
 4. Click **Save**.
 
+![Preferences, Clock tab: MIDI clock chosen, with the MIDI inputs of this computer](images/prefs-clock-midi.png)
+
 The sequencer switches at once and remembers the input for the next start. *No MIDI clock* switches the input off.
 
 For one run you can also start the app with `--midi-port "<name>"`. A part of the name is enough
@@ -64,6 +89,23 @@ BPM), and `seq-app-cli.exe --list-midi-ports` lists the inputs.
 With **Resolume tempo** as the source, the sequencer needs no MIDI at all. It reads Resolume's BPM and transport
 over the connection it already has, and makes its own clock at that tempo.
 
+### Switching to Resolume tempo
+
+1. Open **File → Preferences…** (or click the clock chip on the top bar, or press Ctrl+,).
+2. Under **Clock source**, choose **Resolume tempo**. The MIDI input list disappears; your MIDI input stays saved
+   for switching back.
+3. Click **Save**. The clock chip now reads **RESOLUME** with Resolume's BPM.
+4. In Resolume, press **Resync** in the tempo controls, next to the BPM. The chip changes from
+   *press Resync* to *synced*.
+
+![Preferences, Clock tab: Resolume tempo chosen](images/prefs-clock-resolume.png)
+
+| Before the Resync | After it |
+|---|---|
+| ![Clock chip: RESOLUME 120.0 BPM · press Resync](images/clock-chip-resolume.png) | ![Clock chip: RESOLUME 120.0 BPM · synced](images/clock-chip-synced.png) |
+
+### What Resolume's controls do
+
 Resolume tells the sequencer its tempo, but **not where its beat is**. So the sequencer's beat runs at the right
 speed, but at first it can sit up to half a beat off Resolume's. To line the two up, press **Resync** in
 Resolume's tempo controls once: that moment becomes beat 1 for both.
@@ -77,6 +119,8 @@ Resolume's tempo controls once: that moment becomes beat 1 for both.
 | **Stop** | freezes running sequences. |
 | **Play** after Stop | counts as a Resync: lines up, playing sequences start again at bar 1. |
 
+### Checking it
+
 The clock chip shows:
 
 | Chip | Meaning |
@@ -86,7 +130,7 @@ The clock chip shows:
 | `RESOLUME 128.0 BPM · paused` / `· stopped` (red) | Resolume's transport is paused or stopped; sequences wait. |
 | `RESOLUME TEMPO · not connected` (red) | No connection to Resolume; nothing advances. After it reconnects, press Resync again. |
 
-A few things to know:
+### Good to know
 
 - A Resync restarts *every* playing sequence, also one you started a moment ago. Press it on a downbeat of the
   music, or before you start sequences.
