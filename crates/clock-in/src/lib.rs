@@ -6,9 +6,12 @@
 //!   reconnects when the port disappears and comes back.
 //! - [`TempoEstimator`] is pure: tempo from tick intervals (display only) and clock-loss detection
 //!   ("no tick for more than 2 beats at the last known tempo").
+//! - [`ResolumeClock`] makes the ticks itself at Resolume's tempo instead (SPEC §3.1).
 
+mod generator;
 mod tempo;
 
+pub use generator::{ResolumeClock, TickPlanner, Transport, DEFAULT_BPM};
 pub use tempo::TempoEstimator;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,6 +54,9 @@ pub enum ClockEvent {
     Connected { port: String },
     /// The port went away (or connecting failed); reconnecting is automatic.
     Disconnected { reason: String },
+    /// Resolume tempo clock only (SPEC §3.1): `at` is beat 1, running sequences jump to their
+    /// start. The next tick follows one tick interval later.
+    Resync { at: Instant },
 }
 
 #[derive(Debug, thiserror::Error)]

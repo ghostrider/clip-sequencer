@@ -21,6 +21,8 @@ pub async fn run(port: String) -> anyhow::Result<()> {
                 None => return Ok(()),
                 Some(ClockEvent::Connected { port }) => println!("connected to {port:?}"),
                 Some(ClockEvent::Disconnected { reason }) => println!("disconnected: {reason}"),
+                // Only the Resolume tempo clock sends it; this tool listens to MIDI.
+                Some(ClockEvent::Resync { .. }) => {}
                 Some(ClockEvent::Msg { msg: ClockMsg::Tick, at }) => {
                     tempo.on_tick(at);
                     if lost {
