@@ -447,22 +447,48 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<bool> {
         path.extension().and_then(|e| e.to_str()).unwrap_or("")
     ));
     std::fs::write(&tmp, text)?;
-    if let Err(e) = std::fs::rename(&tmp, path) {
+    if let Err(e) = replace_file(&tmp, path) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
     }
     Ok(true)
 }
 
-fn write_files(dir: &Path, name: &str, doc: &LutDoc, table: &Table) {
+/// Tries to rename for this long while another program holds the target open.
+const RENAME_TRIES: u32 = 10;
+const RENAME_PAUSE: Duration = Duration::from_millis(15);
+
+/// Renames `tmp` over `path`. Windows refuses to replace a file another program has open without delete sharing
+/// ("access denied", os error 5, or a sharing violation, 32): Resolume does that for a moment while it reloads a
+/// `.cube`. Such errors are retried for about 150 ms.
+fn replace_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::rename(tmp, path) {
+            Ok(()) => return Ok(()),
+            Err(e) if is_busy(&e) && tries + 1 < RENAME_TRIES => {
+                tries += 1;
+                std::thread::sleep(RENAME_PAUSE);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// The file is in use by another program (it may work a moment later).
+fn is_busy(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(32)
+}
+
+/// Writes both files of a LUT; the error of the first that failed, if any.
+fn write_files(dir: &Path, name: &str, doc: &LutDoc, table: &Table) -> Result<(), String> {
     let json = dir.join(format!("{name}.lut.json"));
     let cube = dir.join(format!("{name}.cube"));
-    if let Err(e) = write_atomic(&json, &(doc.to_json() + "\n")) {
-        log::error!("{}: {e}", json.display());
-    }
-    if let Err(e) = write_atomic(&cube, &write_cube(name, table)) {
-        log::error!("{}: {e}", cube.display());
-    }
+    let a = write_atomic(&json, &(doc.to_json() + "\n"))
+        .map_err(|e| format!("{}: {e}", json.display()));
+    let b = write_atomic(&cube, &write_cube(name, table))
+        .map_err(|e| format!("{}: {e}", cube.display()));
+    a.and(b).map(|_| ())
 }
 
 fn delete_files(dir: &Path, name: &str) {
@@ -482,6 +508,8 @@ async fn writer_task(lib: std::sync::Weak<LutLibrary>, mut rx: mpsc::UnboundedRe
     let mut due: HashMap<String, Instant> = HashMap::new();
     let mut last: HashMap<String, Instant> = HashMap::new();
     let mut flushes: Vec<tokio::sync::oneshot::Sender<()>> = Vec::new();
+    // LUTs whose last write failed (file in use): retried until it works, logged once per streak.
+    let mut failing: HashMap<String, u32> = HashMap::new();
     loop {
         let msg = if !flushes.is_empty() {
             rx.try_recv().ok() // a flush waits: no sleeping
@@ -541,19 +569,38 @@ async fn writer_task(lib: std::sync::Weak<LutLibrary>, mut rx: mpsc::UnboundedRe
                 .collect()
         };
         drop(l);
-        let names: Vec<String> = jobs.iter().map(|j| j.0.clone()).collect();
-        let _ = tokio::task::spawn_blocking(move || {
+        let results: Vec<(String, Result<(), String>)> = tokio::task::spawn_blocking(move || {
             for n in delete_now {
                 delete_files(&dir, &n);
             }
-            for (n, doc, table) in jobs {
-                write_files(&dir, &n, &doc, &table);
-            }
+            jobs.into_iter()
+                .map(|(n, doc, table)| {
+                    let r = write_files(&dir, &n, &doc, &table);
+                    (n, r)
+                })
+                .collect()
         })
-        .await;
+        .await
+        .unwrap_or_default();
         let t = Instant::now();
-        for n in names {
-            last.insert(n, t);
+        for (n, r) in results {
+            last.insert(n.clone(), t);
+            match r {
+                Ok(()) => {
+                    if let Some(tries) = failing.remove(&n) {
+                        log::info!("LUT {n:?} written after {tries} failed attempt(s)");
+                    }
+                }
+                Err(e) => {
+                    let tries = failing.entry(n.clone()).or_insert(0);
+                    if *tries == 0 {
+                        log::warn!("{e} (the file is in use, probably by Resolume; trying again)");
+                    }
+                    *tries += 1;
+                    // Not given up: the newest values are written as soon as the file is free.
+                    due.entry(n).or_insert(t + WRITE_INTERVAL);
+                }
+            }
         }
         if flushing && rx.is_empty() {
             for tx in flushes.drain(..) {

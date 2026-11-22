@@ -279,3 +279,50 @@ async fn an_unchanged_cube_is_not_rewritten_on_start() {
         before
     );
 }
+
+/// Resolume holds a `.cube` open while it reloads it; Windows then refuses to rename over it ("access denied").
+/// The write is retried until the file is free, and the newest values end up in it.
+#[cfg(windows)]
+#[tokio::test]
+async fn a_cube_held_open_is_written_once_it_is_free() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let tmp = tempfile::tempdir().unwrap();
+    let (lib, _) = open(tmp.path());
+    lib.create("Busy", None).unwrap();
+    lib.flush().await;
+    // Open like a reader that allows others to read only (no delete sharing): renames over it fail.
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1) // FILE_SHARE_READ
+        .open(lib.cube_path("Busy"))
+        .unwrap();
+    lib.update(
+        "Busy",
+        Grade {
+            saturation: 0.0,
+            ..Grade::default()
+        },
+        Default::default(),
+    )
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let identity = Table::identity(33).pipe_round();
+    assert_eq!(
+        cube_on_disk(&lib, "Busy"),
+        identity,
+        "still the old file while it is held"
+    );
+    drop(held);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let want = LutDoc {
+        grade: Grade {
+            saturation: 0.0,
+            ..Grade::default()
+        },
+        ..LutDoc::default()
+    }
+    .bake()
+    .pipe_round();
+    assert_eq!(cube_on_disk(&lib, "Busy"), want);
+    assert!(!tmp.path().join("luts/Busy.cube.tmp").exists());
+}
