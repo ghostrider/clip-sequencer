@@ -128,6 +128,76 @@ export interface StructureState {
   can_redo: boolean;
   seq_layer: string;
   seq_prefix: string;
+  /** Resolume's LUT effects: composition, layers, live deck's clips (SPEC §14). */
+  lut_effects: LutEffect[];
+}
+
+// ---- LUTs (SPEC §14; crates/lut-core, crates/seq-app/src/luts.rs) ----
+
+/** A colour wheel value: master plus R, G, B (lift adds them, gamma and gain multiply). */
+export interface Wheel {
+  master: number;
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** lut-core Grade: every default changes nothing. */
+export interface Grade {
+  exposure: number;
+  temperature: number;
+  tint: number;
+  lift: Wheel;
+  gamma: Wheel;
+  gain: Wheel;
+  contrast: number;
+  saturation: number;
+}
+
+/** Control points [x, y] in 0..1, joined by a monotone spline. */
+export interface Curve {
+  points: [number, number][];
+}
+
+export interface Curves {
+  master: Curve;
+  r: Curve;
+  g: Curve;
+  b: Curve;
+}
+
+export interface LutView {
+  name: string;
+  /** Bumped on every change (the preview fetches the table then). */
+  rev: number;
+  grade: Grade;
+  curves: Curves;
+  /** An imported table is the base under the controls. */
+  has_base: boolean;
+  /** Full path of the .cube file. */
+  path: string;
+}
+
+/** `luts` message. */
+export interface LutsView {
+  /** Folder of the .cube files. */
+  dir: string;
+  luts: LutView[];
+}
+
+export type LutPlace =
+  | { kind: 'composition' }
+  | { kind: 'layer'; layer: number; name: string }
+  | { kind: 'clip'; layer: number; column: number; name: string };
+
+/** One of Resolume's own LUT effects. */
+export interface LutEffect {
+  effect_id: number;
+  /** The `LUT 3D` file parameter (set to point the effect at a file). */
+  file_param: number;
+  /** Full path of its .cube file; empty if none. */
+  path: string;
+  place: LutPlace;
 }
 
 export interface RunLaneView {
@@ -226,7 +296,13 @@ export type Command =
   | { cmd: 'set_clock_source'; source: ClockSource }
   | { cmd: 'set_theme'; id: string | null }
   | { cmd: 'save_theme'; theme: CustomTheme; select: boolean }
-  | { cmd: 'delete_theme'; id: string };
+  | { cmd: 'delete_theme'; id: string }
+  | { cmd: 'lut_create'; name: string; from?: string | null }
+  | { cmd: 'lut_rename'; from: string; to: string }
+  | { cmd: 'lut_delete'; name: string }
+  | { cmd: 'lut_update'; name: string; grade: Grade; curves: Curves }
+  | { cmd: 'lut_clear_base'; name: string }
+  | { cmd: 'lut_apply'; name: string; file_param: number };
 
 /** Theme settings from the app (`appearance` message, SPEC §9.7). */
 export interface Appearance {

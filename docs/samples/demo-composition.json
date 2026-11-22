@@ -19205,6 +19205,59 @@
                 }
               }
             }
+          },
+          {
+            "id": 1900000009011,
+            "is_user_removable": true,
+            "name": "LUT",
+            "display_name": "LUT",
+            "bypassed": {
+              "valuetype": "ParamBoolean",
+              "id": 1900000009012,
+              "value": false
+            },
+            "mixer": {
+              "Blend Mode": {
+                "id": 1900000009013,
+                "valuetype": "ParamChoice",
+                "value": "Alpha",
+                "index": 2,
+                "options": [
+                  "Add",
+                  "Add Example",
+                  "Alpha"
+                ],
+                "view": {
+                  "suffix": "",
+                  "control_type": "choice_combobox"
+                }
+              }
+            },
+            "params": {
+              "Opacity": {
+                "id": 1900000009014,
+                "valuetype": "ParamRange",
+                "min": 0,
+                "max": 1,
+                "in": 0,
+                "out": 1,
+                "value": 1,
+                "view": {
+                  "suffix": " %",
+                  "multiplier": 100,
+                  "display_units": "percent",
+                  "control_type": "slider_color_opacity"
+                }
+              },
+              "LUT 3D": {
+                "id": 1900000009015,
+                "valuetype": "ParamFile",
+                "value": "",
+                "view": {
+                  "suffix": ""
+                }
+              }
+            }
           }
         ],
         "height": {
@@ -25140,6 +25193,59 @@
               "multiplier": 1.0,
               "step": 1.0,
               "suffix": " %"
+            }
+          }
+        }
+      },
+      {
+        "id": 1900000009001,
+        "is_user_removable": true,
+        "name": "LUT",
+        "display_name": "LUT",
+        "bypassed": {
+          "valuetype": "ParamBoolean",
+          "id": 1900000009002,
+          "value": false
+        },
+        "mixer": {
+          "Blend Mode": {
+            "id": 1900000009003,
+            "valuetype": "ParamChoice",
+            "value": "Alpha",
+            "index": 2,
+            "options": [
+              "Add",
+              "Add Example",
+              "Alpha"
+            ],
+            "view": {
+              "suffix": "",
+              "control_type": "choice_combobox"
+            }
+          }
+        },
+        "params": {
+          "Opacity": {
+            "id": 1900000009004,
+            "valuetype": "ParamRange",
+            "min": 0,
+            "max": 1,
+            "in": 0,
+            "out": 1,
+            "value": 1,
+            "view": {
+              "suffix": " %",
+              "multiplier": 100,
+              "display_units": "percent",
+              "control_type": "slider_color_opacity"
+            }
+          },
+          "LUT 3D": {
+            "id": 1900000009005,
+            "valuetype": "ParamFile",
+            "value": "",
+            "view": {
+              "suffix": ""
             }
           }
         }

@@ -3,9 +3,12 @@
 
 import { applyTheme, resolveTheme } from './themes';
 import type {
-  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, RunView, RuntimeState,
-  SequenceView, Step, StructureState, Uuid, VersionInfo,
+  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, RunView,
+  RuntimeState, SequenceView, Step, StructureState, Uuid, VersionInfo,
 } from './types';
+
+/** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 Console, Ctrl+3 LUTs. */
+export type MainTab = 'sequencer' | 'console' | 'luts';
 
 export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit' | 'ffgl';
 
@@ -51,7 +54,11 @@ class AppState {
   version = $state<VersionInfo | null>(null);
 
   /** Top-level tab (M12 E). Log records only flow while the Console tab is open. */
-  tab = $state<'sequencer' | 'console'>('sequencer');
+  tab = $state<MainTab>('sequencer');
+  /** The LUT library (SPEC §14), from the `luts` message. */
+  luts = $state<LutsView | null>(null);
+  /** LUT selected in the LUT tab. */
+  selectedLut = $state<string | null>(null);
   logs = $state.raw<LogRecord[]>([]);
   logStats = $state<LogStats>({ errors: 0, dropped: 0 });
   /** Error count when the Console tab was last visible (for the badge). */
@@ -116,6 +123,7 @@ class AppState {
         this.logStats = msg.data.stats;
       } else if (msg.type === 'log') this.addLogs(msg.data);
       else if (msg.type === 'log_stats') this.logStats = msg.data;
+      else if (msg.type === 'luts') this.luts = msg.data;
       else if (msg.type === 'appearance') {
         this.appearance = msg.data;
         if (!this.themePreview) this.applySavedTheme();
@@ -176,11 +184,13 @@ class AppState {
 
   // ---- console ----
 
-  setTab(tab: 'sequencer' | 'console') {
+  setTab(tab: MainTab) {
     if (tab === this.tab) return;
     this.errorsSeen = this.logStats.errors;
+    const wasConsole = this.tab === 'console';
     this.tab = tab;
-    this.send({ cmd: tab === 'console' ? 'log_subscribe' : 'log_unsubscribe' });
+    if (tab === 'console') this.send({ cmd: 'log_subscribe' });
+    else if (wasConsole) this.send({ cmd: 'log_unsubscribe' });
   }
 
   /** New errors since the Console tab was last visible (badge on the tab). */

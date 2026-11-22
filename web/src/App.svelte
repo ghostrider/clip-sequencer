@@ -14,6 +14,7 @@
   import LicensesDialog from './components/LicensesDialog.svelte';
   import ShortcutsDialog from './components/ShortcutsDialog.svelte';
   import PluginDialog from './components/PluginDialog.svelte';
+  import LutTab from './components/LutTab.svelte';
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -27,9 +28,9 @@
         return;
       }
     }
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === '1' || e.key === '2')) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
       e.preventDefault();
-      app.setTab(e.key === '1' ? 'sequencer' : 'console');
+      app.setTab(e.key === '1' ? 'sequencer' : e.key === '2' ? 'console' : 'luts');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === ',') {
@@ -86,6 +87,8 @@
   {/if}
   {#if app.tab === 'console'}
     <Console />
+  {:else if app.tab === 'luts'}
+    <LutTab />
   {:else}
     <div class="body">
       <SequenceList />
