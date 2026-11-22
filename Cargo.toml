@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/seq-core",
+    "crates/lut-core",
     "crates/clock-in",
     "crates/resolume-client",
     "crates/seq-app",
@@ -24,6 +25,7 @@ publish = false
 
 [workspace.dependencies]
 seq-core = { path = "crates/seq-core" }
+lut-core = { path = "crates/lut-core" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 env_logger = "0.11"
