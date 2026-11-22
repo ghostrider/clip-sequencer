@@ -668,7 +668,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clock-in"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "midir",
@@ -2338,7 +2338,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "lut-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2449,7 +2449,7 @@ dependencies = [
 
 [[package]]
 name = "mock-resolume"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3310,7 +3310,7 @@ dependencies = [
 
 [[package]]
 name = "resolume-client"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -3329,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "resolume-probe"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3551,7 +3551,7 @@ dependencies = [
 
 [[package]]
 name = "seq-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3588,7 +3588,7 @@ dependencies = [
 
 [[package]]
 name = "seq-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",

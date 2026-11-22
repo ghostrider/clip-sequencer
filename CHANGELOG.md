@@ -7,12 +7,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
 ### Added
 
 - **LUTs tab** (Ctrl+2): a library of colour LUTs with exposure, contrast, saturation, temperature, tint,
   lift/gamma/gain per channel and RGB curves, a before/after preview on test images or your clips, and `.cube`
   import and export. Resolume's own **LUT** effect applies them: **Use <LUT>** points an effect at a LUT's file,
   and Resolume reloads it on every change.
+- **Resizable side panels** in the Sequencer tab: drag the edge next to the sequence list or the clip browser;
+  double-click resets it. The widths are remembered.
+
+### Changed
+
+- The desktop app uses the app's own menu bar instead of the Windows menu, so it follows the theme. File gets
+  **Open data folder**; View lists the three tabs.
+- The connection indicators (clock, REST, WS, OSC) moved to the right end of the status bar and are smaller;
+  the top bar is more compact. **Stop all** stays in the top bar.
+- Tab order Sequencer, LUTs, Console: **Ctrl+2** opens LUTs, **Ctrl+3** the Console (was Ctrl+2).
 
 ## [0.3.0] - 2026-11-19
 
@@ -82,6 +94,7 @@ First public release.
 - The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%\resolume-sequencer` of earlier builds is
   moved there on first start.
 
-[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.2.0
