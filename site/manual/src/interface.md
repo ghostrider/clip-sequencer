@@ -2,6 +2,8 @@
 
 The window has a top bar, the sequence list on the left, the editor in the middle, the clip browser and step
 inspector on the right, and a status bar at the bottom.
+Drag the edge between a side panel and the editor to make the panel wider or narrower; double-click the edge to
+go back to the default width. The app remembers the widths.
 
 ![The whole window](images/overview.png)
 
@@ -9,8 +11,8 @@ inspector on the right, and a status bar at the bottom.
 
 ![Top bar](images/top-bar.png)
 
-- **§ SEQ** and the tabs **Sequencer | Console | LUTs** (Ctrl+1 / Ctrl+2 / Ctrl+3). The Console tab shows the log;
-  a red number on it counts new errors. The LUTs tab edits colour LUTs for Resolume ([Colour LUTs](luts.md)).
+- **§ SEQ** and the tabs **Sequencer | LUTs | Console** (Ctrl+1 / Ctrl+2 / Ctrl+3). The LUTs tab edits colour LUTs
+  for Resolume ([Colour LUTs](luts.md)). The Console tab shows the log; a red number on it counts new errors.
 - **Composition**: the name of the composition open in Resolume. Sequences are saved per composition.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
   Resolume is playing. Selecting a tab never switches Resolume ([Working with decks](decks.md)). A dashed tab is a

@@ -8,12 +8,12 @@
   <div class="tabs view-tabs" role="tablist" aria-label="View">
     <button class="tab" role="tab" aria-selected={app.tab === 'sequencer'} title="Ctrl+1"
       onclick={() => app.setTab('sequencer')}>Sequencer</button>
-    <button class="tab" role="tab" aria-selected={app.tab === 'console'} title="Ctrl+2"
+    <button class="tab" role="tab" aria-selected={app.tab === 'luts'} title="Colour LUTs for Resolume's LUT effect · Ctrl+2"
+      onclick={() => app.setTab('luts')}>LUTs</button>
+    <button class="tab" role="tab" aria-selected={app.tab === 'console'} title="Ctrl+3"
       onclick={() => app.setTab('console')}>
       Console{#if app.newErrors > 0}<span class="error-badge" aria-label="{app.newErrors} new errors">{app.newErrors}</span>{/if}
     </button>
-    <button class="tab" role="tab" aria-selected={app.tab === 'luts'} title="Colour LUTs for Resolume's LUT effect · Ctrl+3"
-      onclick={() => app.setTab('luts')}>LUTs</button>
   </div>
   <div>
     <span style="color:var(--muted)">Composition</span>

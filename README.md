@@ -144,7 +144,7 @@ folder and logs a warning.
 
 - **Files:** daily log files in `%APPDATA%\clip-sequencer\logs\` (`seq-app-YYYY-MM-DD.log`). They
   are kept for 7 days.
-- **Console tab:** shows the log live (Ctrl+2), with level filters, pause, copy and save. In the
+- **Console tab:** shows the log live (Ctrl+3), with level filters, pause, copy and save. In the
   desktop app, it opens with View → Toggle Console.
 - **Headless:** `seq-app-cli.exe` also prints the log to the console.
 - **More detail:** set `RUST_LOG=debug` to see every OSC message with microsecond timestamps.
@@ -178,7 +178,7 @@ folder and logs a warning.
 - **Edits while running** apply at the next start ("edited · applies at next start").
 - **Push thumbnail to Resolume** sets the sequence's mosaic as its `§` clip's thumbnail.
 - **Stop all** clears every layer the sequencer owns.
-- **LUTs** (Ctrl+3): **+ New** or **Import…**, adjust; add Resolume's **LUT** effect to the composition, a layer or a
+- **LUTs** (Ctrl+2): **+ New** or **Import…**, adjust; add Resolume's **LUT** effect to the composition, a layer or a
   clip and click **Use <LUT>** next to it. LUTs are saved in `%APPDATA%clip-sequencerluts` (`.cube` + `.lut.json`).
 
 Sequences are saved automatically (about 1 s after an edit) to

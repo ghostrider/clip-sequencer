@@ -7,7 +7,7 @@ import type {
   RuntimeState, SequenceView, Step, StructureState, Uuid, VersionInfo,
 } from './types';
 
-/** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 Console, Ctrl+3 LUTs. */
+/** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 LUTs, Ctrl+3 Console. */
 export type MainTab = 'sequencer' | 'console' | 'luts';
 
 export type InfoDialog = 'about' | 'licenses' | 'shortcuts' | 'quit' | 'ffgl';

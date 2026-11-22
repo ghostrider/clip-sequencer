@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- **LUTs tab** (Ctrl+3): a library of colour LUTs with exposure, contrast, saturation, temperature, tint,
+- **LUTs tab** (Ctrl+2): a library of colour LUTs with exposure, contrast, saturation, temperature, tint,
   lift/gamma/gain per channel and RGB curves, a before/after preview on test images or your clips, and `.cube`
   import and export. Resolume's own **LUT** effect applies them: **Use <LUT>** points an effect at a LUT's file,
   and Resolume reloads it on every change.

@@ -383,7 +383,7 @@ Single screen, everything controlled from here (no separate live view).
 
 ### 9.1 Top bar
 - `§ SEQ` logo, composition name.
-- **View tabs:** Sequencer (Ctrl+1), Console (Ctrl+2), LUTs (Ctrl+3, §14).
+- **View tabs:** Sequencer (Ctrl+1), LUTs (Ctrl+2, §14), Console (Ctrl+3).
 - **Deck tabs** (see 7.2): selected tab = what is shown; `LIVE` badge = active deck in Resolume.
 - **Stop all** (always visible).
 
@@ -668,7 +668,7 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
   the WebSocket. **Rename** points the effects using the old file at the new one, and removes the old files 2 s
   later. **Delete** removes the files; the UI asks first and says how many effects use it.
 
-### 14.4 LUTs tab (Ctrl+3)
+### 14.4 LUTs tab (Ctrl+2)
 
 - Left: the library (name, "used by N LUT effects", "imported"), **+ New** (neutral), **Import…** (several
   `.cube` files; names from the file names, made unique).

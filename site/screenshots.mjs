@@ -179,7 +179,7 @@ mockWs.close();
 
 // Colour LUTs (SPEC §14): a LUT made in the tab and used by the composition's LUT effect (the demo composition has
 // one on the composition and one on the Front layer).
-await page.keyboard.press('Control+3');
+await page.keyboard.press('Control+2');
 await page.getByRole('button', { name: '+ New' }).click();
 await page.locator('.lut-card', { hasText: 'New LUT' }).waitFor();
 await page.locator('.lut-editor h1').dblclick();

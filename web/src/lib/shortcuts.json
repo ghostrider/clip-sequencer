@@ -49,7 +49,7 @@
     "items": [
       {
         "keys": "Ctrl+1 / Ctrl+2 / Ctrl+3",
-        "what": "Sequencer / Console / LUTs tab"
+        "what": "Sequencer / LUTs / Console tab"
       },
       {
         "keys": "Ctrl+,",

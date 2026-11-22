@@ -21,7 +21,7 @@ applies the LUTs with its own **LUT** effect, and every change you make shows on
 
 ## Your first LUT
 
-1. Open the **LUTs** tab (or press **Ctrl+3**).
+1. Open the **LUTs** tab (or press **Ctrl+2**).
 2. Click **+ New**. A neutral LUT called *New LUT* appears: it changes nothing yet. Double-click its name to
    rename it, for example to *Stage Warm*.
 3. Move the controls on the right. The preview shows the original left of the line and the LUT right of it; drag

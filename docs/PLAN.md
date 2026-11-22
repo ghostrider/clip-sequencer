@@ -215,7 +215,7 @@ Tasks:
 - [x] `lut-core`: params, curves, bake to 33³, `.cube` read/write (1D/3D, domain), tests.
 - [x] App: library storage, throttled atomic `.cube` writes, WS commands, LUT effect discovery (composition,
       layers, live deck's clips; not layer groups) and "apply to", mock-resolume effect parameters. Tests.
-- [x] Web UI: LUT tab (Ctrl+3), library, controls, curve editor, WebGL2 preview, import/export, "used by",
+- [x] Web UI: LUT tab (Ctrl+2), library, controls, curve editor, WebGL2 preview, import/export, "used by",
       "Use <LUT>". Checked against the mock with Playwright.
 - [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
       changelog, landing page.

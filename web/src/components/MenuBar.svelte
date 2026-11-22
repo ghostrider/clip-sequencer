@@ -36,8 +36,8 @@
       label: 'View',
       items: [
         { label: 'Sequencer', hint: 'Ctrl+1', run: () => app.setTab('sequencer') },
-        { label: 'Console', hint: 'Ctrl+2', run: () => app.setTab('console') },
-        { label: 'LUTs', hint: 'Ctrl+3', run: () => app.setTab('luts') },
+        { label: 'LUTs', hint: 'Ctrl+2', run: () => app.setTab('luts') },
+        { label: 'Console', hint: 'Ctrl+3', run: () => app.setTab('console') },
         'sep',
         { label: 'Zoom in', hint: desktop ? 'Ctrl+=' : undefined, run: desktop ? shell('zoom_in') : () => app.zoomUi(0.1) },
         { label: 'Zoom out', hint: desktop ? 'Ctrl+-' : undefined, run: desktop ? shell('zoom_out') : () => app.zoomUi(-0.1) },

@@ -15,6 +15,30 @@
   import ShortcutsDialog from './components/ShortcutsDialog.svelte';
   import PluginDialog from './components/PluginDialog.svelte';
   import LutTab from './components/LutTab.svelte';
+  import Splitter from './components/Splitter.svelte';
+
+  // Panel widths of the Sequencer tab (drag the handles; remembered in this browser / window).
+  const PANELS = { left: { min: 180, max: 480, initial: 260 }, right: { min: 240, max: 560, initial: 320 } };
+  const PANEL_KEY = 'seq.panelWidths';
+  function loadWidths(): { left: number; right: number } {
+    try {
+      const v = JSON.parse(localStorage.getItem(PANEL_KEY) ?? '{}');
+      const pick = (x: unknown, p: { min: number; max: number; initial: number }) =>
+        typeof x === 'number' && x >= p.min && x <= p.max ? x : p.initial;
+      return { left: pick(v.left, PANELS.left), right: pick(v.right, PANELS.right) };
+    } catch {
+      return { left: PANELS.left.initial, right: PANELS.right.initial };
+    }
+  }
+  let widths = $state(loadWidths());
+  $effect(() => {
+    const v = JSON.stringify(widths);
+    try {
+      localStorage.setItem(PANEL_KEY, v);
+    } catch {
+      /* private mode: not remembered */
+    }
+  });
 
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
@@ -30,7 +54,7 @@
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
       e.preventDefault();
-      app.setTab(e.key === '1' ? 'sequencer' : e.key === '2' ? 'console' : 'luts');
+      app.setTab(e.key === '1' ? 'sequencer' : e.key === '2' ? 'luts' : 'console');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === ',') {
@@ -88,9 +112,11 @@
   {:else if app.tab === 'luts'}
     <LutTab />
   {:else}
-    <div class="body">
+    <div class="body seq-body" style:--left-w="{widths.left}px" style:--right-w="{widths.right}px">
       <SequenceList />
+      <Splitter bind:width={widths.left} side="left" label="Resize the sequence list" {...PANELS.left} />
       <Editor />
+      <Splitter bind:width={widths.right} side="right" label="Resize the clip browser" {...PANELS.right} />
       <SidePanel />
     </div>
   {/if}

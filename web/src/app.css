@@ -124,6 +124,10 @@ button, input, select { font: inherit; }
 .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* ---- additions (not in the mockup), using tokens only ---- */
+/* Sequencer tab: the side panels have the widths set with the drag handles (App.svelte), no wrapping. */
+.seq-body { flex-wrap: nowrap; }
+.seq-body > .seqlist { flex: 0 0 var(--left-w, 260px); max-width: none; min-width: 0; }
+.seq-body > .side { flex: 0 0 var(--right-w, 320px); max-width: none; min-width: 0; }
 /* Compact top bar (2026-11-22): less padding and lower tabs than the mockup. */
 .topbar { gap: 12px; padding: 6px 14px; }
 .topbar .logo { font-size: 15px; }
