@@ -177,6 +177,52 @@ await chip.filter({ hasText: 'synced' }).waitFor();
 await shot('clock-chip-synced', chip);
 mockWs.close();
 
+// Colour LUTs (SPEC §14): a LUT made in the tab and used by the composition's LUT effect (the demo composition has
+// one on the composition and one on the Front layer).
+await page.keyboard.press('Control+3');
+await page.getByRole('button', { name: '+ New' }).click();
+await page.locator('.lut-card', { hasText: 'New LUT' }).waitFor();
+await page.locator('.lut-editor h1').dblclick();
+await page.locator('input.rename').fill('Stage Warm');
+await page.keyboard.press('Enter');
+await page.locator('.lut-card', { hasText: 'Stage Warm' }).waitFor();
+const setSlider = (group, label, value) =>
+  page
+    .locator(group ? `.group:has(.caps:text-is("${group}")) .ctl` : '.ctl', { hasText: label })
+    .first()
+    .locator('input[type=range]')
+    .evaluate((el, v) => {
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, value);
+await setSlider(null, 'Temperature', 0.45);
+await sleep(100);
+await setSlider(null, 'Contrast', 1.15);
+await sleep(100);
+await setSlider(null, 'Saturation', 1.2);
+await sleep(100);
+// A gentle S on the master curve.
+await page.locator('.curve-box').scrollIntoViewIfNeeded();
+const curve = await page.locator('.curve-box').boundingBox();
+for (const [x, y, to] of [[0.25, 0.75, 0.8], [0.75, 0.25, 0.2]]) {
+  await page.mouse.move(curve.x + curve.width * x, curve.y + curve.height * y);
+  await page.mouse.down();
+  await page.mouse.move(curve.x + curve.width * x, curve.y + curve.height * to, { steps: 4 });
+  await page.mouse.up();
+}
+await page.locator('.lut-controls').evaluate((el) => (el.scrollTop = 0));
+await page.locator('#lut-image').selectOption({ label: 'Skin tones' });
+await page.locator('.fx-row', { hasText: 'Composition' }).getByRole('button', { name: /Use Stage Warm/ }).click();
+await page.locator('.fx-row', { hasText: 'Composition' }).locator('.tag', { hasText: 'this LUT' }).waitFor();
+await page.locator('.preview').click({ position: { x: 420, y: 200 } }); // split a little left of the middle
+await sleep(800);
+await shot('luts-tab');
+await shot('luts-effects', page.locator('.in-resolume'));
+await page.setViewportSize({ width: 1440, height: 1100 });
+await sleep(300);
+await shot('luts-controls', page.locator('.lut-controls'));
+await page.setViewportSize({ width: 1440, height: 820 });
+
 await browser.close();
 rmSync(data, { recursive: true, force: true });
 console.log(`screenshots in ${out}: ${readdirSync(out).length} files`);

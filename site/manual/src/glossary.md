@@ -15,6 +15,10 @@
 **LIVE**
 : The deck Resolume is playing now; marked on the deck tabs.
 
+**LUT**
+: A lookup table that changes colours. The LUTs tab edits them; Resolume's LUT effect applies them
+  ([Colour LUTs](luts.md)).
+
 **Orphaned**
 : Sequences of a deck name that no longer exists in Resolume.
 

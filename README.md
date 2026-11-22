@@ -26,6 +26,8 @@ getting started and for building from source.*
 - Works per deck, follows renames, re-finds clips by id, name or file.
 - Desktop app (one window, splash, live Console tab) and a headless mode with the UI in a browser.
 - Five themes and an editor for your own colours and fonts (Preferences → Appearance).
+- **LUTs tab:** a library of colour LUTs (grading controls, RGB curves, `.cube` import/export) with a before/after
+  preview. Resolume's own LUT effect applies them, and it picks up every change while you drag.
 - Optional FFGL source plugin "1000A Sequence" ([`ffgl/`](ffgl/README.md)) that shows the sequence timeline
   on the `§` clip in Resolume; it ships in the zip and is installed from the app (**File → Install FFGL plugin…**).
 
@@ -176,6 +178,8 @@ folder and logs a warning.
 - **Edits while running** apply at the next start ("edited · applies at next start").
 - **Push thumbnail to Resolume** sets the sequence's mosaic as its `§` clip's thumbnail.
 - **Stop all** clears every layer the sequencer owns.
+- **LUTs** (Ctrl+3): **+ New** or **Import…**, adjust; add Resolume's **LUT** effect to the composition, a layer or a
+  clip and click **Use <LUT>** next to it. LUTs are saved in `%APPDATA%clip-sequencerluts` (`.cube` + `.lut.json`).
 
 Sequences are saved automatically (about 1 s after an edit) to
 `%APPDATA%\clip-sequencer\<Composition>.seq.json`.

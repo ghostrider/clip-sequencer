@@ -383,6 +383,7 @@ Single screen, everything controlled from here (no separate live view).
 
 ### 9.1 Top bar
 - `§ SEQ` logo, composition name.
+- **View tabs:** Sequencer (Ctrl+1), Console (Ctrl+2), LUTs (Ctrl+3, §14).
 - **Deck tabs** (see 7.2): selected tab = what is shown; `LIVE` badge = active deck in Resolume.
 - Connection chips: CLOCK (BPM, locked / no clock), REST, WS, OSC — green when OK, red when not.
 - **Stop all** (always visible).
@@ -617,3 +618,71 @@ same-origin; the FFGL plugin and command-line tools send no `Origin`.
 
 Start quantization, time signatures other than 4/4, per-step parameter automation,
 cross-deck sequences, multi-user editing.
+
+## 14. LUTs (M18, decided 2026-11-22)
+
+Colour-grade Resolume's output from the app: a library of LUTs edited in the **LUTs** tab and applied by Resolume's
+own **LUT** effect, which reads a `.cube` file and reloads it by itself when the file changes (notes §18). No own
+plugin.
+
+### 14.1 Library and files
+
+- Folder `<data-dir>/luts/`. Each LUT is `<name>.lut.json` (the controls, below) and `<name>.cube` (the baked
+  table, 33³, 0..1 domain, six decimals, `TITLE` = the name). The name is the file name: at most 64 characters,
+  none of `\ / : * ? " < > |`, no leading or trailing dot or space, no Windows device name; names differ in more
+  than case. At most 200 LUTs.
+- `.lut.json`: `{ "version": 1, "grade": {…}, "curves": {…}, "base"?: { "size", "data" } }`. Missing fields take
+  their defaults (which change nothing); a newer `version` is refused (the file is skipped with a log line).
+  `.seq.json` (§6) is unchanged.
+- Every change bakes the table at once (in memory) and writes both files through a temp file renamed over the old
+  one, so Resolume never reads a half-written file. While a control is dragged, a LUT's files are written at most
+  every 100 ms; the last value is always written. A `.cube` that already holds the same text is not rewritten (a
+  restart doesn't make Resolume reload).
+- At start the library is read from the folder; files that don't load are skipped.
+
+### 14.2 The transform (crates/lut-core)
+
+Display-referred RGB 0..1, in this order: the imported **base** table (trilinear), **exposure** (stops, ×2^e),
+**white balance** (temperature −1..1: R ×(1+0.25t), B ×(1−0.25t); tint −1..1: G ×(1−0.25n)), per channel
+**gain** (master × channel), **lift** (`v + lift·(1−v)`, master + channel), **gamma** (`v^(1/γ)`, master ×
+channel), **contrast** around 0.5, **saturation** around Rec. 709 luma, clamp to 0..1, then the **curves**: master,
+then the channel's own. Curves are monotone cubic splines (Fritsch–Carlson) through their points; left of the
+first point the first y, right of the last the last y.
+
+Import: `.cube` with `LUT_3D_SIZE` (any 2..256) or `LUT_1D_SIZE`, optional `DOMAIN_MIN`/`DOMAIN_MAX`, `#`
+comments; other keywords are ignored. It becomes the base table, resampled to 33³. Export writes the baked table.
+
+### 14.3 Resolume's LUT effects
+
+- The app reads every LUT effect (`name` `LUT` with a `ParamFile` `LUT 3D`) from each composition push: on the
+  composition, the layers and the live deck's clips (layer groups are not read; their JSON is not probed). It
+  subscribes to their `LUT 3D` parameters by id and follows changes.
+- **Binding by reference:** an effect uses a library LUT when its `LUT 3D` path is that LUT's `.cube` (compared
+  without case and slash direction). Resolume saves the path with the composition, so the binding survives
+  reloads and restarts, and it works without the sequencer.
+- **Apply** ("Use <LUT>" on an effect): the app writes the file if pending, then sets `LUT 3D` to its full path over
+  the WebSocket. **Rename** points the effects using the old file at the new one, and removes the old files 2 s
+  later. **Delete** removes the files; the UI asks first and says how many effects use it.
+
+### 14.4 LUTs tab (Ctrl+3)
+
+- Left: the library (name, "used by N LUT effects", "imported"), **+ New** (neutral), **Import…** (several
+  `.cube` files; names from the file names, made unique).
+- Middle: name (double-click renames), Rename, Duplicate, Export .cube, Delete…; the preview: an image with the LUT
+  right of a draggable split, the original left of it. Images: drawn test images (ramps, colour chart, skin tones,
+  neon) and the live deck's clip thumbnails. WebGL2 with the table the app baked, so it matches Resolume. Below:
+  Resolume's LUT effects (where, which file or LUT) with **Use <LUT>**.
+- Right: Basic (exposure, contrast, saturation, temperature, tint), Lift/Gamma/Gain (all, R, G, B), Curves (Master,
+  R, G, B). Double-click on a slider resets it. Changes go to the app every 40 ms while dragging; a control being
+  dragged isn't moved by the app's echo.
+
+### 14.5 Protocol (§9.6)
+
+- App → UI: `luts` `{ dir, luts: [{ name, rev, grade, curves, has_base, path }] }` on connect and on every change;
+  `structure.lut_effects: [{ effect_id, file_param, path, place: { kind: composition | layer | clip, … } }]`.
+- UI → app: `lut_create { name, from? }`, `lut_rename { from, to }`, `lut_delete { name }`,
+  `lut_update { name, grade, curves }`, `lut_clear_base { name }`, `lut_apply { name, file_param }`. Errors show
+  as a notice.
+- HTTP: `GET /api/luts/table?name=` (the baked table: size³ little-endian f32 RGB, red fastest; headers
+  `x-lut-rev`, `x-lut-size`), `GET /api/luts/cube?name=` (export), `POST /api/luts/import?name=` (body: the
+  `.cube` text; `{ ok, name }` or 400 `{ ok: false, error }`).

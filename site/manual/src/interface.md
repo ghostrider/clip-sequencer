@@ -9,8 +9,8 @@ inspector on the right, and a status bar at the bottom.
 
 ![Top bar](images/top-bar.png)
 
-- **§ SEQ** and the tabs **Sequencer | Console** (Ctrl+1 / Ctrl+2). The Console tab shows the log; a red number on
-  it counts new errors.
+- **§ SEQ** and the tabs **Sequencer | Console | LUTs** (Ctrl+1 / Ctrl+2 / Ctrl+3). The Console tab shows the log;
+  a red number on it counts new errors. The LUTs tab edits colour LUTs for Resolume ([Colour LUTs](luts.md)).
 - **Composition**: the name of the composition open in Resolume. Sequences are saved per composition.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
   Resolume is playing. Selecting a tab never switches Resolume ([Working with decks](decks.md)). A dashed tab is a

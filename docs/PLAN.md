@@ -185,7 +185,7 @@ Asked for on 2026-11-19: follow Resolume's tempo when no MIDI clock is used. Pro
       Troubleshooting, Glossary, FAQ, Interface, Introduction, Installation, Quick start); README, changelog,
       landing page.
 
-## M18 — LUT editor, applied through Resolume's LUT effect  (concept agreed 2026-11-22, probe done, not started)
+## M18 — LUT editor, applied through Resolume's LUT effect  (built 2026-11-22, live check pending)
 Asked for on 2026-11-22: build LUTs in the app and apply them in Resolume live. Probed: notes §18. Resolume's
 own **LUT** effect reloads its `.cube` file by itself when the file changes, and its path can be set over the
 WebSocket, so the user chose it over an own FFGL plugin (2026-11-22; the plugin idea is dropped).
@@ -212,11 +212,13 @@ Tasks:
       FFGL effect works; Resolume's LUT effect: `LUT 3D` path, reload on overwrite and on rename, path set over WS.
 - [ ] Check before relying on them: Resolume with a 33³ `.cube` (probed only 17³), `DOMAIN_MIN/MAX`, and how fast
       it reloads during a fast drag (pick the write throttle from it).
-- [ ] `lut-core`: params, curves, bake to 33³, `.cube` read/write, tests.
-- [ ] App: library storage, throttled atomic `.cube` writes, WS commands, LUT effect discovery and "apply to",
-      mock-resolume LUT effect.
-- [ ] Web UI: LUT tab, library, controls, curve editor, preview, import/export, "used by", "apply to".
-- [ ] Docs: SPEC section, manual page with screenshots, README, changelog.
+- [x] `lut-core`: params, curves, bake to 33³, `.cube` read/write (1D/3D, domain), tests.
+- [x] App: library storage, throttled atomic `.cube` writes, WS commands, LUT effect discovery (composition,
+      layers, live deck's clips; not layer groups) and "apply to", mock-resolume effect parameters. Tests.
+- [x] Web UI: LUT tab (Ctrl+3), library, controls, curve editor, WebGL2 preview, import/export, "used by",
+      "Use <LUT>". Checked against the mock with Playwright.
+- [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
+      changelog, landing page.
 
 ## M14 — In-app update  (planned 2026-11-04, not started)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
