@@ -75,9 +75,8 @@ impl From<&Settings> for Appearance {
     }
 }
 
-/// Window actions the UI asks the desktop shell for. Keys typed into the web content never reach
-/// the native menu's shortcuts (WebView2 handles input in its own process), so the UI sends
-/// Ctrl+Q and the zoom keys here. Without a shell (headless, browser UI) only `Quit` is used: it stops
+/// Window actions the UI asks the desktop shell for: the page's menu bar and Ctrl+Q / the zoom keys
+/// (the desktop app has no native menu). Without a shell (headless, browser UI) only `Quit` is used: it stops
 /// the app when `ServerCtx::quit` is set; the rest is ignored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +89,11 @@ pub enum ShellAction {
     OpenLogs,
     /// Open Resolume's plugin folder in Explorer (Install FFGL plugin dialog).
     OpenFfglDir,
+    /// File → Open data folder.
+    OpenDataDir,
+    /// Help → User manual / Report an issue, in the system browser.
+    OpenManual,
+    OpenIssue,
 }
 
 pub fn router(ctx: ServerCtx) -> Router {
@@ -359,7 +363,7 @@ enum ClientMsg {
     },
     Undo,
     Redo,
-    /// File menu of the browser UI (the desktop app's native menu sends these directly).
+    /// File menu.
     ReloadComposition,
     SaveNow,
     /// "Sync SEQ layer" for the live deck (SPEC §7.6).

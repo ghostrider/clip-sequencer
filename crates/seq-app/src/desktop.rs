@@ -9,8 +9,9 @@
 //! created hidden on the UI's background colour and shown once the page has loaded; the splash
 //! fades out after it. A fatal startup error turns the splash into an error panel (Retry, Open
 //! log, Copy details, Quit). The remote UI in the main window gets no Tauri IPC (no
-//! capabilities): the menu, close handling and dialogs are native and talk to the engine through
-//! its command channel. Only the local splash page calls one command, `splash_action`.
+//! capabilities): its menu bar is the page's own (themed, like the browser UI); window actions
+//! (quit, zoom, open a folder or the manual) reach the shell as `shell` commands over `/ws`. Close
+//! handling and its dialogs are native. Only the local splash page calls one command, `splash_action`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,7 +19,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::window::Color;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -31,7 +31,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
 use crate::engine::view::RuntimeState;
-use crate::engine::EngineCommand;
 use crate::runner::{self, StartError, StartupStep};
 use crate::server::ShellAction;
 use crate::{APP_NAME, BUILD_NUMBER, COPYRIGHT, GIT_COMMIT, LONG_VERSION, VERSION};
@@ -77,7 +76,6 @@ struct Shell {
 }
 
 struct Backend {
-    commands: mpsc::UnboundedSender<EngineCommand>,
     runtime: watch::Receiver<RuntimeState>,
     done: Option<JoinHandle<()>>,
 }
@@ -119,8 +117,6 @@ pub fn run(config: Config) -> ExitCode {
         )
         .manage(shell)
         .invoke_handler(tauri::generate_handler![splash_action])
-        .menu(build_menu)
-        .on_menu_event(on_menu)
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == MAIN {
@@ -182,6 +178,12 @@ async fn start(app: AppHandle, config: Config) {
                 ShellAction::ZoomReset => zoom(&handle, None),
                 ShellAction::OpenLogs => open_logs(&handle),
                 ShellAction::OpenFfglDir => open_ffgl_dir(&handle),
+                ShellAction::OpenDataDir => open_data_dir(&handle),
+                ShellAction::OpenManual => open_link(&handle, &format!("{}manual/", site_url())),
+                ShellAction::OpenIssue => open_link(
+                    &handle,
+                    concat!(env!("CARGO_PKG_REPOSITORY"), "/issues/new/choose"),
+                ),
             }
         }
     });
@@ -201,7 +203,6 @@ async fn start(app: AppHandle, config: Config) {
                 Err(e) => return fatal(&app, format!("bad UI URL {ui_url}: {e}"), false),
             };
             *shell.backend.lock().unwrap() = Some(Backend {
-                commands: running.commands,
                 runtime: running.outputs.runtime,
                 done: Some(running.done),
             });
@@ -605,83 +606,14 @@ fn quit(app: AppHandle) {
     });
 }
 
-// ---- menu ----
-
-fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let item = |id: &str, text: &str| MenuItemBuilder::with_id(id, text).build(app);
-    let item_key = |id: &str, text: &str, key: &str| {
-        MenuItemBuilder::with_id(id, text)
-            .accelerator(key)
-            .build(app)
-    };
-    let file = SubmenuBuilder::new(app, "File")
-        .item(&item("reload", "Reload composition")?)
-        .item(&item("save", "Save now")?)
-        .item(&item("data", "Open data folder")?)
-        .item(&item("prefs", "Preferences…")?)
-        .item(&item("ffgl", "Install FFGL plugin…")?)
-        .separator()
-        .item(&item_key("quit", "Quit", "CmdOrCtrl+Q")?)
-        .build()?;
-    let view = SubmenuBuilder::new(app, "View")
-        .item(&item_key("zoom_in", "Zoom in", "CmdOrCtrl+=")?)
-        .item(&item_key("zoom_out", "Zoom out", "CmdOrCtrl+-")?)
-        .item(&item_key("zoom_reset", "Reset zoom", "CmdOrCtrl+0")?)
-        .separator()
-        .item(&item("console", "Toggle Console")?)
-        .build()?;
-    let help = SubmenuBuilder::new(app, "Help")
-        .item(&item("shortcuts", "Keyboard shortcuts")?)
-        .item(&item("manual", "User manual")?)
-        .item(&item("issue", "Report an issue")?)
-        .separator()
-        .item(&item("licenses", "Licenses")?)
-        .item(&item("about", "About Clip Sequencer")?)
-        .build()?;
-    MenuBuilder::new(app).items(&[&file, &view, &help]).build()
-}
-
-fn on_menu(app: &AppHandle, event: MenuEvent) {
+/// The data folder (sequences, settings, LUTs, logs) in Explorer.
+fn open_data_dir(app: &AppHandle) {
     let shell = app.state::<Shell>();
-    let send = |cmd: EngineCommand| {
-        if let Some(b) = shell.backend.lock().unwrap().as_ref() {
-            let _ = b.commands.send(cmd);
-        }
-    };
-    match event.id().as_ref() {
-        "reload" => send(EngineCommand::ReloadComposition),
-        "save" => send(EngineCommand::SaveNow),
-        "data" => {
-            if let Err(e) = app
-                .opener()
-                .open_path(shell.data_dir.to_string_lossy(), None::<&str>)
-            {
-                log::warn!("could not open {}: {e}", shell.data_dir.display());
-            }
-        }
-        "quit" => request_quit(app),
-        "zoom_in" => zoom(app, Some(ZOOM_STEP)),
-        "zoom_out" => zoom(app, Some(-ZOOM_STEP)),
-        "zoom_reset" => zoom(app, None),
-        "prefs" => {
-            if let Some(window) = app.get_webview_window(MAIN) {
-                let _ = window.eval("window.__seqOpenPrefs && window.__seqOpenPrefs()");
-            }
-        }
-        "console" => {
-            // The tab lives in the page; Ctrl+1 / Ctrl+2 switch it there too.
-            if let Some(window) = app.get_webview_window(MAIN) {
-                let _ = window.eval("window.__seqToggleConsole && window.__seqToggleConsole()");
-            }
-        }
-        // Help (M11 Phase F): the dialogs live in the page (one shortcut list: web/src/lib/shortcuts.ts).
-        "shortcuts" | "licenses" | "about" | "ffgl" => page_dialog(app, event.id().as_ref()),
-        "manual" => open_link(app, &format!("{}manual/", site_url())),
-        "issue" => open_link(
-            app,
-            concat!(env!("CARGO_PKG_REPOSITORY"), "/issues/new/choose"),
-        ),
-        _ => {}
+    if let Err(e) = app
+        .opener()
+        .open_path(shell.data_dir.to_string_lossy(), None::<&str>)
+    {
+        log::warn!("could not open {}: {e}", shell.data_dir.display());
     }
 }
 
@@ -722,18 +654,6 @@ fn zoom(app: &AppHandle, step: Option<f64>) {
     .clamp(ZOOM_RANGE.0, ZOOM_RANGE.1);
     if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.set_zoom(*zoom);
-    }
-}
-
-/// Opens one of the page's Help dialogs (`about`, `licenses`, `shortcuts`); the page has no IPC, so the
-/// menu calls the hook it exposes (web/src/lib/app.svelte.ts).
-fn page_dialog(app: &AppHandle, name: &str) {
-    if let Some(window) = app.get_webview_window(MAIN) {
-        let _ = window.set_focus();
-        let _ = window.eval(format!(
-            "window.__seqOpenDialog && window.__seqOpenDialog({})",
-            serde_json::Value::from(name)
-        ));
     }
 }
 

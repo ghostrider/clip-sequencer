@@ -19,7 +19,7 @@
   // Global shortcuts (SPEC §9.3). Inputs keep their own keys.
   function onKey(e: KeyboardEvent) {
     if (app.desktop && (e.ctrlKey || e.metaKey) && !e.altKey) {
-      // Window shortcuts of the desktop shell; the native menu never sees keys typed in here.
+      // Window shortcuts of the desktop shell (it has no native menu; keys typed in here stay in the page).
       const keys: Record<string, ShellAction> = { '=': 'zoom_in', '+': 'zoom_in', '-': 'zoom_out', '0': 'zoom_reset', q: 'quit' };
       const action = keys[e.key.toLowerCase()];
       if (action) {
@@ -76,9 +76,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="app">
-  {#if !app.desktop}
-    <MenuBar />
-  {/if}
+  <MenuBar />
   <TopBar />
   {#if !app.connected}
     <div class="banner">Not connected to the sequencer app · retrying…</div>

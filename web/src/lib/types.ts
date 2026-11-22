@@ -312,7 +312,8 @@ export interface Appearance {
 }
 
 /** Window actions for the desktop shell (ignored in a browser). */
-export type ShellAction = 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs' | 'open_ffgl_dir';
+export type ShellAction =
+  | 'quit' | 'zoom_in' | 'zoom_out' | 'zoom_reset' | 'open_logs' | 'open_ffgl_dir' | 'open_data_dir' | 'open_manual' | 'open_issue';
 
 /** One log record (Console tab, M12 E). */
 export interface LogRecord {

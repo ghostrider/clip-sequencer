@@ -11,7 +11,7 @@ The sequencer talks to Resolume over its **webserver** (to read the composition 
 3. **Tempo:** Resolume and the sequencer must both receive **the same MIDI clock**, so Resolume's tempo and the
    sequencer's steps agree. See [Setting up the clock](clock.md).
 
-The sequencer connects to `127.0.0.1`, the same computer. On the top bar of the app, the chips **REST**, **WS**
+The sequencer connects to `127.0.0.1`, the same computer. In the status bar at the bottom of the app, the chips **REST**, **WS**
 (WebSocket) and **OSC** turn green when the connection works.
 
 ## Once per composition

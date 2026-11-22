@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with the chips on the top bar and the **Console** tab: most problems show up there.
+Start with the chips in the status bar at the bottom and the **Console** tab: most problems show up there.
 
 ## CLOCK is red
 

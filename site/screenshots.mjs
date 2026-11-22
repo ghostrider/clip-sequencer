@@ -155,14 +155,14 @@ await page.getByRole('tab', { name: /Sequencer/ }).click();
 await page.route('**/api/midi/ports', (r) =>
   r.fulfill({ json: { ports: ['loopMIDI Port', 'Clock Shifter Out', 'Arturia BeatStep Pro'], selected: 'loopMIDI Port' } }),
 );
-await page.locator('.topbar .chip-btn').click();
+await page.locator('.statusbar .chip-btn').click();
 await page.locator('.prefs').waitFor();
 await sleep(300);
 await shot('prefs-clock-midi', page.locator('.prefs'));
 await page.locator('input[name="clock-source"][value="resolume"]').check();
 await shot('prefs-clock-resolume', page.locator('.prefs'));
 await page.getByRole('button', { name: 'Save' }).click();
-const chip = page.locator('.topbar .chip-btn');
+const chip = page.locator('.statusbar .chip-btn');
 await chip.filter({ hasText: 'press Resync' }).waitFor();
 await shot('clock-chip-resolume', chip);
 // Resync pressed in "Resolume": the mock reports it to the app like Resolume does (notes §17).

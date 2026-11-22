@@ -32,7 +32,7 @@ Resolume's tempo would only copy the BPM, not the beat.
 
 ## Choosing the source
 
-Open **File → Preferences…** and the **Clock** tab (or click the clock chip on the top bar, or press Ctrl+,). Pick
+Open **File → Preferences…** and the **Clock** tab (or click the clock chip in the status bar at the bottom, or press Ctrl+,). Pick
 the source under **Clock source**, then click **Save**. The sequencer switches at once and remembers it for the
 next start. For one run, `--clock midi` or `--clock resolume` on the command line wins over the saved choice
 ([Settings](settings.md)).
@@ -58,7 +58,7 @@ shifted clock** as Resolume. The sequencer never compensates latency itself; it 
 
 ### Choosing the MIDI input
 
-1. Open **File → Preferences…** (or click the **CLOCK** chip on the top bar, or press Ctrl+,).
+1. Open **File → Preferences…** (or click the **CLOCK** chip in the status bar at the bottom, or press Ctrl+,).
 2. Under **Clock source**, choose **MIDI clock**.
 3. Pick the input under *MIDI clock input*. **Refresh MIDI inputs** lists the ports again if you just started the
    source.
@@ -73,7 +73,7 @@ For one run you can also start the app with `--midi-port "<name>"`. A part of th
 
 ### Checking it
 
-The **CLOCK** chip on the top bar shows the state:
+The **CLOCK** chip in the status bar at the bottom shows the state:
 
 | Chip | Meaning |
 |---|---|
@@ -91,7 +91,7 @@ over the connection it already has, and makes its own clock at that tempo.
 
 ### Switching to Resolume tempo
 
-1. Open **File → Preferences…** (or click the clock chip on the top bar, or press Ctrl+,).
+1. Open **File → Preferences…** (or click the clock chip in the status bar at the bottom, or press Ctrl+,).
 2. Under **Clock source**, choose **Resolume tempo**. The MIDI input list disappears; your MIDI input stays saved
    for switching back.
 3. Click **Save**. The clock chip now reads **RESOLUME** with Resolume's BPM.

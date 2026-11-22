@@ -15,9 +15,6 @@ inspector on the right, and a status bar at the bottom.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
   Resolume is playing. Selecting a tab never switches Resolume ([Working with decks](decks.md)). A dashed tab is a
   deck that no longer exists in Resolume but still has sequences; "same name" marks two decks with one name.
-- **Connection chips**: **CLOCK** (MIDI clock, with BPM; **RESOLUME** when it follows Resolume's tempo), **REST**,
-  **WS** and **OSC** (Resolume). Green is fine, red needs attention ([Troubleshooting](troubleshooting.md)). Click
-  the clock chip to choose the clock ([Setting up the clock](clock.md)).
 - **Stop all** stops every running sequence and clears every layer the sequencer is using.
 
 ## Menus
@@ -118,6 +115,10 @@ For a step of a slot lane it shows the column and the clip in it now instead ([S
 
 The bottom line shows what is playing and where (`bar.beat`), the last trigger sent to Resolume and its
 confirmation, and notices: a lane that yielded, a failed trigger, a problem with a file.
+
+On its right are the **connection chips**: **CLOCK** (MIDI clock, with BPM; **RESOLUME** when it follows
+Resolume's tempo), **REST**, **WS** and **OSC** (Resolume). Green is fine, red needs attention
+([Troubleshooting](troubleshooting.md)). Click the clock chip to choose the clock ([Setting up the clock](clock.md)).
 
 ## Console tab
 

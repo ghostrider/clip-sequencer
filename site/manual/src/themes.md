@@ -1,7 +1,7 @@
 # Themes
 
 The app's colours and fonts come from a **theme**. Choose one in **File → Preferences… → Appearance**. Clicking
-the clock chip on the top bar opens Preferences too, on the *MIDI clock* tab.
+the clock chip in the status bar at the bottom opens Preferences too, on the *MIDI clock* tab.
 
 ## Choosing a theme
 

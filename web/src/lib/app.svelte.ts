@@ -337,13 +337,3 @@ export function formatLength(sixteenths: number): string {
 export function repeatLabel(r: SequenceView['sequence']['repeat']): string {
   return r.mode === 'once' ? 'once' : r.mode === 'infinite' ? '∞' : `×${r.count}`;
 }
-
-// The desktop shell's View > Toggle Console menu item calls this (it has no IPC into the page).
-(window as unknown as { __seqToggleConsole: () => void }).__seqToggleConsole = () =>
-  app.setTab(app.tab === 'console' ? 'sequencer' : 'console');
-
-// The desktop shell's File > Preferences menu item calls this.
-(window as unknown as { __seqOpenPrefs: () => void }).__seqOpenPrefs = () => (app.prefsOpen = true);
-
-// The desktop shell's Help menu items (About, Licenses, Keyboard shortcuts) call this.
-(window as unknown as { __seqOpenDialog: (d: InfoDialog) => void }).__seqOpenDialog = (d) => app.openDialog(d);

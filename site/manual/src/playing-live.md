@@ -3,7 +3,7 @@
 ## Before the show
 
 1. Start Resolume with your composition, then your MIDI clock source (if you use one), then the sequencer.
-2. Check the top bar: **CLOCK** shows the BPM and "locked" (with Resolume's tempo: **RESOLUME** and the BPM;
+2. Check the status bar at the bottom: **CLOCK** shows the BPM and "locked" (with Resolume's tempo: **RESOLUME** and the BPM;
    press **Resync** in Resolume until it says "synced"); **REST**, **WS** and **OSC** are green.
 3. Make every deck you'll use live once, so its clips are cached ([Working with decks](decks.md)).
 4. Look for red: steps or lanes in red can't find their clip or layer and will stay silent

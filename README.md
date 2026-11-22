@@ -152,7 +152,7 @@ folder and logs a warning.
 ### Before a show
 
 1. Start Resolume (composition open), then your MIDI clock source, then `seq-app`.
-2. Check the chips in the UI's top bar: **CLOCK** shows the BPM and "locked", **REST**, **WS**,
+2. Check the chips in the UI's status bar (bottom): **CLOCK** shows the BPM and "locked", **REST**, **WS**,
    **OSC** are green.
 3. Make every deck you will use live once: its clips are then cached, so its sequences show and
    resolve even while another deck is live (also after a restart).
@@ -186,7 +186,7 @@ Sequences are saved automatically (about 1 s after an edit) to
 
 ## Behaviour worth knowing
 
-- No clock → sequences freeze in place (top bar shows "no clock") and continue when it returns.
+- No clock → sequences freeze in place (the status bar shows "no clock") and continue when it returns.
   MIDI Start (e.g. a clock source's resync) does not restart sequences.
 - If Resolume quits, triggers are not confirmed (red top edge on steps); when it comes back the
   sequencer reconnects by itself. A port that disappears (clock source restarted) is reconnected

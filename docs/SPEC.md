@@ -385,7 +385,6 @@ Single screen, everything controlled from here (no separate live view).
 - `§ SEQ` logo, composition name.
 - **View tabs:** Sequencer (Ctrl+1), Console (Ctrl+2), LUTs (Ctrl+3, §14).
 - **Deck tabs** (see 7.2): selected tab = what is shown; `LIVE` badge = active deck in Resolume.
-- Connection chips: CLOCK (BPM, locked / no clock), REST, WS, OSC — green when OK, red when not.
 - **Stop all** (always visible).
 
 ### 9.2 Left: sequence list (for the selected deck tab)
@@ -439,7 +438,12 @@ Single screen, everything controlled from here (no separate live view).
 
 ### 9.5 Status bar
 Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,
-last WebSocket confirmation, yield and error notices.
+last WebSocket confirmation, yield and error notices. On the right, small connection chips: CLOCK (BPM, locked /
+no clock; click opens Preferences → Clock), REST, WS, OSC — green when OK, red when not (moved here from the top
+bar, 2026-11-22).
+
+Menu bar (File, View, Help) above the top bar, in the browser UI and in the desktop app (no native menu since
+2026-11-22, so it follows the theme); desktop actions go to the shell as `shell` commands (§9.6).
 
 ### 9.6 UI ↔ engine protocol
 - UI talks to the app over one WebSocket (`/ws`) with JSON messages.

@@ -1,9 +1,12 @@
 <script lang="ts">
-  // Menu bar of the browser UI (M11 Phase F; the desktop app has the native menu instead, M12 decision).
+  // The app's menu bar (M11 Phase F), in the browser UI and in the desktop app (which has no native menu, so the
+  // bar follows the theme). Desktop-only actions (quit, window zoom, open a folder, links in the system browser) go
+  // to the window shell as `shell` commands.
   // Keyboard: Alt (pressed alone) or F10 enters it, ←/→ move between menus, ↓/Enter/Space open one,
   // ↑/↓/Home/End move inside it, Enter/Space activate, Esc closes (and leaves the bar), Tab leaves it.
   import { app } from '../lib/app.svelte';
   import Dialog from './Dialog.svelte';
+  import type { ShellAction } from '../lib/types';
 
   type Item = { label: string; hint?: string; run: () => void } | 'sep';
   interface Menu {
@@ -12,45 +15,48 @@
   }
 
   const external = (url: string) => () => window.open(url, '_blank', 'noopener');
+  const shell = (action: ShellAction) => () => app.send({ cmd: 'shell', action });
 
-  let menus = $derived<Menu[]>([
-    {
-      label: 'File',
-      items: [
-        { label: 'Reload composition', run: () => app.send({ cmd: 'reload_composition' }) },
-        { label: 'Save now', run: () => app.send({ cmd: 'save_now' }) },
-        { label: 'Preferences…', hint: 'Ctrl+,', run: () => (app.prefsOpen = true) },
-        { label: 'Install FFGL plugin…', run: () => app.openDialog('ffgl') },
-        'sep',
-        { label: 'Quit server…', run: () => app.openDialog('quit') },
-      ],
-    },
+  let menus = $derived.by<Menu[]>(() => {
+    const desktop = app.desktop;
+    const file: Item[] = [
+      { label: 'Reload composition', run: () => app.send({ cmd: 'reload_composition' }) },
+      { label: 'Save now', run: () => app.send({ cmd: 'save_now' }) },
+    ];
+    if (desktop) file.push({ label: 'Open data folder', run: shell('open_data_dir') });
+    file.push(
+      { label: 'Preferences…', hint: 'Ctrl+,', run: () => (app.prefsOpen = true) },
+      { label: 'Install FFGL plugin…', run: () => app.openDialog('ffgl') },
+      'sep',
+      desktop ? { label: 'Quit', hint: 'Ctrl+Q', run: shell('quit') } : { label: 'Quit server…', run: () => app.openDialog('quit') },
+    );
+    return [
+    { label: 'File', items: file },
     {
       label: 'View',
       items: [
-        { label: 'Zoom in', run: () => app.zoomUi(0.1) },
-        { label: 'Zoom out', run: () => app.zoomUi(-0.1) },
-        { label: 'Reset zoom', run: () => app.zoomUi(null) },
+        { label: 'Sequencer', hint: 'Ctrl+1', run: () => app.setTab('sequencer') },
+        { label: 'Console', hint: 'Ctrl+2', run: () => app.setTab('console') },
+        { label: 'LUTs', hint: 'Ctrl+3', run: () => app.setTab('luts') },
         'sep',
-        {
-          label: 'Toggle Console',
-          hint: 'Ctrl+1 / Ctrl+2',
-          run: () => app.setTab(app.tab === 'console' ? 'sequencer' : 'console'),
-        },
+        { label: 'Zoom in', hint: desktop ? 'Ctrl+=' : undefined, run: desktop ? shell('zoom_in') : () => app.zoomUi(0.1) },
+        { label: 'Zoom out', hint: desktop ? 'Ctrl+-' : undefined, run: desktop ? shell('zoom_out') : () => app.zoomUi(-0.1) },
+        { label: 'Reset zoom', hint: desktop ? 'Ctrl+0' : undefined, run: desktop ? shell('zoom_reset') : () => app.zoomUi(null) },
       ],
     },
     {
       label: 'Help',
       items: [
         { label: 'Keyboard shortcuts', run: () => app.openDialog('shortcuts') },
-        { label: 'User manual ↗', run: external(app.links.manual) },
-        { label: 'Report an issue ↗', run: external(app.links.issues) },
+        { label: 'User manual ↗', run: desktop ? shell('open_manual') : external(app.links.manual) },
+        { label: 'Report an issue ↗', run: desktop ? shell('open_issue') : external(app.links.issues) },
         'sep',
         { label: 'Licenses', run: () => app.openDialog('licenses') },
         { label: 'About', run: () => app.openDialog('about') },
       ],
     },
-  ]);
+    ];
+  });
 
   let openIndex = $state<number | null>(null);
   let tops: HTMLButtonElement[] = $state([]);
