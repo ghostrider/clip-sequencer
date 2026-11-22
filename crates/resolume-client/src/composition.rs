@@ -15,6 +15,9 @@ use seq_core::index::{
 
 /// Display name of the text parameter of the "1000A Sequence" FFGL source (SPEC §12).
 pub const SEQUENCE_PARAM: &str = "Sequence";
+/// Name of Resolume's built-in LUT effect and of its file parameter (notes §18).
+pub const LUT_EFFECT: &str = "LUT";
+pub const LUT_FILE_PARAM: &str = "LUT 3D";
 use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -31,6 +34,36 @@ pub struct CompositionSnapshot {
     pub states: HashMap<u64, ClipState>,
     /// `tempocontroller` (notes §17); `None` if the composition JSON has none.
     pub tempo: Option<TempoController>,
+    /// Resolume's own LUT effects on the composition, the layers and the live deck's clips, in that
+    /// order (notes §18). Layer groups are not read (their JSON is not probed).
+    pub lut_effects: Vec<LutEffect>,
+}
+
+/// One instance of Resolume's LUT effect: its `LUT 3D` file parameter and where it sits.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct LutEffect {
+    pub effect_id: u64,
+    /// The `LUT 3D` `ParamFile`: set it to a path over the WebSocket to change the file.
+    pub file_param: u64,
+    /// The full path of the `.cube` file; empty if none is chosen.
+    pub path: String,
+    pub place: LutPlace,
+}
+
+/// Where a LUT effect sits. Indexes are 1-based, like everywhere else.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LutPlace {
+    Composition,
+    Layer {
+        layer: usize,
+        name: String,
+    },
+    Clip {
+        layer: usize,
+        column: usize,
+        name: String,
+    },
 }
 
 /// The composition's tempo controller (notes §17): parameter ids to subscribe to and the values at
@@ -137,15 +170,36 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
     let mut layers = Vec::with_capacity(raw.layers.len());
     let mut clips = Vec::new();
     let mut states = HashMap::new();
+    let mut lut_effects: Vec<LutEffect> = Vec::new();
+    let mut add_luts = |effects: Vec<RawEffect>, place: &dyn Fn() -> LutPlace| {
+        lut_effects.extend(effects.into_iter().filter_map(|e| e.lut(place())));
+    };
+    add_luts(raw.video.map(|v| v.effects).unwrap_or_default(), &|| {
+        LutPlace::Composition
+    });
     for (li, layer) in raw.layers.into_iter().enumerate() {
         let layer_index = li + 1;
+        let layer_name = layer.name.value.clone();
+        add_luts(layer.video.map(|v| v.effects).unwrap_or_default(), &|| {
+            LutPlace::Layer {
+                layer: layer_index,
+                name: layer_name.clone(),
+            }
+        });
         layers.push(LayerInfo {
             id: layer.id,
             index: layer_index,
             name: layer.name.value,
             name_param: layer.name.id,
         });
-        for (ci, clip) in layer.clips.into_iter().enumerate() {
+        for (ci, mut clip) in layer.clips.into_iter().enumerate() {
+            let effects = clip.video.as_mut().map(|v| std::mem::take(&mut v.effects));
+            let clip_name = clip.name.value.clone();
+            add_luts(effects.unwrap_or_default(), &|| LutPlace::Clip {
+                layer: layer_index,
+                column: ci + 1,
+                name: clip_name.clone(),
+            });
             let (info, state) = clip_info(clip, layer_index, ci + 1);
             if let Some(s) = state {
                 states.insert(info.id, s);
@@ -170,6 +224,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
         index: CompositionIndex::new(raw.name.value, decks, live_deck, layers, columns, clips),
         states,
         tempo,
+        lut_effects,
     }
 }
 
@@ -186,6 +241,41 @@ struct RawComposition {
     columns: Vec<RawColumn>,
     #[serde(default)]
     tempocontroller: Option<RawTempoController>,
+    #[serde(default)]
+    video: Option<RawEffects>,
+}
+
+/// The `video` object of the composition or a layer: only its effects are read.
+#[derive(Deserialize)]
+struct RawEffects {
+    #[serde(default)]
+    effects: Vec<RawEffect>,
+}
+
+/// One entry of `video.effects[]` (notes §13, §18).
+#[derive(Deserialize)]
+struct RawEffect {
+    #[serde(default)]
+    id: u64,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    params: HashMap<String, RawSourceParam>,
+}
+
+impl RawEffect {
+    fn lut(mut self, place: LutPlace) -> Option<LutEffect> {
+        if self.name != LUT_EFFECT {
+            return None;
+        }
+        let p = self.params.remove(LUT_FILE_PARAM)?;
+        (p.valuetype == "ParamFile" && p.id != 0).then(|| LutEffect {
+            effect_id: self.id,
+            file_param: p.id,
+            path: p.value.as_str().unwrap_or_default().to_owned(),
+            place,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -232,6 +322,8 @@ struct RawLayer {
     name: Param<String>,
     #[serde(default)]
     clips: Vec<RawClip>,
+    #[serde(default)]
+    video: Option<RawEffects>,
 }
 
 #[derive(Deserialize)]
@@ -254,6 +346,8 @@ struct RawVideo {
     /// Parameters of a source plugin, keyed by display name (notes §11).
     #[serde(default)]
     sourceparams: Option<std::collections::HashMap<String, RawSourceParam>>,
+    #[serde(default)]
+    effects: Vec<RawEffect>,
 }
 
 #[derive(Deserialize)]

@@ -299,6 +299,18 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                 ffgl_dir: cfg.ffgl_dir.clone(),
                 thumbs_ready: std::sync::Arc::new(thumbs_ready_tx),
                 clock: clock.clone(),
+                luts: {
+                    let commands = cmd_tx.clone();
+                    crate::luts::LutLibrary::open(
+                        &data_dir,
+                        Some(Box::new(move |file_param, path: &str| {
+                            let _ = commands.send(EngineCommand::SetLutFile {
+                                file_param,
+                                path: path.to_owned(),
+                            });
+                        })),
+                    )
+                },
                 appearance: std::sync::Arc::new(
                     tokio::sync::watch::channel(crate::server::Appearance::from(
                         &crate::settings::Settings::load(&data_dir),

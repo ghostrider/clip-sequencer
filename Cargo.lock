@@ -3564,6 +3564,7 @@ dependencies = [
  "futures-util",
  "image",
  "log",
+ "lut-core",
  "mock-resolume",
  "reqwest",
  "resolume-client",

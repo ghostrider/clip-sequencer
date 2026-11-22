@@ -55,6 +55,8 @@ pub struct ServerCtx {
     pub clock: Option<Arc<crate::app::ClockControl>>,
     /// Colour theme settings (SPEC §9.7); every UI gets them on connect and on each change.
     pub appearance: Arc<watch::Sender<Appearance>>,
+    /// The LUT library (SPEC §14); every UI gets it on connect and on each change.
+    pub luts: Arc<crate::luts::LutLibrary>,
 }
 
 /// The theme part of the settings, as sent to the UI (`appearance` message).
@@ -101,6 +103,9 @@ pub fn router(ctx: ServerCtx) -> Router {
         .route("/api/ffgl/dir", post(ffgl_set_dir))
         .route("/api/logs/current", get(current_log))
         .route("/api/midi/ports", get(midi_ports))
+        .route("/api/luts/table", get(lut_table))
+        .route("/api/luts/cube", get(lut_cube))
+        .route("/api/luts/import", post(lut_import))
         .route("/thumbs/clip/{file}", get(clip_thumb))
         .route("/thumbs/seq/{file}", get(seq_thumb))
         .route("/plugin/v1/view.txt", get(plugin_view))
@@ -394,6 +399,34 @@ enum ClientMsg {
     DeleteTheme {
         id: String,
     },
+    /// LUT tab (SPEC §14): a new LUT, a copy of `from` or one that changes nothing.
+    LutCreate {
+        name: String,
+        #[serde(default)]
+        from: Option<String>,
+    },
+    LutRename {
+        from: String,
+        to: String,
+    },
+    LutDelete {
+        name: String,
+    },
+    /// New control values (sent while dragging).
+    LutUpdate {
+        name: String,
+        grade: lut_core::Grade,
+        curves: lut_core::Curves,
+    },
+    /// Drop the imported table under the controls.
+    LutClearBase {
+        name: String,
+    },
+    /// Point one of Resolume's LUT effects (its `LUT 3D` parameter id) at this LUT's file.
+    LutApply {
+        name: String,
+        file_param: u64,
+    },
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<ServerCtx>) -> Response {
@@ -408,6 +441,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
     let mut structure = ctx.structure.clone();
     let mut runtime = ctx.runtime.clone();
     let mut appearance = ctx.appearance.subscribe();
+    let mut luts = ctx.luts.subscribe();
     // Log records go out only while this UI shows its Console tab; the stats (error count for
     // the tab's badge, dropped records) always.
     let mut logs: Option<broadcast::Receiver<LogRecord>> = None;
@@ -420,6 +454,10 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
         msg("runtime", &*runtime.borrow_and_update()),
         msg("log_stats", &stats),
         msg("appearance", &*appearance.borrow_and_update()),
+        {
+            luts.borrow_and_update();
+            msg("luts", &ctx.luts.view())
+        },
     ];
     for m in first {
         if socket.send(m).await.is_err() {
@@ -438,6 +476,13 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
             },
             r = appearance.changed() => match r {
                 Ok(()) => msg("appearance", &*appearance.borrow_and_update()),
+                Err(_) => return,
+            },
+            r = luts.changed() => match r {
+                Ok(()) => {
+                    luts.borrow_and_update();
+                    msg("luts", &ctx.luts.view())
+                }
                 Err(_) => return,
             },
             incoming = socket.recv() => {
@@ -461,6 +506,17 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                         | ClientMsg::DeleteTheme { .. }),
                     ) => {
                         theme_command(&ctx, cmd).await;
+                        continue;
+                    }
+                    Ok(
+                        cmd @ (ClientMsg::LutCreate { .. }
+                        | ClientMsg::LutRename { .. }
+                        | ClientMsg::LutDelete { .. }
+                        | ClientMsg::LutUpdate { .. }
+                        | ClientMsg::LutClearBase { .. }
+                        | ClientMsg::LutApply { .. }),
+                    ) => {
+                        lut_command(&ctx, cmd).await;
                         continue;
                     }
                     _ => {
@@ -629,9 +685,123 @@ fn handle(ctx: &ServerCtx, text: &str) {
         // Per session, in order (above).
         ClientMsg::SetTheme { .. }
         | ClientMsg::SaveTheme { .. }
-        | ClientMsg::DeleteTheme { .. } => return,
+        | ClientMsg::DeleteTheme { .. }
+        | ClientMsg::LutCreate { .. }
+        | ClientMsg::LutRename { .. }
+        | ClientMsg::LutDelete { .. }
+        | ClientMsg::LutUpdate { .. }
+        | ClientMsg::LutClearBase { .. }
+        | ClientMsg::LutApply { .. } => return,
     };
     let _ = ctx.commands.send(engine_cmd);
+}
+
+/// LUT commands of one UI, applied in the order it sent them (the session awaits each). Baking runs off the
+/// async workers; failures show as a notice.
+async fn lut_command(ctx: &ServerCtx, cmd: ClientMsg) {
+    let lib = ctx.luts.clone();
+    let effects = ctx.structure.borrow().lut_effects.clone();
+    let result = match cmd {
+        ClientMsg::LutApply { name, file_param } => lib.apply(&name, file_param).await,
+        cmd => tokio::task::spawn_blocking(move || match cmd {
+            ClientMsg::LutCreate { name, from } => lib.create(&name, from.as_deref()),
+            ClientMsg::LutRename { from, to } => lib.rename(&from, &to, &effects).map(|_| ()),
+            ClientMsg::LutDelete { name } => lib.delete(&name),
+            ClientMsg::LutUpdate {
+                name,
+                grade,
+                curves,
+            } => lib.update(&name, grade, curves),
+            ClientMsg::LutClearBase { name } => lib.clear_base(&name),
+            _ => Ok(()),
+        })
+        .await
+        .unwrap_or(Ok(())),
+    };
+    if let Err(e) = result {
+        log::warn!("LUT: {e}");
+        let _ = ctx
+            .commands
+            .send(EngineCommand::Notice(format!("LUT: {e}")));
+    }
+}
+
+#[derive(Deserialize)]
+struct LutQuery {
+    name: String,
+}
+
+/// The baked table for the preview: `size`³ little-endian f32 RGB triples, red fastest; headers `x-lut-rev` and
+/// `x-lut-size`.
+async fn lut_table(State(ctx): State<ServerCtx>, Query(q): Query<LutQuery>) -> Response {
+    match ctx.luts.table(&q.name) {
+        Some((rev, table)) => {
+            let size = table.size.to_string();
+            let body = tokio::task::spawn_blocking(move || table.to_f32_le_bytes())
+                .await
+                .unwrap_or_default();
+            (
+                [
+                    (header::CONTENT_TYPE, "application/octet-stream".to_owned()),
+                    (header::CACHE_CONTROL, "no-store".to_owned()),
+                    (
+                        header::HeaderName::from_static("x-lut-rev"),
+                        rev.to_string(),
+                    ),
+                    (header::HeaderName::from_static("x-lut-size"), size),
+                ],
+                body,
+            )
+                .into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Export: the LUT as a `.cube` download.
+async fn lut_cube(State(ctx): State<ServerCtx>, Query(q): Query<LutQuery>) -> Response {
+    let lib = ctx.luts.clone();
+    let name = q.name.clone();
+    match tokio::task::spawn_blocking(move || lib.cube_text(&name))
+        .await
+        .ok()
+        .flatten()
+    {
+        Some(text) => (
+            [
+                (header::CONTENT_TYPE, "text/plain; charset=utf-8".to_owned()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}.cube\"", q.name.replace('"', "")),
+                ),
+            ],
+            text,
+        )
+            .into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Import: the body is the `.cube` text, `name` the new LUT's name. `{ ok, name }` or `{ ok: false, error }`.
+async fn lut_import(
+    State(ctx): State<ServerCtx>,
+    Query(q): Query<LutQuery>,
+    body: String,
+) -> Response {
+    let lib = ctx.luts.clone();
+    let name = q.name.trim().to_owned();
+    let n = name.clone();
+    let result = tokio::task::spawn_blocking(move || lib.import(&n, &body))
+        .await
+        .unwrap_or(Ok(()));
+    match result {
+        Ok(()) => axum::Json(json!({ "ok": true, "name": name })).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            axum::Json(json!({ "ok": false, "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 /// Theme commands of one UI, applied in the order it sent them (the session awaits each).

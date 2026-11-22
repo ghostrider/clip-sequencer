@@ -547,6 +547,65 @@ impl State {
             }
         }
         out.extend(plugin_params);
+        // Effect parameters (notes §13, §18) of the composition, the layers and the clips. Only set by id in the
+        // app; the logical path here follows the one recorded for an FFGL effect (notes §13).
+        let effect_params =
+            |out: &mut Vec<(u64, String, String)>, video: &Value, ptr: String, path: String| {
+                for (ei, e) in video["effects"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                {
+                    let fx: String = e["name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .chars()
+                        .filter(|c| !c.is_whitespace())
+                        .collect::<String>()
+                        .to_lowercase();
+                    for (k, v) in e["params"].as_object().into_iter().flatten() {
+                        if is_param(v) {
+                            let p: String = k
+                                .chars()
+                                .filter(|c| !c.is_whitespace())
+                                .collect::<String>()
+                                .to_lowercase();
+                            out.push((
+                                v["id"].as_u64().unwrap(),
+                                format!(
+                                    "{ptr}/video/effects/{ei}/params/{}",
+                                    k.replace('~', "~0").replace('/', "~1")
+                                ),
+                                format!("{path}/video/effects/{fx}/effect/{p}"),
+                            ));
+                        }
+                    }
+                }
+            };
+        effect_params(
+            &mut out,
+            &self.comp["video"],
+            String::new(),
+            "/composition".into(),
+        );
+        for (li, l) in self.comp["layers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let lp = format!("/composition/layers/{}", li + 1);
+            effect_params(&mut out, &l["video"], format!("/layers/{li}"), lp.clone());
+            for (ci, c) in l["clips"].as_array().into_iter().flatten().enumerate() {
+                effect_params(
+                    &mut out,
+                    &c["video"],
+                    format!("/layers/{li}/clips/{ci}"),
+                    format!("{lp}/clips/{}", ci + 1),
+                );
+            }
+        }
         out
     }
 

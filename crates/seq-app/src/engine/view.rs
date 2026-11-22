@@ -26,6 +26,8 @@ pub struct StructureState {
     pub can_redo: bool,
     pub seq_layer: String,
     pub seq_prefix: String,
+    /// Resolume's LUT effects (composition, layers, live deck's clips) with their file paths (SPEC §14).
+    pub lut_effects: Vec<resolume_client::composition::LutEffect>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use clock_in::{ClockEvent, ClockMsg, ResolumeClock, TempoEstimator, Transport};
-use resolume_client::composition::{CompositionSnapshot, TempoController};
+use resolume_client::composition::{CompositionSnapshot, LutEffect, TempoController};
 use resolume_client::osc::OscSender;
 use resolume_client::ws::{ParamMsg, WsCommand, WsEvent};
 use seq_core::edit::EditOp;
@@ -71,6 +71,12 @@ pub enum EngineCommand {
     /// needed (SPEC §7.6). With `remove_orphans`, also clear `§` clips without a sequence.
     SyncSeqLayer {
         remove_orphans: bool,
+    },
+    /// Point one of Resolume's LUT effects at a `.cube` file (LUT tab, SPEC §14): a `set` on its `LUT 3D`
+    /// parameter. Shown at once in the LUT effect list; Resolume's update or next push confirms it.
+    SetLutFile {
+        file_param: u64,
+        path: String,
     },
 }
 
@@ -143,6 +149,8 @@ enum ParamTarget {
     Tempo,
     TempoPlay,
     TempoResync,
+    /// The `LUT 3D` file of one of Resolume's LUT effects (SPEC §14), by effect id.
+    LutFile(u64),
 }
 
 /// Resolume sends two `resync` updates per press (press and release, ~100 ms apart, no value;
@@ -228,6 +236,8 @@ pub struct Engine {
     resolume_clock: Option<ResolumeClock>,
     /// Ids and last known values of Resolume's tempo controller.
     tempo_ctl: Option<TempoController>,
+    /// Resolume's LUT effects from the last composition push (SPEC §14): shown in the LUT tab.
+    lut_effects: Vec<LutEffect>,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     last_resync: Option<Instant>,
@@ -308,6 +318,7 @@ impl Engine {
             clock_source: ClockSourceKind::Midi,
             resolume_clock: None,
             tempo_ctl: None,
+            lut_effects: Vec::new(),
             phase_synced: false,
             last_resync: None,
             ws_connected: false,
@@ -559,6 +570,7 @@ impl Engine {
             index,
             states,
             tempo,
+            lut_effects,
         } = snap;
         let old_live = self.index.as_ref().and_then(|i| i.live_deck.clone());
         let new_live = index.live_deck.clone();
@@ -566,8 +578,16 @@ impl Engine {
             t.as_ref()
                 .map(|t| (t.tempo_param, t.play_param, t.resync_param))
         };
-        let structural =
-            self.index.as_ref() != Some(&index) || tempo_ids(&self.tempo_ctl) != tempo_ids(&tempo);
+        let lut_ids = |l: &[LutEffect]| -> Vec<(u64, u64)> {
+            l.iter().map(|e| (e.effect_id, e.file_param)).collect()
+        };
+        let structural = self.index.as_ref() != Some(&index)
+            || tempo_ids(&self.tempo_ctl) != tempo_ids(&tempo)
+            || lut_ids(&self.lut_effects) != lut_ids(&lut_effects);
+        if lut_effects != self.lut_effects {
+            self.lut_effects = lut_effects;
+            self.structure_dirty = true;
+        }
         self.states = states;
         self.tempo_ctl = tempo;
         self.feed_resolume_state();
@@ -701,6 +721,10 @@ impl Engine {
             self.params.insert(t.play_param, ParamTarget::TempoPlay);
             self.params.insert(t.resync_param, ParamTarget::TempoResync);
         }
+        for e in &self.lut_effects {
+            self.params
+                .insert(e.file_param, ParamTarget::LutFile(e.effect_id));
+        }
         self.params.remove(&0);
         let ids: BTreeSet<u64> = self.params.keys().copied().collect();
         self.unacked.retain(|id| ids.contains(id));
@@ -823,6 +847,17 @@ impl Engine {
                     if let Some(clock) = &self.resolume_clock {
                         clock.resync(at);
                     }
+                }
+            }
+            ParamTarget::LutFile(effect_id) => {
+                let Some(path) = value.as_str() else { return };
+                if let Some(e) = self
+                    .lut_effects
+                    .iter_mut()
+                    .find(|e| e.effect_id == effect_id && e.path != path)
+                {
+                    e.path = path.to_owned();
+                    self.structure_dirty = true;
                 }
             }
         }
@@ -984,6 +1019,26 @@ impl Engine {
                             let _ = aux.send(Aux::SaveFailed(e));
                         }
                     });
+                }
+            }
+            EngineCommand::SetLutFile { file_param, path } => {
+                if !self.ws_connected {
+                    self.notice("LUT: not connected to Resolume");
+                    return;
+                }
+                let msg = serde_json::json!({
+                    "action": "set",
+                    "parameter": format!("/parameter/by-id/{file_param}"),
+                    "value": path,
+                });
+                let _ = self.ws_cmd.send(WsCommand::Raw(msg.to_string()));
+                if let Some(e) = self
+                    .lut_effects
+                    .iter_mut()
+                    .find(|e| e.file_param == file_param)
+                {
+                    e.path = path;
+                    self.structure_dirty = true;
                 }
             }
             EngineCommand::ClockSourceChanged { source } => {
@@ -1797,6 +1852,7 @@ impl Engine {
             can_redo: !self.redo.is_empty(),
             seq_layer: self.cfg.seq_layer.clone(),
             seq_prefix: self.cfg.seq_prefix.clone(),
+            lut_effects: self.lut_effects.clone(),
         }
     }
 

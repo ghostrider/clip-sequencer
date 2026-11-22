@@ -14,6 +14,7 @@ description = "Resolume clip sequencer: engine, storage, UI server"
 
 [dependencies]
 seq-core.workspace = true
+lut-core.workspace = true
 clock-in = { path = "../clock-in" }
 resolume-client = { path = "../resolume-client" }
 serde.workspace = true

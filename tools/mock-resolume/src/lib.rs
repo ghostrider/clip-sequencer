@@ -192,6 +192,11 @@ impl Mock {
         }
     }
 
+    /// Reads the composition JSON as the mock holds it now.
+    pub fn read<T>(&self, f: impl FnOnce(&Value) -> T) -> T {
+        f(&self.shared.state.lock().unwrap().comp)
+    }
+
     /// Mutates the composition JSON directly (e.g. rename a layer for a test) and pushes it.
     pub fn edit(&self, f: impl FnOnce(&mut Value)) {
         self.shared.apply(|s| {

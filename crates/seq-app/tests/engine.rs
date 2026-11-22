@@ -151,6 +151,41 @@ fn start_app_clock(
     (app, clock)
 }
 
+#[tokio::test]
+async fn lut_effects_are_listed_and_can_be_pointed_at_a_file() {
+    let h = harness().await;
+    let fx: serde_json::Value =
+        serde_json::from_str(include_str!("../../../docs/samples/lut-effect.json")).unwrap();
+    let file_param = fx["params"]["LUT 3D"]["id"].as_u64().unwrap();
+    h.mock
+        .edit(|v| v["layers"][1]["video"] = json!({"effects": [fx]}));
+    let s = h.structure(|s| !s.lut_effects.is_empty()).await;
+    assert_eq!(s.lut_effects[0].file_param, file_param);
+    assert!(matches!(
+        &s.lut_effects[0].place,
+        resolume_client::composition::LutPlace::Layer { layer: 2, .. }
+    ));
+
+    let path = r"C:\data\luts\Night.cube".to_owned();
+    h.app
+        .commands
+        .send(EngineCommand::SetLutFile {
+            file_param,
+            path: path.clone(),
+        })
+        .unwrap();
+    h.structure(|s| s.lut_effects[0].path == path).await;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while h.mock.read(|v| {
+            v["layers"][1]["video"]["effects"][0]["params"]["LUT 3D"]["value"] != path.as_str()
+        }) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the mock never got the new path");
+}
+
 impl Harness {
     async fn structure(&self, pred: impl Fn(&StructureState) -> bool) -> StructureState {
         let mut rx = self.app.outputs.structure.clone();

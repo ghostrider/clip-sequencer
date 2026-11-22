@@ -409,3 +409,60 @@ fn tempo_controller_ids_and_values() {
     v.as_object_mut().unwrap().remove("tempocontroller");
     assert_eq!(parse_composition_value(&v).unwrap().tempo, None);
 }
+
+#[test]
+fn lut_effects_on_composition_layer_and_clip() {
+    use resolume_client::composition::LutPlace;
+    // The LUT effect as Resolume 7.29 reports it (notes §18), put on the composition, layer 2 and clip 2/3.
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../docs/samples/lut-effect.json")).unwrap();
+    let mut v: Value = serde_json::from_str(DECK2).unwrap();
+    let with = |id: u64, path: &str| {
+        let mut e = fx.clone();
+        e["id"] = id.into();
+        e["params"]["LUT 3D"]["id"] = (id + 1).into();
+        e["params"]["LUT 3D"]["value"] = path.into();
+        e
+    };
+    v["video"] = serde_json::json!({ "effects": [ { "id": 1, "name": "Transform", "params": {} }, with(100, "C:/a.cube") ] });
+    layers_mut(&mut v)[1]["video"] = serde_json::json!({ "effects": [with(200, "")] });
+    clip_mut(&mut v, 2, 3)["video"]["effects"] = serde_json::json!([with(300, "C:/b.cube")]);
+    // An effect named LUT without a file parameter is not one.
+    clip_mut(&mut v, 2, 3)["video"]["effects"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"id": 9, "name": "LUT", "params": {}}));
+    let snap = parse_composition_value(&v).unwrap();
+    let got: Vec<(u64, u64, &str)> = snap
+        .lut_effects
+        .iter()
+        .map(|e| (e.effect_id, e.file_param, e.path.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (100, 101, "C:/a.cube"),
+            (200, 201, ""),
+            (300, 301, "C:/b.cube")
+        ]
+    );
+    assert_eq!(snap.lut_effects[0].place, LutPlace::Composition);
+    let layer_name = snap.index.layers[1].name.clone();
+    assert_eq!(
+        snap.lut_effects[1].place,
+        LutPlace::Layer {
+            layer: 2,
+            name: layer_name
+        }
+    );
+    assert!(matches!(
+        &snap.lut_effects[2].place,
+        LutPlace::Clip {
+            layer: 2,
+            column: 3,
+            ..
+        }
+    ));
+    // The samples without effects have none.
+    assert!(parse_composition(DECK1).unwrap().lut_effects.is_empty());
+}
