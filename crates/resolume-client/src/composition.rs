@@ -171,8 +171,8 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
     let mut clips = Vec::new();
     let mut states = HashMap::new();
     let mut lut_effects: Vec<LutEffect> = Vec::new();
-    let mut add_luts = |effects: Vec<RawEffect>, place: &dyn Fn() -> LutPlace| {
-        lut_effects.extend(effects.into_iter().filter_map(|e| e.lut(place())));
+    let mut add_luts = |effects: Vec<serde_json::Value>, place: &dyn Fn() -> LutPlace| {
+        lut_effects.extend(effects.into_iter().filter_map(|e| lut_effect(e, place())));
     };
     add_luts(raw.video.map(|v| v.effects).unwrap_or_default(), &|| {
         LutPlace::Composition
@@ -248,34 +248,34 @@ struct RawComposition {
 /// The `video` object of the composition or a layer: only its effects are read.
 #[derive(Deserialize)]
 struct RawEffects {
+    /// Kept as raw JSON and read one by one (`lut_effect`): effects vary a lot (a built-in "RenderPass" has
+    /// `"params": null`), and one odd effect must never make the whole composition unreadable.
     #[serde(default)]
-    effects: Vec<RawEffect>,
+    effects: Vec<serde_json::Value>,
 }
 
-/// One entry of `video.effects[]` (notes §13, §18).
+/// One LUT effect entry of `video.effects[]` (notes §13, §18).
 #[derive(Deserialize)]
 struct RawEffect {
     #[serde(default)]
     id: u64,
     #[serde(default)]
-    name: String,
-    #[serde(default)]
-    params: HashMap<String, RawSourceParam>,
+    params: Option<HashMap<String, RawSourceParam>>,
 }
 
-impl RawEffect {
-    fn lut(mut self, place: LutPlace) -> Option<LutEffect> {
-        if self.name != LUT_EFFECT {
-            return None;
-        }
-        let p = self.params.remove(LUT_FILE_PARAM)?;
-        (p.valuetype == "ParamFile" && p.id != 0).then(|| LutEffect {
-            effect_id: self.id,
-            file_param: p.id,
-            path: p.value.as_str().unwrap_or_default().to_owned(),
-            place,
-        })
+/// Resolume's LUT effect with its `LUT 3D` file parameter, or `None` for any other (or unreadable) effect.
+fn lut_effect(effect: serde_json::Value, place: LutPlace) -> Option<LutEffect> {
+    if effect.get("name").and_then(|n| n.as_str()) != Some(LUT_EFFECT) {
+        return None;
     }
+    let raw = RawEffect::deserialize(effect).ok()?;
+    let p = raw.params?.remove(LUT_FILE_PARAM)?;
+    (p.valuetype == "ParamFile" && p.id != 0).then(|| LutEffect {
+        effect_id: raw.id,
+        file_param: p.id,
+        path: p.value.as_str().unwrap_or_default().to_owned(),
+        place,
+    })
 }
 
 #[derive(Deserialize)]
@@ -347,7 +347,7 @@ struct RawVideo {
     #[serde(default)]
     sourceparams: Option<std::collections::HashMap<String, RawSourceParam>>,
     #[serde(default)]
-    effects: Vec<RawEffect>,
+    effects: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]

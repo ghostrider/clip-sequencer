@@ -427,6 +427,8 @@ fn lut_effects_on_composition_layer_and_clip() {
     v["video"] = serde_json::json!({ "effects": [ { "id": 1, "name": "Transform", "params": {} }, with(100, "C:/a.cube") ] });
     layers_mut(&mut v)[1]["video"] = serde_json::json!({ "effects": [with(200, "")] });
     clip_mut(&mut v, 2, 3)["video"]["effects"] = serde_json::json!([with(300, "C:/b.cube")]);
+    // Effects of other shapes don't break the composition: Resolume's "RenderPass" has `"params": null`.
+    layers_mut(&mut v)[0]["video"] = serde_json::json!({ "effects": [ { "id": 5, "name": "RenderPass", "params": null }, { "id": 6, "name": "LUT", "params": null }, 7 ] });
     // An effect named LUT without a file parameter is not one.
     clip_mut(&mut v, 2, 3)["video"]["effects"]
         .as_array_mut()
