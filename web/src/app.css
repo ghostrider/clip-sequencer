@@ -124,6 +124,11 @@ button, input, select { font: inherit; }
 .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* ---- additions (not in the mockup), using tokens only ---- */
+/* Compact top bar (2026-11-22): less padding and lower tabs than the mockup. */
+.topbar { gap: 12px; padding: 6px 14px; }
+.topbar .logo { font-size: 15px; }
+.topbar .tab { min-height: 28px; padding: 0 10px; }
+.topbar .btn { min-height: 30px; }
 .banner { padding: 8px 16px; background: var(--err-bg); color: var(--err-text); border-bottom: 1px solid var(--err-line); font-size: 12px; }
 .body { min-height: 0; }
 .editor { overflow: auto; }
