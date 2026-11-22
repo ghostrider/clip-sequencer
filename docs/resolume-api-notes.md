@@ -341,3 +341,26 @@ on Pause, reset on Stop) and takes its phase from events: a **Resync** press mar
 a beat (both arrive within WebSocket latency). Until the first resync the grid is not in phase with
 Resolume's beat. Still open: whether Resolume's own beat restarts at bar 1 on Resync (check by eye), and
 Ableton Link.
+
+## 18. LUTs: an FFGL effect with a 3D texture, and Resolume's own LUT effect (probed for M18, 2026-11-22, Arena 7.29.0)
+
+Can the app colour-grade Resolume's output live? A throwaway FFGL effect "1000A LUT Probe" (`LUT` text param,
+`Mix`; a procedural 3D LUT chosen by name, re-uploaded only when the name changes; not kept in the repo) on a
+clip, a layer and the composition, then Resolume's built-in **LUT** effect on the same clip. The user made the
+changes in Resolume; the app side only read the composition, except one WebSocket `set` (agreed with the user).
+
+| Question | Result | Status |
+|---|---|---|
+| FFGL effect on composition, layer, clip | appears in `video.effects[]` of the composition, the layer and the clip; a text param is `{"valuetype":"ParamString","id":…,"value":"warm65"}`, the typed value is in the composition JSON; a standard float is `ParamRange` 0–1 | ✅ |
+| 3D texture in Resolume's FFGL context | works: `GL_RGB16F` 33³ and 65³ via `glTexImage3D`/`glTexSubImage3D`, trilinear lookup; GL 4.1 (Quadro T2000), `GL_MAX_3D_TEXTURE_SIZE` 16384. Text param changes arrive by `SetTextParameter` on a host thread, not the render thread. | ✅ (by eye) |
+| Upload time | not measured (the probe's log line after the upload was never written; cause not found) | ❓ |
+| Resolume's **LUT** effect (`name` `LUT`, idstring `c_374f5d67-85db-4fa7-afd8-d86621b6926e`) | params `LUT 3D` (`ParamFile`, `value` = full path, default `C:\Program Files\Resolume Arena\luts\Elenno.cube`) and `Opacity` (`ParamRange` 0–1); the usual `bypassed` and `mixer` | ✅ |
+| A `.cube` anywhere on disk | the file picker takes any path (a 17³ `.cube` with `TITLE` and `LUT_3D_SIZE`, R fastest, applied correctly) | ✅ |
+| The file is **overwritten** while in use | Resolume **reloads it by itself**, within about a second | ✅ (by eye) |
+| The file is **replaced by a rename** (temp file renamed over it) | reloaded by itself as well, "pretty quickly" | ✅ (by eye) |
+| WS `set` `/parameter/by-id/<LUT 3D id>` with another path | accepted; the composition JSON shows the new path and the picture changes to that file | ✅ |
+| 1D LUTs, sizes above 17³, `DOMAIN_MIN/MAX` | not probed | ❓ |
+
+Result: Resolume's own LUT effect is enough for live grading. The app writes a `.cube` (temp file + rename), every
+LUT effect pointing at that file reloads, and the app can point an effect at a file over the WebSocket. No own
+plugin is needed (M18 decision, 2026-11-22).

@@ -185,6 +185,39 @@ Asked for on 2026-11-19: follow Resolume's tempo when no MIDI clock is used. Pro
       Troubleshooting, Glossary, FAQ, Interface, Introduction, Installation, Quick start); README, changelog,
       landing page.
 
+## M18 — LUT editor, applied through Resolume's LUT effect  (concept agreed 2026-11-22, probe done, not started)
+Asked for on 2026-11-22: build LUTs in the app and apply them in Resolume live. Probed: notes §18. Resolume's
+own **LUT** effect reloads its `.cube` file by itself when the file changes, and its path can be set over the
+WebSocket, so the user chose it over an own FFGL plugin (2026-11-22; the plugin idea is dropped).
+- **Applying:** the app writes each library LUT as `<data-dir>/luts/<name>.cube`, always as a temp file renamed over
+  the old one. Resolume's LUT effect on a clip, layer, group or the composition points at that file (`LUT 3D`,
+  `ParamFile`); its `Opacity` is the mix. It keeps working without the sequencer (the file stays on disk).
+- **Live edits:** dragging a control rebakes and rewrites the file, throttled (about 10 writes per second at most,
+  the last value always written); off the engine task. Every LUT effect using that file updates.
+- **LUT library** in a new LUT tab:
+  - library actions: new, duplicate, rename, delete, import `.cube` (1D/3D, resampled to 33³), export;
+  - grading controls: exposure, contrast, temperature/tint, saturation, and lift/gamma/gain per channel;
+  - **RGB curves** (master + R, G, B, monotone spline) from the start;
+  - an imported table can be the base under the controls;
+  - before/after preview (WebGL2, same baked table) on bundled test images and clip thumbnails.
+- **Binding by reference:** the LUT effect's `LUT 3D` path is the link, saved by Resolume with the composition.
+  - The app finds LUT effects in the composition JSON whose path is in its luts folder ("used by").
+  - "Apply to…" lists all LUT effects and sets the chosen one's `LUT 3D` over the WebSocket.
+  - Renaming a LUT renames the file and rewrites the path of the effects using it; deleting warns when in use.
+- **Code and storage:** colour math only in a new pure crate `lut-core`; `<data-dir>/luts/<name>.lut.json`
+  (versioned: params, curves, optional imported base table) next to the baked `<name>.cube`.
+
+Tasks:
+- [x] Probe (2026-11-22, notes §18): FFGL effect params at composition, layer and clip level; a 3D texture in an
+      FFGL effect works; Resolume's LUT effect: `LUT 3D` path, reload on overwrite and on rename, path set over WS.
+- [ ] Check before relying on them: Resolume with a 33³ `.cube` (probed only 17³), `DOMAIN_MIN/MAX`, and how fast
+      it reloads during a fast drag (pick the write throttle from it).
+- [ ] `lut-core`: params, curves, bake to 33³, `.cube` read/write, tests.
+- [ ] App: library storage, throttled atomic `.cube` writes, WS commands, LUT effect discovery and "apply to",
+      mock-resolume LUT effect.
+- [ ] Web UI: LUT tab, library, controls, curve editor, preview, import/export, "used by", "apply to".
+- [ ] Docs: SPEC section, manual page with screenshots, README, changelog.
+
 ## M14 — In-app update  (planned 2026-11-04, not started)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.
