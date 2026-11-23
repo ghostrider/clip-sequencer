@@ -13,7 +13,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 | C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | should |
 | D | In-app update check (M14, planned 2026-11-04) | L | should, or move to 0.6 |
 | E | Start quantization (next bar / next beat; SPEC §3, §13) | M | **must** (decided 2026-11-23) |
-| G | Cue, mute/solo, pass conditions, alternatives, record, sections | L | **must** (approved 2026-11-23) |
+| G | Cue, mute/solo, pass conditions, alternatives, record, sections, pre-show check | L | **must** (approved 2026-11-23) |
 | F | Housekeeping: stale M11c boxes in PLAN, dependency PRs, LUT effects in layer groups | S | must (small) |
 
 ---
@@ -128,7 +128,14 @@ Approved for 0.5 from the suggestion list. Each still needs a SPEC section befor
 - [ ] **G6 Record from Resolume:** arm, click clips in Resolume in time, they land on the grid (snapped to 1/16).
 - [ ] **G7 Section markers:** named sections ("Intro", "Drop") and 8/16/32-bar guide lines in the editor.
 
+- [ ] **G16 Pre-show check:** one button that checks all sequences of the composition and lists what would go
+      wrong live: unresolved clips, missing layers, Beat Snap on in Resolume, clips with their own transition
+      (they ignore A), clips shorter than their step that don't loop. Uses data the app already has; it needs
+      a probe only for Beat Snap and clip loop mode, and their fields are not in the notes yet.
+
 Rejected 2026-11-23: performance view, rehearse without Resolume, copy sequences between decks/compositions.
+Not for now (2026-11-23): MIDI controller mapping, fill button, half/double time, chain sequences, shift lane,
+pattern fill.
 
 **Format v4** therefore carries: lane `transition` (A), `start` values (E), step conditions (G4), step
 alternatives (G5) and sections (G7). Design them together, then one bump and one migration.
