@@ -13,6 +13,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 | C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | should |
 | D | In-app update check (M14, planned 2026-11-04) | L | should, or move to 0.6 |
 | E | Start quantization (next bar / next beat; SPEC §3, §13) | M | **must** (decided 2026-11-23) |
+| G | Cue, mute/solo, pass conditions, alternatives, record, sections | L | **must** (approved 2026-11-23) |
 | F | Housekeeping: stale M11c boxes in PLAN, dependency PRs, LUT effects in layer groups | S | must (small) |
 
 ---
@@ -112,6 +113,25 @@ Needs a format change too, so it goes into v4 together with A (one format bump).
 - [ ] Dependency PRs: cargo, npm and actions minor bumps (#15–#17) merge; **TypeScript 7 (#12)** is a major bump:
       check `npm run check` and the Svelte tooling first, or hold it.
 - [ ] LUT effects inside layer groups are not found yet (M18 note): small, could ride along.
+
+## G. Performance and editing features (approved 2026-11-23)
+
+Approved for 0.5 from the suggestion list. Each still needs a SPEC section before it is built.
+
+- [ ] **G1 Cue next sequence:** while one plays, cue another; it starts at the next bar, at the end of the current
+      pass, or at the next 8/16 bars. Shares the quantization of E.
+- [ ] **G2 Mute / solo lane live:** a muted lane keeps counting but sends no triggers and comes back in time at its
+      next step.
+- [ ] **G4 Pass conditions per step:** play a step only on some passes ("every 2nd", "last pass only", "not on
+      the first"). Format v4.
+- [ ] **G5 Alternatives per step:** 2–4 clips per step, picked at random or in rotation each pass. Format v4.
+- [ ] **G6 Record from Resolume:** arm, click clips in Resolume in time, they land on the grid (snapped to 1/16).
+- [ ] **G7 Section markers:** named sections ("Intro", "Drop") and 8/16/32-bar guide lines in the editor.
+
+Rejected 2026-11-23: performance view, rehearse without Resolume, copy sequences between decks/compositions.
+
+**Format v4** therefore carries: lane `transition` (A), `start` values (E), step conditions (G4), step
+alternatives (G5) and sections (G7). Design them together, then one bump and one migration.
 
 ## Proposed order
 1. F (cleanup) and the probe for A → decide the format question.
