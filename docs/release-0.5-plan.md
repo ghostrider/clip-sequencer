@@ -10,8 +10,8 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 |---|------|------|----------|
 | A | Layer transitions, restored when the sequence stops (new M19) | L | **must**, headline feature |
 | B | Open live and Windows checks from M6, M13, M15, M18, M10 soak | S–M | **must**, before tagging |
-| C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | should |
-| D | In-app update check (M14, planned 2026-11-04) | L | should, or move to 0.6 |
+| C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | **must** (decided 2026-11-23) |
+| D | In-app update check (M14, planned 2026-11-04) | L | **must** (decided 2026-11-23) |
 | E | Start quantization (next bar / next beat; SPEC §3, §13) | M | **must** (decided 2026-11-23) |
 | G | Cue, mute/solo, pass conditions, alternatives, record, sections, pre-show check | L | **must** (approved 2026-11-23) |
 | F | Housekeeping: stale M11c boxes in PLAN, dependency PRs, LUT effects in layer groups | S | must (small) |
@@ -91,13 +91,13 @@ so there is **no "remove all transitions" button**.
 - [ ] M15: Windows: window and splash colours, fonts in WebView2, zip size.
 - [ ] M18: Resolume with a 33³ `.cube`, `DOMAIN_MIN/MAX`, reload speed during a fast drag (sets the write throttle).
 
-## C. Started twice from UI and `§` clip (SPEC §7.1, known limitation)
+## C. Started twice from UI and `§` clip (SPEC §7.1, known limitation; in 0.5, decided 2026-11-23)
 Fix already sketched in the SPEC: starting a running sequence keeps the run and its `§` link instead of
 restarting it as a UI start. Decide: should a second start still jump back to step 1 (explicit restart), or be
 ignored? Proposal: from the UI, ▶ on a running sequence restarts it but keeps the `§` link; the `§` clip
 connecting while the sequence runs only adopts the run.
 
-## D. In-app update (M14)
+## D. In-app update (M14; in 0.5, decided 2026-11-23)
 Planned in detail in `docs/PLAN.md`. Still open: how the binary is replaced. If that decision doesn't come soon,
 ship **check only** in 0.5 (menu entry, dialog with notes, "open release page") and the replacement in 0.6.
 That way the check, the privacy texts and the CLI `--check-update` go out now.
