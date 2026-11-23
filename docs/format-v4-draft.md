@@ -135,7 +135,8 @@ Runtime (goes into SPEC §7.7):
   step and in the pre-show check.
 - Validation: `length` 0–256 (16 bars); `blend` 1–64 characters.
 
-Editor display (goes into SPEC §9.3; a new colour token `--fade` in `tokens.css`, `themes.ts` and the mockup):
+Editor display (goes into SPEC §9.3; a new colour token `--fade` in `tokens.css`, `themes.ts` and the mockup;
+sketch: `docs/images/transition-fade-sketch.png`):
 - **Fade wedge:** a ramp at the left edge of the step block, rising from bottom left to top right, drawn on the
   grid scale, so its width **is** the fade length (a 1-beat fade covers the first beat of the block). Fill
   `--fade`, translucent, under the name.
@@ -145,7 +146,7 @@ Editor display (goes into SPEC §9.3; a new colour token `--fade` in `tokens.css
 - **Cut (`0`) set on a step** over a lane default: a short vertical bar at the left edge instead of a wedge.
 - **Fade longer than the step:** the wedge runs to the block's right edge and ends in a small `›` (the next step
   starts while this fade still runs).
-- **Warnings** (capped at 10 s, unknown blend mode, clip with its own transition): the label in `--warn`, the
+- **Warnings** (capped at 10 s, unknown blend mode, clip with its own transition): the label in `--err-text` with ⚠, the
   reason as a tooltip and in the inspector.
 - Steps with the original or Resolume's own transition show nothing.
 - Lane header: the lane default as a small chip `↗ 1 beat`, click to edit; inspector: the step's transition
