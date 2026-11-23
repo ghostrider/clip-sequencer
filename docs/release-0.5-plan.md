@@ -92,15 +92,26 @@ so there is **no "remove all transitions" button**.
 - [ ] M18: Resolume with a 33³ `.cube`, `DOMAIN_MIN/MAX`, reload speed during a fast drag (sets the write throttle).
 
 ## C. Started twice from UI and `§` clip (SPEC §7.1, known limitation; in 0.5, decided 2026-11-23)
-Fix already sketched in the SPEC: starting a running sequence keeps the run and its `§` link instead of
-restarting it as a UI start. Decide: should a second start still jump back to step 1 (explicit restart), or be
-ignored? Proposal: from the UI, ▶ on a running sequence restarts it but keeps the `§` link; the `§` clip
-connecting while the sequence runs only adopts the run.
+Decided 2026-11-23:
+- **▶ in the app on a running sequence** restarts it from step 1 with a fresh snapshot, but **keeps its `§` link**:
+  clearing the SEQ layer still stops it, and the `§` clip stays the connected one.
+- **The `§` clip connecting while the sequence runs** (started from the app) **adopts the run**: no jump back to
+  step 1, the run is now linked to that `§` clip.
+- SPEC §7.1: replace the "known limitation" paragraph with these rules; engine tests for both orders.
 
 ## D. In-app update (M14; in 0.5, decided 2026-11-23)
-Planned in detail in `docs/PLAN.md`. Still open: how the binary is replaced. If that decision doesn't come soon,
-ship **check only** in 0.5 (menu entry, dialog with notes, "open release page") and the replacement in 0.6.
-That way the check, the privacy texts and the CLI `--check-update` go out now.
+Planned in `docs/PLAN.md` (M14). Decided 2026-11-23: **full replacement** (option 3 of: check only /
+download and open the folder / replace). Outline for the SPEC section:
+- Help → Check for updates… shows the version and notes; **Install** downloads the zip to a temp folder and
+  verifies it against `SHA256SUMS.txt` (and the signature once releases are signed).
+- Not while a sequence runs (the button says why). The app quits; a small helper (shipped in the zip, or the
+  new exe in a helper mode) waits for it to exit, moves the old files of the `clip-sequencer` folder aside, moves
+  the new ones in and starts the new version. The data folder is never touched.
+- The old files are deleted only after the new version has started and reported OK; otherwise the helper puts
+  them back and starts the old version (rollback).
+- Folder not writable, download or check failed → say why and offer the release page instead.
+- The FFGL plugin is not replaced by this (Resolume may hold it); the existing "plugin update available" hint
+  takes over after the restart.
 
 ## E. Start quantization (in 0.5, decided 2026-11-23)
 The `start` field already exists (`"immediate"`). Add `"next_beat"` and `"next_bar"` (bar phase from the start of

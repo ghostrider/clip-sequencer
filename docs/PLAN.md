@@ -227,8 +227,9 @@ details in SPEC first (new section), then build it.
 Decided (2026-11-04):
 - **Only by hand:** a menu entry **Help → Check for updates…** (desktop app, and the browser UI's menu bar). No
   automatic or background checks, no check at start-up, no setting for it.
-- **If a newer release is found:** show its version and release notes, and offer to install it. How the files are
-  replaced is **to be decided later** (see open points).
+- **If a newer release is found:** show its version and release notes, and offer to install it.
+- **Binary replacement (decided 2026-11-23): full replacement** by a helper after the app quits, with rollback
+  (outline in `docs/release-0.5-plan.md` §D). Part of release 0.5.0.
 
 Open points for the SPEC section:
 - **Privacy texts:** the privacy note and the code signing policy (`site/landing/privacy.html`,
