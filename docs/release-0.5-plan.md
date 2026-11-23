@@ -130,8 +130,8 @@ Approved for 0.5 from the suggestion list. Each still needs a SPEC section befor
 
 - [ ] **G16 Pre-show check:** one button that checks all sequences of the composition and lists what would go
       wrong live: unresolved clips, missing layers, Beat Snap on in Resolume, clips with their own transition
-      (they ignore A), clips shorter than their step that don't loop. Uses data the app already has; it needs
-      a probe only for Beat Snap and clip loop mode, and their fields are not in the notes yet.
+      (they ignore A), clips shorter than their step that don't loop. Uses data the app already has. Beat Snap
+      is recorded (notes §2: `clipbeatsnap`); the clip play mode field (Loop / Play once …) still needs a probe.
 
 Rejected 2026-11-23: performance view, rehearse without Resolume, copy sequences between decks/compositions.
 Not for now (2026-11-23): MIDI controller mapping, fill button, half/double time, chain sequences, shift lane,
