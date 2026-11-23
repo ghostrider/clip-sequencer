@@ -196,11 +196,13 @@ New edit operations (with undo): set sequence start, set/clear lane transition, 
 add/remove/reorder/relink a step choice and set pick, add/move/rename/delete a section. The step's flat serde
 form (`{"clip": …, "length": 8}`) gains the optional `when`, `choices`, `pick`.
 
-## Decisions for Uli
+## Decisions (Uli, 2026-11-23)
 
-1. **A step whose condition is false:** nothing is sent and the previous clip keeps playing (proposed: like a
-   failed trig condition on a drum machine), **or** the layer is cleared (the step acts as a rest)?
-2. **Pass number inside a looping lane:** all loops of a short lane in one pass count as that pass (proposed),
-   **or** each loop of the lane counts on its own?
-3. **Random pick:** allow the same option twice in a row (proposed, simplest), **or** never repeat the last one?
-4. **MIDI Start sets the bar phase** for quantized starts (proposed; it still never restarts sequences). OK?
+1. **A step whose condition is false:** nothing is sent; the previous clip keeps playing.
+2. **Pass number inside a looping lane:** all loops of a short lane in one pass count as that pass.
+3. **Random pick:** the same option may come twice in a row.
+4. **MIDI Start sets the bar phase** for quantized starts (it still never restarts sequences); Resync does the
+   same with the Resolume tempo source.
+
+Still open: transitions per step instead of per lane (see the conversation of 2026-11-23); this section of the
+draft is updated once that is settled.
