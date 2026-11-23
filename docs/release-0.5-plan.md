@@ -12,7 +12,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 | B | Open live and Windows checks from M6, M13, M15, M18, M10 soak | S–M | **must**, before tagging |
 | C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | should |
 | D | In-app update check (M14, planned 2026-11-04) | L | should, or move to 0.6 |
-| E | Start quantization (next bar / next beat; SPEC §3, §13) | M | could, pairs well with A |
+| E | Start quantization (next bar / next beat; SPEC §3, §13) | M | **must** (decided 2026-11-23) |
 | F | Housekeeping: stale M11c boxes in PLAN, dependency PRs, LUT effects in layer groups | S | must (small) |
 
 ---
@@ -67,7 +67,7 @@ so there is **no "remove all transitions" button**.
   means **format version 4** with a v3→v4 migration (CLAUDE.md: don't change the format without asking).
   Alternative without a format change: a per-layer setting in `settings.json`, the same for every sequence on that
   layer. Proposal: in the lane, because different sequences want different fades.
-- **Duration unit:** grid units that follow the tempo (proposed) or plain seconds.
+- **Duration unit:** decided 2026-11-23: **beats**, converted to seconds at the current tempo.
 - **Restore point:** at the release of the layer (proposed). Alternative: only when *all* sequences have stopped.
 
 ### Tasks (draft)
@@ -101,11 +101,10 @@ Planned in detail in `docs/PLAN.md`. Still open: how the binary is replaced. If 
 ship **check only** in 0.5 (menu entry, dialog with notes, "open release page") and the replacement in 0.6.
 That way the check, the privacy texts and the CLI `--check-update` go out now.
 
-## E. Start quantization (optional)
+## E. Start quantization (in 0.5, decided 2026-11-23)
 The `start` field already exists (`"immediate"`). Add `"next_beat"` and `"next_bar"` (bar phase from the start of
 the clock or from Resolume's Resync). It fits with transitions: a fade that starts on the bar sounds right.
-Needs a format change too, so it should go into v4 together with A if it is wanted at all. Otherwise leave it
-for 0.6.
+Needs a format change too, so it goes into v4 together with A (one format bump).
 
 ## F. Housekeeping
 - [ ] PLAN.md: M11c and the plugin docs are shipped since 0.2.0, but their boxes are still open; M10/M11 still say
