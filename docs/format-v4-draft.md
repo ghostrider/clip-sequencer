@@ -8,7 +8,7 @@ Version 4 carries everything in 0.5 that needs to be saved, in one bump:
 | Feature | Where in the file | Plan |
 |---|---|---|
 | Quantized start | `sequence.start` (object instead of a string) | E |
-| Layer transition | `lane.transition` (optional) | A |
+| Transition per step | `step.transition`, default `lane.transition` (both optional) | A |
 | Pass conditions | `step.when` (optional) | G4 |
 | Alternatives per step | `step.choices` + `step.pick` (optional) | G5 |
 | Section markers | `sequence.sections` (optional) | G7 |
@@ -47,7 +47,7 @@ the remembered "original" transitions (their own file, release plan §A).
                   "pick": "cycle" },
                 { "clip": null, "length": 16 },
                 { "clip": { "id": 1712400, "name": "Strobe" }, "length": 16,
-                  "when": { "is": "last" } }
+                  "when": { "is": "last" }, "transition": { "length": 0 } }
               ]
             },
             {
@@ -94,7 +94,10 @@ Same shape as `repeat`: an object with `mode`.
 - A cue (G1) uses this value by default; the cue menu can override it per cue, e.g. "end of the current pass" of
   another sequence. That choice is not saved.
 
-### `lane.transition` (A) — new, optional
+### `step.transition` and `lane.transition` (A) — new, optional
+
+Decided 2026-11-23: the transition is set **per step** ("how this clip comes in"), with an optional **default per
+lane**. Resolume's layer transition is only the means: the app sets it just before each step triggers.
 
 ```json
 "transition": { "length": 4, "blend": "Alpha" }
@@ -102,18 +105,51 @@ Same shape as `repeat`: an object with `mode`.
 
 | Field | Meaning |
 |---|---|
-| (field absent) | **Resolume's own**: the app never touches this layer's transition. Default. |
 | `length` | Fade length in **sixteenths**, like step lengths (4 = 1 beat, 16 = 1 bar). `0` = cut. Required. The UI shows and edits it in beats (1/4, 1/2, 1, 2, 4 …). |
-| `blend` | Resolume blend mode name, e.g. `"Alpha"`, `"Add"`. Optional: absent = keep the layer's current blend mode and set only the length. |
+| `blend` | Resolume blend mode name, e.g. `"Alpha"`, `"Add"`. Optional: absent = keep the layer's blend mode as it was before the sequence started. |
 
-- Stored in sixteenths so it uses the same unit as every other length in the file; "beats" is how the UI shows
-  it (decided 2026-11-23: the fade length follows the tempo).
-- The app converts it to seconds at the current tempo and sends it again when the tempo changes while the
-  sequence runs (throttled). Resolume's limit is 10 s: a longer value is capped, and the lane shows a warning.
-- `blend` is checked against the layer's own option list from the composition at run time, not in the file (the
-  list comes from Resolume and can change between versions). An unknown name: only the length is set, warning
-  in the lane and in the pre-show check (G16).
-- Validation: `length` ≤ 256 (16 bars); `blend` not empty, at most 64 characters.
+Which transition a step gets:
+
+1. its own `step.transition`, else
+2. the lane's `lane.transition`, else
+3. if **any** step of the lane (or the lane default) has a transition: the layer's **original** transition (the one
+   it had before the sequence took it). So a step without a value always looks the same, whatever ran before it.
+4. If neither the lane nor any of its steps has a transition: **Resolume's own**. The app never touches this
+   layer's transition.
+
+Runtime (goes into SPEC §7.7):
+- The value is sent **ahead of the step**, not with the trigger: at the latest one sixteenth before the step,
+  and only if it differs from what the layer has now. The trigger itself still goes out exactly on its tick.
+  The scheduler (pure) already knows the next step, its pass condition and its pick, so this works with `when`
+  and `choices`. A step at the very start of a run: the set goes out with the start, before the first trigger.
+  *The probe must confirm that this order holds and that changing the value doesn't disturb a fade still
+  running.*
+- The length is converted to seconds at the current tempo. Resolume's limit is 10 s: a longer value is capped, and
+  the step shows a warning.
+- With `choices`, the step's transition applies to whichever option is picked. A step that doesn't play (`when`)
+  sets nothing.
+- When the sequence releases the layer, the original comes back (release plan §A).
+- `blend` is checked against the layer's own option list at run time (the list comes from Resolume). Unknown name:
+  only the length is set; warning on the step and in the pre-show check (G16).
+- Clips with their own transition in Resolume (`layer_determined: false`) ignore the layer value: warning on the
+  step and in the pre-show check.
+- Validation: `length` 0–256 (16 bars); `blend` 1–64 characters.
+
+Editor display (goes into SPEC §9.3; a new colour token `--fade` in `tokens.css`, `themes.ts` and the mockup):
+- **Fade wedge:** a ramp at the left edge of the step block, rising from bottom left to top right, drawn on the
+  grid scale, so its width **is** the fade length (a 1-beat fade covers the first beat of the block). Fill
+  `--fade`, translucent, under the name.
+- **Label** in the block's length line: `↗ 1 beat · Alpha` (blend only when set). In narrow blocks only `↗ 1`.
+- **Own vs. lane default:** a step's own transition is drawn solid; one inherited from the lane default only as an
+  outline (dashed), so you see at a glance which steps differ.
+- **Cut (`0`) set on a step** over a lane default: a short vertical bar at the left edge instead of a wedge.
+- **Fade longer than the step:** the wedge runs to the block's right edge and ends in a small `›` (the next step
+  starts while this fade still runs).
+- **Warnings** (capped at 10 s, unknown blend mode, clip with its own transition): the label in `--warn`, the
+  reason as a tooltip and in the inspector.
+- Steps with the original or Resolume's own transition show nothing.
+- Lane header: the lane default as a small chip `↗ 1 beat`, click to edit; inspector: the step's transition
+  (inherit / own: length in beats, blend mode list from the layer).
 
 ### `step.when` (G4) — new, optional
 
@@ -174,7 +210,7 @@ A step can hold up to 4 options: the step's own `clip` (or `column`) is option 1
 ## Validation (additions to `seq_core::validate`)
 
 - `start.bars` ∈ {1, 2, 4, 8, 16} and only with `mode: "bar"`.
-- `transition.length` 0–256; `blend` 1–64 characters.
+- `transition.length` (step and lane) 0–256; `blend` 1–64 characters.
 - `when`: known `is`; `pass`/`of` only with `cycle`, in range.
 - `choices`: 1–3 entries, matching the lane mode; columns ≥ 1; `pick` only with `choices`.
 - `sections`: sorted, unique `at`, names 1–64 characters, at most 64.
@@ -192,9 +228,9 @@ A step can hold up to 4 options: the step's own `clip` (or `column`) is option 1
 
 ## Edit protocol (SPEC §9.6)
 
-New edit operations (with undo): set sequence start, set/clear lane transition, set/clear step condition,
+New edit operations (with undo): set sequence start, set/clear lane default transition, set/clear step transition, set/clear step condition,
 add/remove/reorder/relink a step choice and set pick, add/move/rename/delete a section. The step's flat serde
-form (`{"clip": …, "length": 8}`) gains the optional `when`, `choices`, `pick`.
+form (`{"clip": …, "length": 8}`) gains the optional `when`, `choices`, `pick`, `transition`.
 
 ## Decisions (Uli, 2026-11-23)
 
@@ -204,5 +240,4 @@ form (`{"clip": …, "length": 8}`) gains the optional `when`, `choices`, `pick`
 4. **MIDI Start sets the bar phase** for quantized starts (it still never restarts sequences); Resync does the
    same with the Resolume tempo source.
 
-Still open: transitions per step instead of per lane (see the conversation of 2026-11-23); this section of the
-draft is updated once that is settled.
+5. **Transitions per step with a per-lane default**, not per clip; the editor draws the fade on the step.

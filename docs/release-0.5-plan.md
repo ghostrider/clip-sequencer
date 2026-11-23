@@ -8,7 +8,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 
 | # | Item | Size | Proposal |
 |---|------|------|----------|
-| A | Layer transitions, restored when the sequence stops (new M19) | L | **must**, headline feature |
+| A | Transitions per step (lane default), through the layer transition, restored when the sequence stops (new M19) | L | **must**, headline feature |
 | B | Open live and Windows checks from M6, M13, M15, M18, M10 soak | S–M | **must**, before tagging |
 | C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | **must** (decided 2026-11-23) |
 | D | In-app update check (M14, planned 2026-11-04) | L | **must** (decided 2026-11-23) |
@@ -19,6 +19,10 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 ---
 
 ## A. Layer transitions (proposed M19)
+
+**Changed 2026-11-23:** the transition is chosen **per step**, with a default per lane; the app sets the layer
+transition just before each step. Details and the editor display: `docs/format-v4-draft.md`. The text below
+still says "lane" where it means "the sequence holding the layer"; the restore logic is unchanged.
 
 **Goal:** a lane can set its layer's transition (duration and blend mode) while the sequence runs. When the
 sequence stops, the layer gets back exactly the transition it had before. The user never has to clean up by hand,
