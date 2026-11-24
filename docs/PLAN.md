@@ -74,13 +74,13 @@ Done when: every [verify] item is answered in `resolume-api-notes.md`, and SPEC.
 - [x] Disk cache with change detection; cached thumbnails for inactive decks.
 - [x] Sequence mosaic rendering (`image` crate) and "Push thumbnail to Resolume".
 
-## M10 — Hardening  ⟵ next
+## M10 — Hardening  (soak test open, see Release 0.5.0)
 - [ ] Long-run test (2 h with mock, simulated 128 BPM): no drift between tick count and triggers.
 - [x] Resolume restart, WS drop, MIDI port loss, composition reload — all recover without restart.
       (tests/recovery.rs with the mock; port loss via the injectable clock supervisor.)
 - [x] Release build, Windows run instructions in `README.md` (`scripts/release.ps1`).
 
-## M11 — "Sequence" FFGL source plugin (SPEC §12)  ⟵ next
+## M11 — "Sequence" FFGL source plugin (SPEC §12)  (shipped in 0.2.0; boxes below to tidy, see Release 0.5.0)
 Follow `ffgl-plugins/AGENTS.md` (verify SDK headers, build and run every test, check the host log).
 - [x] M11a probe: minimal source plugin with a `Sequence` text parameter that logs render calls;
       installed in Resolume (Uli restarts Resolume). Record in `resolume-api-notes.md`: render when
@@ -220,15 +220,16 @@ Tasks:
 - [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
       changelog, landing page.
 
-## M14 — In-app update  (planned 2026-11-04, not started)
+## M14 — In-app update  (planned 2026-11-04, not started; part of release 0.5.0, SPEC §15)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.
 
 Decided (2026-11-04):
 - **Only by hand:** a menu entry **Help → Check for updates…** (desktop app, and the browser UI's menu bar). No
   automatic or background checks, no check at start-up, no setting for it.
-- **If a newer release is found:** show its version and release notes, and offer to install it. How the files are
-  replaced is **to be decided later** (see open points).
+- **If a newer release is found:** show its version and release notes, and offer to install it.
+- **Binary replacement (decided 2026-11-23): full replacement** by a helper after the app quits, with rollback
+  (outline in `docs/release-0.5-plan.md` §D). Part of release 0.5.0.
 
 Open points for the SPEC section:
 - **Privacy texts:** the privacy note and the code signing policy (`site/landing/privacy.html`,
@@ -253,3 +254,93 @@ Tasks (to refine when it starts):
 - [ ] Download, verification and binary replacement (after the decision).
 - [ ] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
 - [ ] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin.
+
+---
+
+# Release 0.5.0  (planned 2026-11-23/24)
+
+Decided with Uli on 2026-11-23/24 (background and rejected ideas: `docs/release-0.5-plan.md`). Spec: format v4
+(SPEC §6), quantized start (§3.2), starting a running sequence (§7.1), transitions per step (§7.7), editor (§9.3,
+§9.4), in-app update (§15). Order: M19 first (everything else builds on the format); M21's probe needs Uli and
+Resolume and can run whenever he has time; the rest in the order below. One milestone at a time, as always.
+
+## M19 — Sequence file format v4 (SPEC §6)  ⟵ next
+- [ ] `seq-core` model: `start` object (`immediate` / `beat` / `bar` + `bars`), `sections`, lane and step
+      `transition`, step `when`, `choices` + `pick`; strict serde forms (`deny_unknown_fields`, the repr pattern of
+      `repeat`).
+- [ ] Load v1–v3 (`start: "immediate"` → object), v4; refuse > 4; first save writes v4 and keeps `.v<N>.bak`.
+- [ ] Validation for every new field (ranges, "only with" rules, kinds matching the lane mode, sorted sections).
+- [ ] Clip resolution (§4.3) and relink for every choice; unresolved marks per option.
+- [ ] Edit operations with undo (SPEC §9.6 list) and their protocol; round-trip, migration and validation tests.
+- [ ] The app keeps playing as before: new fields are carried but not acted on yet (the scheduler ignores them
+      until their milestone); `--validate` reports v4 errors.
+- [ ] Samples: update `docs/samples/demo.seq.json` to v4 (keep a v3 copy for the migration test).
+
+## M20 — Quantized start, cue, mute/solo (SPEC §3.2; G1, G2)
+- [ ] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
+- [ ] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
+      freeze with the clock; `§` starts wait too; deck switch first. Unit tests on boundaries.
+- [ ] UI: start mode in the editor header, `starts in …` on card and header.
+- [ ] SPEC section for **cue** (G1): how to cue (card action, key), cue points (start mode, end of the current pass
+      of a running sequence, next 8/16 bars), one cue or a queue, cancelling; then build it.
+- [ ] SPEC section for **mute/solo** (G2): lane header buttons, a muted lane counts but doesn't trigger and comes
+      back at its next step, solo = mute the others; not saved; what a mute does to the layer (clear or hold);
+      then build it.
+- [ ] Docs: manual (Playing live), shortcuts, changelog.
+
+## M21 — Transitions per step (SPEC §7.7; A)
+- [ ] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
+      `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
+      tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
+      covers; do the param ids survive a deck switch / reload. Adjust SPEC §7.7 to the findings.
+- [ ] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
+      condition and pick; "original" bookkeeping per layer (take over, hand over, release, user change). Tests.
+- [ ] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
+      (throttled), 10 s cap, restore after clear, user-change detection, `transitions-pending.json` and restore on
+      reconnect. Mock-resolume layer transition params. Integration tests: stop, finish, Stop all, deck change,
+      takeover, user change, crash restore.
+- [ ] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
+      warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
+- [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
+
+## M22 — Pass conditions and choices (SPEC §6; G4, G5)
+- [ ] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
+      infinite rules; pick (`cycle` counter per run, `random` from the engine's seed). Unit tests incl. a condition
+      false (nothing sent) and a picked rest / unresolved option.
+- [ ] FFGL view and sequence mosaic: show option 1 (or the option playing).
+- [ ] UI: condition chip and `1/3` badge on blocks, inspector Play on and Choices (add from the browser by drag onto
+      the inspector, reorder, relink), warning for `last` with infinite repeat.
+- [ ] Docs: manual (Editing), changelog.
+
+## M23 — Section markers (SPEC §6, §9.3; G7)
+- [ ] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
+      the end; guide lines 8/16/32/off as a view setting in `settings.json`.
+- [ ] Docs: manual, shortcuts, changelog.
+
+## M24 — Starting a running sequence (SPEC §7.1; C)
+- [ ] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
+      `§` connecting while pending links the pending start. Tests for every order.
+- [ ] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
+
+## M25 — Record from Resolume (G6)
+- [ ] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
+      layer without a lane does (new lane?), stop recording, undo as one step; slot lanes record columns.
+- [ ] Build: WS `connected` events while armed → steps (pure part in `seq-core`, tested); UI arm/record state.
+- [ ] Docs.
+
+## M26 — Pre-show check (G16)
+- [ ] Probe: the clip play mode field (Loop / Play once …) and the clip duration, notes §19 or §20.
+- [ ] SPEC section: what is checked (unresolved clips and choices, missing layers, Beat Snap on (`clipbeatsnap`,
+      notes §2), clips with their own transition, unknown blend modes, clips shorter than their step that don't
+      loop, `last` with infinite repeat), where it shows (button, dialog, jump to the step).
+- [ ] Build (pure checks in `seq-core` where possible), UI, docs.
+
+## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
+
+## Release 0.5.0 — before tagging
+- [ ] Housekeeping: M11c and the plugin docs boxes (shipped since 0.2.0; the "⟵ next" markers are already gone); dependency PRs
+      (cargo/npm/actions minor bumps; TypeScript 7 only after `npm run check` passes); LUT effects in layer groups
+      (optional).
+- [ ] Open checks: M6 (2 lanes in time, live), M10 2 h soak, M13 slot lanes live, M15 Windows look and zip size,
+      M18 33³ `.cube`, `DOMAIN_MIN/MAX`, reload speed.
+- [ ] Changelog, manual, landing page; `docs/RELEASING.md`.
