@@ -50,6 +50,7 @@ button, input, select { font: inherit; }
 .meta { font-size: 11px; color: var(--muted); }
 .bind { font: 10px var(--mono); color: var(--info-text); }
 .bind.bad { color: var(--err-text); }
+.bind.waiting { color: var(--accent-text); }
 
 /* center: editor */
 .editor { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px; }

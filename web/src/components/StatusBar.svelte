@@ -17,12 +17,15 @@
     }
     if (!c.connected) return 'CLOCK · no port';
     if (!c.running) return 'CLOCK · no clock';
-    return `CLOCK ${c.bpm?.toFixed(1) ?? '—'} BPM · locked`;
+    // SPEC §3.2: bars count from the first tick until a MIDI Start sets the bar phase.
+    return `CLOCK ${c.bpm?.toFixed(1) ?? '—'} BPM · locked${c.bar_synced ? '' : ' · bar phase not synced'}`;
   });
   let clockTitle = $derived(
     rt?.clock.source === 'resolume'
       ? `Following Resolume's tempo${rt.clock.synced ? '' : '; press Resync in Resolume to line up with its beat'} · click to change (Ctrl+,)`
-      : (rt?.clock.port ?? 'no MIDI port selected') + ' · click to choose (Ctrl+,)',
+      : (rt?.clock.port ?? 'no MIDI port selected') +
+          (rt?.clock.bar_synced === false ? ' · bars count from the first tick until the clock sends MIDI Start' : '') +
+          ' · click to choose (Ctrl+,)',
   );
   let current = $derived(app.run(app.selectedSeq) ?? rt?.running[0] ?? null);
   let notices = $derived((rt?.notices ?? []).slice(-3));

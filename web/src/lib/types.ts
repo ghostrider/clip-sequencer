@@ -276,6 +276,18 @@ export interface ClockView {
   transport: string | null;
   /** Resolume source: in phase with Resolume's beat since the last Resync. */
   synced: boolean;
+  /** The bar phase for quantized starts comes from a MIDI Start or Resync (SPEC §3.2). */
+  bar_synced: boolean;
+}
+
+/** A start waiting for its beat or bar (SPEC §3.2). */
+export interface PendingView {
+  seq: Uuid;
+  name: string;
+  from_seq_clip: boolean;
+  mode: Start;
+  /** Ticks until it starts (24 per beat). */
+  wait_ticks: number;
 }
 
 export interface RuntimeState {
@@ -285,6 +297,8 @@ export interface RuntimeState {
   rest: boolean;
   osc: boolean;
   running: RunView[];
+  /** Starts waiting for their boundary, in the order they were made. */
+  pending: PendingView[];
   switching: { seq: Uuid; deck: string } | null;
   last_osc: { addr: string; send_us: number } | null;
   last_confirm: string | null;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, SIXTEENTHS_PER_BAR, repeatLabel } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, repeatLabel, startsIn } from '../lib/app.svelte';
   import type { SequenceView } from '../lib/types';
   import SeqSyncDialog from './SeqSyncDialog.svelte';
 
@@ -88,6 +88,7 @@
   <div style="display:flex;flex-direction:column;gap:10px">
     {#each deck?.sequences ?? [] as v (v.sequence.id)}
       {@const running = !!app.run(v.sequence.id)}
+      {@const waiting = app.pendingStart(v.sequence.id)}
       {@const b = bindingText(v)}
       <div
         class="seqcard"
@@ -128,13 +129,15 @@
             {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} {bars(v) === '1' ? 'bar' : 'bars'} · {repeatLabel(v.sequence.repeat)}
           </div>
           <div class="bind" class:bad={b.bad}>{b.text}</div>
+          {#if waiting}<div class="bind waiting">{startsIn(waiting.wait_ticks)}</div>{/if}
         </div>
         <div class="spacer"></div>
         {#if deck && !deck.orphaned}
           <button
             class={deck.live || running ? 'icon-btn' : 'btn'}
             class:running
-            aria-label={`${running ? 'Stop' : 'Start'} ${v.sequence.name}`}
+            aria-label={`${running ? 'Stop' : waiting ? 'Start now' : 'Start'} ${v.sequence.name}`}
+            title={waiting ? 'Start now' : undefined}
             disabled={app.runtime?.switching?.seq === v.sequence.id}
             onclick={(e) => {
               e.stopPropagation();

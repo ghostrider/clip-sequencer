@@ -3,8 +3,8 @@
 
 import { applyTheme, resolveTheme } from './themes';
 import type {
-  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, RunView,
-  RuntimeState, SequenceView, Step, StructureState, Uuid, VersionInfo,
+  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
+  RunView, RuntimeState, SequenceView, Start, Step, StructureState, Uuid, VersionInfo,
 } from './types';
 
 /** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 LUTs, Ctrl+3 Console. */
@@ -234,6 +234,12 @@ class AppState {
     return this.runtime?.running.find((r) => r.seq === seq) ?? null;
   }
 
+  /** The start of `seq` waiting for its beat or bar (SPEC §3.2). */
+  pendingStart(seq: Uuid | null | undefined): PendingView | null {
+    if (!seq) return null;
+    return this.runtime?.pending?.find((p) => p.seq === seq) ?? null;
+  }
+
   /** Clip of the deck being viewed, by id. */
   clip(id: number | null | undefined): ClipView | null {
     if (id == null) return null;
@@ -255,7 +261,10 @@ class AppState {
 
   // ---- actions ----
 
-  /** ▶ on a card or Space: start, or stop when running. Switching decks asks first. */
+  /**
+   * ▶ on a card or Space: start, or stop when running. A start waiting for its beat or bar starts at once
+   * (the engine does that for a second start). Switching decks asks first.
+   */
   toggle(view: SequenceView, deck: DeckView) {
     const id = view.sequence.id;
     if (this.run(id)) {
@@ -324,6 +333,30 @@ export function layerLabel(l: { name: string; index: number; ambiguous: boolean 
   if (l.name.includes('#')) return `${l.name.replace('#', String(l.index))} · unnamed, rename in Resolume to use it`;
   if (l.ambiguous) return `${l.name} · name used twice, rename in Resolume`;
   return l.name;
+}
+
+/** `starts in 3 beats`, `starts in 2 bars` for waits of more than a bar (SPEC §3.2). */
+export function startsIn(waitTicks: number): string {
+  const beats = Math.ceil(waitTicks / 24);
+  if (beats <= 4) return `starts in ${beats} ${beats === 1 ? 'beat' : 'beats'}`;
+  const bars = Math.ceil(waitTicks / 96);
+  return `starts in ${bars} bars`;
+}
+
+/** Start modes in the editor header (SPEC §9.3): now, beat, bar, 2 · 4 · 8 · 16 bars. */
+export const START_MODES: { label: string; title: string; start: Start }[] = [
+  { label: 'now', title: 'Start on the tick ▶ is pressed', start: { mode: 'immediate' } },
+  { label: 'beat', title: 'Start on the next beat', start: { mode: 'beat' } },
+  { label: 'bar', title: 'Start on the next bar', start: { mode: 'bar', bars: 1 } },
+  ...[2, 4, 8, 16].map((bars) => ({
+    label: String(bars),
+    title: `Start on the next bar that is a multiple of ${bars} bars`,
+    start: { mode: 'bar' as const, bars },
+  })),
+];
+
+export function sameStart(a: Start, b: Start): boolean {
+  return a.mode === b.mode && (a.mode !== 'bar' || b.mode !== 'bar' || a.bars === b.bars);
 }
 
 /** Length in sixteenths as whole bars, else eighths, else sixteenths: `2 bars`, `3/8`, `5/16`. */
