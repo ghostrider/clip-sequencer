@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "composition": "Demo",
   "decks": {
     "Act 2": {
@@ -7,7 +7,7 @@
         {
           "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d01",
           "name": "Drop A",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": {
             "mode": "count",
             "count": 4
@@ -125,7 +125,7 @@
         {
           "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d02",
           "name": "Intro",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": {
             "mode": "once"
           },
@@ -158,7 +158,7 @@
         {
           "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d03",
           "name": "Build B",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": {
             "mode": "infinite"
           },
@@ -209,7 +209,7 @@
         {
           "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d04",
           "name": "Old Set",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": {
             "mode": "once"
           },
@@ -254,7 +254,7 @@
         {
           "id": "0a6f7a52-3c1e-4c55-9d0e-6f1b2a3c4d05",
           "name": "Finale",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": {
             "mode": "once"
           },

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "composition": "dev",
   "decks": {
     "1000A Text3D": {
@@ -7,9 +7,14 @@
         {
           "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e01",
           "name": "Intro",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": { "mode": "once" },
           "after_last_pass": "hold",
+          "sections": [
+            { "at": 0, "name": "Intro" },
+            { "at": 32, "name": "Hold it" },
+            { "at": 512, "name": "Beyond the end" }
+          ],
           "lanes": [
             {
               "layer": "Layer 1",
@@ -28,25 +33,27 @@
         {
           "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e02",
           "name": "Loop Forever",
-          "start": "immediate",
+          "start": { "mode": "beat" },
           "repeat": { "mode": "infinite" },
           "after_last_pass": "clear",
           "lanes": [
             {
               "layer": "Layer 2",
               "end": "loop_to_end",
+              "transition": { "length": 4, "blend": "Add" },
               "steps": [
-                { "clip": { "name": "Clip 02" }, "length": 8 },
-                { "clip": { "file": "Clip 03.mov" }, "length": 8 },
-                { "clip": null, "length": 2 },
-                { "clip": { "id": 1791619727030 }, "length": 14 }
+                { "clip": { "name": "Clip 02" }, "length": 8, "when": { "is": "first" } },
+                { "clip": { "file": "Clip 03.mov" }, "length": 8, "when": { "is": "not_first" },
+                  "choices": [ { "name": "Clip 04" }, null, { "id": 1791619727031 } ], "pick": "cycle" },
+                { "clip": null, "length": 2, "transition": { "length": 0 } },
+                { "clip": { "id": 1791619727030 }, "length": 14, "transition": { "length": 256, "blend": "Alpha" } }
               ]
             },
             {
               "layer": "Layer 3",
               "end": "clear",
               "steps": [
-                { "clip": { "name": "1000A Shake" }, "length": 16 }
+                { "clip": { "name": "1000A Shake" }, "length": 16, "choices": [ null ] }
               ]
             }
           ]
@@ -58,26 +65,48 @@
         {
           "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e03",
           "name": "§ odd name: \"quotes\" & ümlauts",
-          "start": "immediate",
+          "start": { "mode": "bar", "bars": 16 },
           "repeat": { "mode": "count", "count": 2 },
           "after_last_pass": "clear",
+          "sections": [
+            { "at": 7, "name": "ümlaut section, a name of exactly sixty-four characters: xxxxxxx" }
+          ],
           "lanes": [
             {
               "layer": "Layer 2",
               "end": "loop_to_end",
               "steps": [
-                { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 32 },
-                { "clip": null, "length": 32 }
+                { "clip": { "id": 1792956592496, "name": "Clip 13", "file": "Clip 13.mov" }, "length": 32,
+                  "when": { "is": "last" } },
+                { "clip": null, "length": 32, "when": { "is": "not_last" } }
               ]
             },
             {
               "layer": "Layer 3",
               "mode": "slot",
               "end": "hold",
+              "transition": { "length": 16 },
               "steps": [
-                { "column": 3, "length": 8 },
-                { "column": null, "length": 3 },
-                { "column": 12, "length": 16 }
+                { "column": 3, "length": 8, "when": { "is": "cycle", "pass": 3, "of": 3 },
+                  "choices": [ 4, null, 5 ], "pick": "random" },
+                { "column": null, "length": 3, "choices": [ 1 ] },
+                { "column": 12, "length": 16, "when": { "is": "cycle", "pass": 1, "of": 16 } }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "0b5e3a52-8f0e-4e8e-b1d2-7c4f6a9d1e04",
+          "name": "On the bar",
+          "start": { "mode": "bar", "bars": 1 },
+          "repeat": { "mode": "once" },
+          "after_last_pass": "hold",
+          "lanes": [
+            {
+              "layer": "Layer 1",
+              "end": "hold",
+              "steps": [
+                { "clip": null, "length": 16 }
               ]
             }
           ]

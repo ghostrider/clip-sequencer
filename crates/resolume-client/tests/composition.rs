@@ -170,18 +170,21 @@ fn sequence_from(v: &Value, lanes: &[(&str, &[(usize, usize)])]) -> Sequence {
         start: Start::Immediate,
         repeat: Repeat::Once,
         after_last_pass: AfterLastPass::Clear,
+        sections: Vec::new(),
         lanes: lanes
             .iter()
             .map(|(layer, cells)| Lane {
                 layer: (*layer).into(),
                 mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
+                transition: None,
                 steps: cells
                     .iter()
                     .map(|&(l, c)| Step {
                         column: None,
                         clip: Some(clip_ref_for(idx.clip_at(l, c).unwrap())),
                         length: 8,
+                        ..Default::default()
                     })
                     .collect(),
             })

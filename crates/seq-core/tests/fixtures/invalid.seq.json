@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "composition": "dev",
   "decks": {
     "Act 1": {
@@ -7,7 +7,7 @@
         {
           "id": "11111111-1111-1111-1111-111111111111",
           "name": "Drop A",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": { "mode": "count", "count": 1 },
           "after_last_pass": "clear",
           "lanes": [
@@ -32,10 +32,40 @@
         {
           "id": "22222222-2222-2222-2222-222222222222",
           "name": "Drop A",
-          "start": "immediate",
+          "start": { "mode": "immediate" },
           "repeat": { "mode": "once" },
           "after_last_pass": "hold",
           "lanes": []
+        },
+        {
+          "id": "33333333-3333-3333-3333-333333333333",
+          "name": "Drop B",
+          "start": { "mode": "bar", "bars": 3 },
+          "repeat": { "mode": "once" },
+          "after_last_pass": "clear",
+          "sections": [
+            { "at": 8, "name": "A" },
+            { "at": 8, "name": "B" }
+          ],
+          "lanes": [
+            {
+              "layer": "BG",
+              "end": "hold",
+              "transition": { "length": 300 },
+              "steps": [
+                { "clip": { "name": "Tunnel" }, "length": 16, "when": { "is": "cycle", "pass": 1, "of": 1 },
+                  "choices": [ { "name": "A" }, {}, { "name": "C" }, null ] }
+              ]
+            },
+            {
+              "layer": "FG",
+              "mode": "slot",
+              "end": "hold",
+              "steps": [
+                { "column": 1, "length": 16, "choices": [ 0 ] }
+              ]
+            }
+          ]
         }
       ]
     }

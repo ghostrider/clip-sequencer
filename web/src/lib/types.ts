@@ -9,11 +9,37 @@ export interface ClipRef {
   file?: string;
 }
 
-/** Clip lanes use `clip`, slot lanes `column` (1-based, SPEC §4.5); `null` is a rest. */
+/** Format v4 (SPEC §6): how a clip comes in; `length` in sixteenths (0 = cut), `blend` a Resolume blend mode. */
+export interface Transition {
+  length: number;
+  blend?: string;
+}
+
+/** Format v4: on which passes a step plays. */
+export type When =
+  | { is: 'first' }
+  | { is: 'not_first' }
+  | { is: 'last' }
+  | { is: 'not_last' }
+  | { is: 'cycle'; pass: number; of: number };
+
+export type Pick = 'random' | 'cycle';
+
+/** One more option of a step: a clip in clip lanes, a column in slot lanes, `null` a rest. */
+export type Choice = ClipRef | number | null;
+
+/**
+ * Clip lanes use `clip`, slot lanes `column` (1-based, SPEC §4.5); `null` is a rest. The format v4 fields are
+ * optional; `choices` (1–3) are options 2…, `pick` only with `choices` (absent = random).
+ */
 export interface Step {
   clip?: ClipRef | null;
   column?: number | null;
   length: number;
+  when?: When;
+  choices?: Choice[];
+  pick?: Pick;
+  transition?: Transition;
 }
 
 export type LaneMode = 'clip' | 'slot';
@@ -27,15 +53,28 @@ export interface Lane {
   /** Omitted for clip lanes. */
   mode?: LaneMode;
   end: LaneEnd;
+  /** Format v4: default transition of the lane's steps. */
+  transition?: Transition;
   steps: Step[];
+}
+
+/** Format v4 (SPEC §3.2): when a started sequence begins. `bars` ∈ 1, 2, 4, 8, 16. */
+export type Start = { mode: 'immediate' } | { mode: 'beat' } | { mode: 'bar'; bars: number };
+
+/** Format v4: a named marker, `at` in sixteenths from the start. */
+export interface Section {
+  at: number;
+  name: string;
 }
 
 export interface Sequence {
   id: Uuid;
   name: string;
-  start: 'immediate';
+  start: Start;
   repeat: Repeat;
   after_last_pass: AfterLastPass;
+  /** Sorted by `at`; omitted when empty. */
+  sections?: Section[];
   lanes: Lane[];
 }
 
@@ -58,6 +97,8 @@ export interface StepResolution {
 export interface LaneResolution {
   layer: 'ok' | 'missing' | 'ambiguous' | 'seq_layer';
   steps: StepResolution[];
+  /** Per step, its `choices` (options 2…) resolved one by one; empty without choices. */
+  choices: StepResolution[][];
 }
 
 export interface ResolutionView {
@@ -275,7 +316,21 @@ export type EditOp =
   | { op: 'set_step_length'; seq: Uuid; lane: number; index: number; length: number }
   | { op: 'move_step'; seq: Uuid; lane: number; from: number; to: number }
   | { op: 'set_step_clip'; seq: Uuid; lane: number; index: number; clip: ClipRef | null }
-  | { op: 'set_step_column'; seq: Uuid; lane: number; index: number; column: number | null };
+  | { op: 'set_step_column'; seq: Uuid; lane: number; index: number; column: number | null }
+  // Format v4. Option positions: 0 = the step's own clip/column, 1… = its choices.
+  | { op: 'set_start'; seq: Uuid; start: Start }
+  | { op: 'set_lane_transition'; seq: Uuid; lane: number; transition: Transition | null }
+  | { op: 'set_step_transition'; seq: Uuid; lane: number; index: number; transition: Transition | null }
+  | { op: 'set_step_when'; seq: Uuid; lane: number; index: number; when: When | null }
+  | { op: 'add_choice'; seq: Uuid; lane: number; index: number; choice: Choice }
+  | { op: 'remove_choice'; seq: Uuid; lane: number; index: number; option: number }
+  | { op: 'move_choice'; seq: Uuid; lane: number; index: number; from: number; to: number }
+  | { op: 'set_choice'; seq: Uuid; lane: number; index: number; option: number; choice: Choice }
+  | { op: 'set_pick'; seq: Uuid; lane: number; index: number; pick: Pick | null }
+  | { op: 'add_section'; seq: Uuid; at: number; name: string }
+  | { op: 'move_section'; seq: Uuid; section: number; at: number }
+  | { op: 'rename_section'; seq: Uuid; section: number; name: string }
+  | { op: 'delete_section'; seq: Uuid; section: number };
 
 export type Command =
   | { cmd: 'start'; seq: Uuid }

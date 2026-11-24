@@ -30,7 +30,9 @@ Sessions:
   layers `Background`, `Mid`, `Front`, `SEQ` with `§` placeholders). Generated from `composition.json` (same
   structure, every id renumbered, clips renamed; no real media). Run the mock with it:
   `cargo run -p mock-resolume -- --composition docs/samples/demo-composition.json`.
-- `demo.seq.json`: three sequences for it (`Drop A`, `Intro`, `Build B`); copy it to `<data-dir>/Demo.seq.json`.
+- `demo.seq.json`: sequences for it (`Drop A`, `Intro`, `Build B`, …), file format v4; copy it to
+  `<data-dir>/Demo.seq.json`. `demo-v3.seq.json` is the same file as 0.4.x saves it (format v3), used by the
+  migration test in `crates/seq-core/tests/roundtrip.rs`.
 - The thumbnails in `docs/images/screenshot.png` are abstract images generated for the demo and uploaded to the
   mock (`POST /api/v1/composition/clips/by-id/<id>/thumbnail`); without them every clip shows the sample gradient.
 - `m16-01-layer-add.jsonl` … `m16-05-column-remove.jsonl`: building the SEQ layer for "Sync SEQ layer" (notes §16): add a

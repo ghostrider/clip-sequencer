@@ -93,7 +93,7 @@ fn v2_file_is_backed_up_as_v2_on_first_save() {
     assert_ne!(v2, V1);
     fs::write(&path, &v2).unwrap();
     let file = storage.load("MyShow").unwrap().into_file();
-    assert_eq!(file.version, 3);
+    assert_eq!(file.version, seq_core::FORMAT_VERSION);
     assert_eq!(
         file.decks["Act 1"].sequences[0].lanes[0].steps[0].length, 16,
         "v2 lengths are not doubled"
@@ -106,8 +106,35 @@ fn v2_file_is_backed_up_as_v2_on_first_save() {
     assert!(!dir.path().join("MyShow.seq.json.v1.bak").exists());
     assert_eq!(
         seq_core::file_version(&fs::read_to_string(&path).unwrap()),
-        Some(3)
+        Some(4)
     );
+}
+
+/// Format v4 (release 0.5): a v3 file is kept as `.v3.bak` on its first save, since 0.4.x cannot
+/// read v4 (SPEC §6 "Going back to 0.4").
+#[test]
+fn v3_file_is_backed_up_as_v3_on_first_save() {
+    const V3: &str = include_str!("../../seq-core/tests/fixtures/spec-example-v3.seq.json");
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Storage::new(dir.path());
+    let path = storage.path_for("MyShow");
+    fs::write(&path, V3).unwrap();
+    let file = storage.load("MyShow").unwrap().into_file();
+    assert_eq!(file.version, 4);
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        V3,
+        "load must not write"
+    );
+    storage.save(&file).unwrap();
+    assert_eq!(
+        fs::read_to_string(dir.path().join("MyShow.seq.json.v3.bak")).unwrap(),
+        V3
+    );
+    let saved = fs::read_to_string(&path).unwrap();
+    assert_eq!(seq_core::file_version(&saved), Some(4));
+    assert!(saved.contains(r#""mode": "immediate""#), "{saved}");
+    assert_eq!(storage.load("MyShow").unwrap().into_file(), file);
 }
 
 fn renamed_first(mut f: SeqFile, name: &str) -> SeqFile {
