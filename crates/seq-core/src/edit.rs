@@ -7,7 +7,8 @@ use uuid::Uuid;
 
 use crate::index::CompositionIndex;
 use crate::model::{
-    AfterLastPass, ClipRef, Deck, Lane, LaneEnd, LaneMode, Repeat, SeqFile, Sequence, Start, Step,
+    AfterLastPass, Choice, ClipRef, Deck, Lane, LaneEnd, LaneMode, Pick, Repeat, Section, SeqFile,
+    Sequence, Start, Step, Transition, When,
 };
 use crate::resolve::convert_steps;
 use crate::validate::{validate, ValidationError};
@@ -116,6 +117,92 @@ pub enum EditOp {
         index: usize,
         column: Option<u32>,
     },
+    /// Start mode (format v4, SPEC §3.2).
+    SetStart {
+        seq: Uuid,
+        start: Start,
+    },
+    /// The lane's default transition; `None` clears it (format v4, SPEC §7.7).
+    SetLaneTransition {
+        seq: Uuid,
+        lane: usize,
+        transition: Option<Transition>,
+    },
+    /// The step's own transition; `None` clears it (the lane default applies again).
+    SetStepTransition {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        transition: Option<Transition>,
+    },
+    /// The step's pass condition; `None` = plays on every pass.
+    SetStepWhen {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        when: Option<When>,
+    },
+    /// Appends an option to the step's `choices` (a clip or column of the lane's kind, or `None`
+    /// for a rest).
+    AddChoice {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        choice: Option<Choice>,
+    },
+    /// Removes option `option` (0 = the step's own clip or column, then the next option takes its
+    /// place; 1… = `choices`). The last option cannot be removed. Without choices left, `pick` goes.
+    RemoveChoice {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        option: usize,
+    },
+    /// Moves an option so that it ends up at position `to` (positions as in `RemoveChoice`).
+    MoveChoice {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        from: usize,
+        to: usize,
+    },
+    /// Relinks one option (positions as in `RemoveChoice`; 0 is the same as `SetStepClip` /
+    /// `SetStepColumn`).
+    SetChoice {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        option: usize,
+        choice: Option<Choice>,
+    },
+    /// How an option is picked; `None` = the default, random. Only with choices.
+    SetPick {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        pick: Option<Pick>,
+    },
+    /// Adds a section marker; the list stays sorted by `at`.
+    AddSection {
+        seq: Uuid,
+        at: u64,
+        name: String,
+    },
+    /// Moves section `section` (its index in the sorted list) to `at`; the list is sorted again.
+    MoveSection {
+        seq: Uuid,
+        section: usize,
+        at: u64,
+    },
+    RenameSection {
+        seq: Uuid,
+        section: usize,
+        name: String,
+    },
+    DeleteSection {
+        seq: Uuid,
+        section: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -126,6 +213,12 @@ pub enum EditError {
     NoSuchLane(usize),
     #[error("step {0} does not exist")]
     NoSuchStep(usize),
+    #[error("option {0} does not exist")]
+    NoSuchOption(usize),
+    #[error("a step keeps at least one option")]
+    LastOption,
+    #[error("section {0} does not exist")]
+    NoSuchSection(usize),
     #[error("{}", .0.first().map(ToString::to_string).unwrap_or_default())]
     Invalid(Vec<ValidationError>),
 }
@@ -158,7 +251,7 @@ pub fn apply_with(
                 .push(Sequence {
                     id: *id,
                     name: name.clone(),
-                    start: Start::Immediate,
+                    start: Start::default(),
                     repeat: Repeat::Once,
                     after_last_pass: AfterLastPass::Clear,
                     sections: Vec::new(),
@@ -279,9 +372,125 @@ pub fn apply_with(
             index,
             column,
         } => step_mut(&mut f, *seq, *lane, *index)?.column = *column,
+        EditOp::SetStart { seq, start } => seq_mut(&mut f, *seq)?.start = *start,
+        EditOp::SetLaneTransition {
+            seq,
+            lane,
+            transition,
+        } => lane_mut(&mut f, *seq, *lane)?.transition = transition.clone(),
+        EditOp::SetStepTransition {
+            seq,
+            lane,
+            index,
+            transition,
+        } => step_mut(&mut f, *seq, *lane, *index)?.transition = transition.clone(),
+        EditOp::SetStepWhen {
+            seq,
+            lane,
+            index,
+            when,
+        } => step_mut(&mut f, *seq, *lane, *index)?.when = *when,
+        EditOp::AddChoice {
+            seq,
+            lane,
+            index,
+            choice,
+        } => step_mut(&mut f, *seq, *lane, *index)?
+            .choices
+            .push(choice.clone()),
+        EditOp::RemoveChoice {
+            seq,
+            lane,
+            index,
+            option,
+        } => {
+            let step = step_mut(&mut f, *seq, *lane, *index)?;
+            let mut options = step.options();
+            check_option(&options, *option)?;
+            if options.len() == 1 {
+                return Err(EditError::LastOption);
+            }
+            options.remove(*option);
+            step.set_options(options);
+        }
+        EditOp::MoveChoice {
+            seq,
+            lane,
+            index,
+            from,
+            to,
+        } => {
+            let step = step_mut(&mut f, *seq, *lane, *index)?;
+            let mut options = step.options();
+            check_option(&options, *from)?;
+            check_option(&options, *to)?;
+            let moved = options.remove(*from);
+            options.insert(*to, moved);
+            step.set_options(options);
+        }
+        EditOp::SetChoice {
+            seq,
+            lane,
+            index,
+            option,
+            choice,
+        } => {
+            let step = step_mut(&mut f, *seq, *lane, *index)?;
+            let mut options = step.options();
+            check_option(&options, *option)?;
+            options[*option] = choice.clone();
+            step.set_options(options);
+        }
+        EditOp::SetPick {
+            seq,
+            lane,
+            index,
+            pick,
+        } => step_mut(&mut f, *seq, *lane, *index)?.pick = *pick,
+        EditOp::AddSection { seq, at, name } => {
+            let s = seq_mut(&mut f, *seq)?;
+            s.sections.push(Section {
+                at: *at,
+                name: name.clone(),
+            });
+            sort_sections(s);
+        }
+        EditOp::MoveSection { seq, section, at } => {
+            let s = seq_mut(&mut f, *seq)?;
+            section_mut(s, *section)?.at = *at;
+            sort_sections(s);
+        }
+        EditOp::RenameSection { seq, section, name } => {
+            section_mut(seq_mut(&mut f, *seq)?, *section)?.name = name.clone()
+        }
+        EditOp::DeleteSection { seq, section } => {
+            let s = seq_mut(&mut f, *seq)?;
+            section_mut(s, *section)?;
+            s.sections.remove(*section);
+        }
     }
     validate(&f).map_err(EditError::Invalid)?;
     Ok(f)
+}
+
+fn check_option(options: &[Option<Choice>], option: usize) -> Result<(), EditError> {
+    if option < options.len() {
+        Ok(())
+    } else {
+        Err(EditError::NoSuchOption(option))
+    }
+}
+
+fn section_mut(s: &mut Sequence, section: usize) -> Result<&mut Section, EditError> {
+    s.sections
+        .get_mut(section)
+        .ok_or(EditError::NoSuchSection(section))
+}
+
+/// Keeps sections sorted by position (stable, so a moved section stays before an equal one only
+/// if it was; two at one position are refused by validation anyway).
+fn sort_sections(s: &mut Sequence) {
+    s.sections.sort_by_key(|x| x.at);
 }
 
 fn seq_mut(f: &mut SeqFile, id: Uuid) -> Result<&mut Sequence, EditError> {
@@ -740,6 +949,492 @@ mod tests {
         };
         let f = apply_with(&f, &to_clip, Some(&idx)).unwrap();
         assert_eq!(names(&f), ["a", "b", "-", "a"]);
+    }
+
+    fn named(name: &str) -> Option<Choice> {
+        clip(name).map(Choice::Clip)
+    }
+
+    fn step0(f: &SeqFile) -> &Step {
+        &f.find_sequence(A).unwrap().1.lanes[0].steps[0]
+    }
+
+    fn ok(f: &SeqFile, op: EditOp) -> SeqFile {
+        apply(f, &op).unwrap_or_else(|e| panic!("{op:?}: {e}"))
+    }
+
+    #[test]
+    fn start_condition_and_transitions() {
+        let f = base();
+        let f = ok(
+            &f,
+            EditOp::SetStart {
+                seq: A,
+                start: Start::Bar { bars: 8 },
+            },
+        );
+        assert_eq!(f.find_sequence(A).unwrap().1.start, Start::Bar { bars: 8 });
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::SetStart {
+                    seq: A,
+                    start: Start::Bar { bars: 3 }
+                }
+            ),
+            Err(EditError::Invalid(_))
+        ));
+
+        let t = |length, blend: Option<&str>| Transition {
+            length,
+            blend: blend.map(Into::into),
+        };
+        let f = ok(
+            &f,
+            EditOp::SetLaneTransition {
+                seq: A,
+                lane: 0,
+                transition: Some(t(4, Some("Alpha"))),
+            },
+        );
+        let f = ok(
+            &f,
+            EditOp::SetStepTransition {
+                seq: A,
+                lane: 0,
+                index: 0,
+                transition: Some(t(0, None)),
+            },
+        );
+        let f = ok(
+            &f,
+            EditOp::SetStepWhen {
+                seq: A,
+                lane: 0,
+                index: 0,
+                when: Some(When::Cycle { pass: 2, of: 4 }),
+            },
+        );
+        let lane = &f.find_sequence(A).unwrap().1.lanes[0];
+        assert_eq!(lane.transition, Some(t(4, Some("Alpha"))));
+        assert_eq!(lane.steps[0].transition, Some(t(0, None)));
+        assert_eq!(lane.steps[0].when, Some(When::Cycle { pass: 2, of: 4 }));
+        for bad in [
+            EditOp::SetStepTransition {
+                seq: A,
+                lane: 0,
+                index: 0,
+                transition: Some(t(257, None)),
+            },
+            EditOp::SetStepWhen {
+                seq: A,
+                lane: 0,
+                index: 0,
+                when: Some(When::Cycle { pass: 5, of: 4 }),
+            },
+        ] {
+            assert!(
+                matches!(apply(&f, &bad), Err(EditError::Invalid(_))),
+                "{bad:?}"
+            );
+        }
+        // Clearing restores the plain step.
+        let f = ok(
+            &f,
+            EditOp::SetStepTransition {
+                seq: A,
+                lane: 0,
+                index: 0,
+                transition: None,
+            },
+        );
+        let f = ok(
+            &f,
+            EditOp::SetStepWhen {
+                seq: A,
+                lane: 0,
+                index: 0,
+                when: None,
+            },
+        );
+        assert_eq!(step0(&f), &Step::clip(clip("a"), 8));
+    }
+
+    #[test]
+    fn choices_add_move_relink_remove_and_pick() {
+        let f = base(); // step 0 = a
+        let add = |f: &SeqFile, c: Option<Choice>| {
+            ok(
+                f,
+                EditOp::AddChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    choice: c,
+                },
+            )
+        };
+        let f = add(&f, named("x"));
+        let f = add(&f, None);
+        let f = ok(
+            &f,
+            EditOp::SetPick {
+                seq: A,
+                lane: 0,
+                index: 0,
+                pick: Some(Pick::Cycle),
+            },
+        );
+        assert_eq!(step0(&f).options(), [named("a"), named("x"), None]);
+        let f = add(&f, named("y"));
+        // A fourth choice and a column in a clip lane are refused.
+        for bad in [
+            Some(Choice::Clip(ClipRef::default())),
+            Some(Choice::Column(2)),
+        ] {
+            assert!(matches!(
+                apply(
+                    &f,
+                    &EditOp::SetChoice {
+                        seq: A,
+                        lane: 0,
+                        index: 0,
+                        option: 1,
+                        choice: bad
+                    }
+                ),
+                Err(EditError::Invalid(_))
+            ));
+        }
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::AddChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    choice: named("z")
+                }
+            ),
+            Err(EditError::Invalid(_))
+        ));
+
+        // Reorder: option 3 (y) to the front becomes the step's own clip.
+        let f = ok(
+            &f,
+            EditOp::MoveChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                from: 3,
+                to: 0,
+            },
+        );
+        assert_eq!(step0(&f).clip, clip("y"));
+        assert_eq!(step0(&f).choices, [named("a"), named("x"), None]);
+        // Relink option 2 (x -> b).
+        let f = ok(
+            &f,
+            EditOp::SetChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                option: 2,
+                choice: named("b"),
+            },
+        );
+        assert_eq!(
+            step0(&f).options(),
+            [named("y"), named("a"), named("b"), None]
+        );
+        assert_eq!(
+            apply(
+                &f,
+                &EditOp::SetChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    option: 4,
+                    choice: None
+                }
+            ),
+            Err(EditError::NoSuchOption(4))
+        );
+        // Remove the step's own: the next option takes its place.
+        let mut f = ok(
+            &f,
+            EditOp::RemoveChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                option: 0,
+            },
+        );
+        assert_eq!(step0(&f).options(), [named("a"), named("b"), None]);
+        assert_eq!(step0(&f).pick, Some(Pick::Cycle));
+        for _ in 0..2 {
+            f = ok(
+                &f,
+                EditOp::RemoveChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    option: 1,
+                },
+            );
+        }
+        // No choices left: pick went with them; the last option stays.
+        assert_eq!(step0(&f), &Step::clip(clip("a"), 8));
+        assert_eq!(
+            apply(
+                &f,
+                &EditOp::RemoveChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    option: 0
+                }
+            ),
+            Err(EditError::LastOption)
+        );
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::SetPick {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    pick: Some(Pick::Random)
+                }
+            ),
+            Err(EditError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn slot_lane_choices_are_columns() {
+        use crate::index::test_support::Builder;
+        let idx = Builder::new(3)
+            .layer("BG", &[Some((1, "a", None)), Some((2, "b", None)), None])
+            .build();
+        let f = ok(
+            &base(),
+            EditOp::AddChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                choice: named("b"),
+            },
+        );
+        let f = apply_with(
+            &f,
+            &EditOp::SetLaneMode {
+                seq: A,
+                lane: 0,
+                mode: LaneMode::Slot,
+            },
+            Some(&idx),
+        )
+        .unwrap();
+        assert_eq!(
+            step0(&f).options(),
+            [Some(Choice::Column(1)), Some(Choice::Column(2))]
+        );
+        let f = ok(
+            &f,
+            EditOp::AddChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                choice: Some(Choice::Column(3)),
+            },
+        );
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::AddChoice {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    choice: named("a")
+                }
+            ),
+            Err(EditError::Invalid(_))
+        ));
+        assert_eq!(step0(&f).choices.len(), 2);
+    }
+
+    #[test]
+    fn sections_stay_sorted() {
+        let names = |f: &SeqFile| {
+            f.find_sequence(A)
+                .unwrap()
+                .1
+                .sections
+                .iter()
+                .map(|s| (s.at, s.name.clone()))
+                .collect::<Vec<_>>()
+        };
+        let mut f = base();
+        for (at, name) in [(64, "Drop"), (0, "Intro"), (32, "Build")] {
+            f = ok(
+                &f,
+                EditOp::AddSection {
+                    seq: A,
+                    at,
+                    name: name.into(),
+                },
+            );
+        }
+        assert_eq!(
+            names(&f),
+            [
+                (0, "Intro".into()),
+                (32, "Build".into()),
+                (64, "Drop".into())
+            ]
+        );
+        // Beyond the sequence's length is allowed.
+        let f = ok(
+            &f,
+            EditOp::MoveSection {
+                seq: A,
+                section: 0,
+                at: 999,
+            },
+        );
+        let f = ok(
+            &f,
+            EditOp::RenameSection {
+                seq: A,
+                section: 0,
+                name: "Build up".into(),
+            },
+        );
+        assert_eq!(
+            names(&f),
+            [
+                (32, "Build up".into()),
+                (64, "Drop".into()),
+                (999, "Intro".into())
+            ]
+        );
+        for bad in [
+            EditOp::AddSection {
+                seq: A,
+                at: 64,
+                name: "Same place".into(),
+            },
+            EditOp::RenameSection {
+                seq: A,
+                section: 1,
+                name: String::new(),
+            },
+        ] {
+            assert!(
+                matches!(apply(&f, &bad), Err(EditError::Invalid(_))),
+                "{bad:?}"
+            );
+        }
+        assert_eq!(
+            apply(&f, &EditOp::DeleteSection { seq: A, section: 3 }),
+            Err(EditError::NoSuchSection(3))
+        );
+        let f = ok(&f, EditOp::DeleteSection { seq: A, section: 1 });
+        assert_eq!(names(&f), [(32, "Build up".into()), (999, "Intro".into())]);
+    }
+
+    #[test]
+    fn v4_op_json_shapes() {
+        let p = |t: &str| serde_json::from_str::<EditOp>(t).unwrap();
+        let seq = r#""seq":"00000000-0000-0000-0000-000000000001""#;
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"set_start",{seq},"start":{{"mode":"bar","bars":2}}}}"#
+            )),
+            EditOp::SetStart {
+                seq: A,
+                start: Start::Bar { bars: 2 }
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"set_lane_transition",{seq},"lane":0,"transition":null}}"#
+            )),
+            EditOp::SetLaneTransition {
+                seq: A,
+                lane: 0,
+                transition: None
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"set_step_when",{seq},"lane":0,"index":1,"when":{{"is":"cycle","pass":1,"of":2}}}}"#
+            )),
+            EditOp::SetStepWhen {
+                seq: A,
+                lane: 0,
+                index: 1,
+                when: Some(When::Cycle { pass: 1, of: 2 })
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"add_choice",{seq},"lane":0,"index":0,"choice":3}}"#
+            )),
+            EditOp::AddChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                choice: Some(Choice::Column(3))
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"set_choice",{seq},"lane":0,"index":0,"option":1,"choice":{{"name":"a"}}}}"#
+            )),
+            EditOp::SetChoice {
+                seq: A,
+                lane: 0,
+                index: 0,
+                option: 1,
+                choice: named("a")
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"set_pick",{seq},"lane":0,"index":0,"pick":"cycle"}}"#
+            )),
+            EditOp::SetPick {
+                seq: A,
+                lane: 0,
+                index: 0,
+                pick: Some(Pick::Cycle)
+            }
+        );
+        assert_eq!(
+            p(&format!(
+                r#"{{"op":"add_section",{seq},"at":16,"name":"Drop"}}"#
+            )),
+            EditOp::AddSection {
+                seq: A,
+                at: 16,
+                name: "Drop".into()
+            }
+        );
+        // A step with the v4 fields in its flat form.
+        let op = p(&format!(
+            r#"{{"op":"insert_step",{seq},"lane":0,"index":0,"step":{{"clip":null,"length":8,"when":{{"is":"last"}},"choices":[{{"name":"a"}}],"pick":"random","transition":{{"length":4}}}}}}"#
+        ));
+        let EditOp::InsertStep { step, .. } = op else {
+            panic!("{op:?}")
+        };
+        assert_eq!(step.when, Some(When::Last));
+        assert_eq!(step.choices, [named("a")]);
+        assert!(serde_json::from_str::<EditOp>(&format!(
+            r#"{{"op":"set_pick",{seq},"lane":0,"index":0,"pick":"sometimes"}}"#
+        ))
+        .is_err());
     }
 
     #[test]
