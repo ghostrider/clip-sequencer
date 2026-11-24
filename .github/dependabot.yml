@@ -23,6 +23,11 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # svelte-check (4.7.x) only accepts typescript ^5 || ^6; with 7, `npm ci` fails (ERESOLVE).
+      # Remove once svelte-check's peerDependencies allow typescript 7.
+      - dependency-name: typescript
+        versions: [">=7"]
     commit-message:
       prefix: "deps(npm)"
 
