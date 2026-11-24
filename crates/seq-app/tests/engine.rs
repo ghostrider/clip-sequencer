@@ -848,6 +848,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
                 column: None,
                 clip: Some(clip(TWISTED)),
                 length: 2,
+                ..Default::default()
             },
         },
         EditOp::InsertStep {
@@ -858,6 +859,7 @@ async fn rest_stops_a_clip_the_lane_started_on_another_layer() {
                 column: None,
                 clip: None,
                 length: 2,
+                ..Default::default()
             },
         },
     ] {

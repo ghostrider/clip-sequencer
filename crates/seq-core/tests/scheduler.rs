@@ -702,26 +702,31 @@ fn run_spec_from_sequence_and_resolution() {
         start: seq_core::Start::Immediate,
         repeat: Repeat::Count { count: 2 },
         after_last_pass: AfterLastPass::Hold,
+        sections: Vec::new(),
         lanes: vec![
             Lane {
                 layer: "BG".into(),
                 mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::Clear,
+                transition: None,
                 steps: vec![
                     Step {
                         column: None,
                         clip: named("A"),
                         length: 16,
+                        ..Default::default()
                     },
                     Step {
                         column: None,
                         clip: None,
                         length: 4,
+                        ..Default::default()
                     },
                     Step {
                         column: None,
                         clip: named("Missing"),
                         length: 2,
+                        ..Default::default()
                     },
                 ],
             },
@@ -729,10 +734,12 @@ fn run_spec_from_sequence_and_resolution() {
                 layer: "Nope".into(),
                 mode: seq_core::model::LaneMode::Clip,
                 end: LaneEnd::Hold,
+                transition: None,
                 steps: vec![Step {
                     column: None,
                     clip: named("A"),
                     length: 8,
+                    ..Default::default()
                 }],
             },
         ],

@@ -161,10 +161,12 @@ pub fn apply_with(
                     start: Start::Immediate,
                     repeat: Repeat::Once,
                     after_last_pass: AfterLastPass::Clear,
+                    sections: Vec::new(),
                     lanes: vec![Lane {
                         layer: layer.clone(),
                         mode: LaneMode::Clip,
                         end: LaneEnd::LoopToEnd,
+                        transition: None,
                         steps: Vec::new(),
                     }],
                 });
@@ -193,6 +195,7 @@ pub fn apply_with(
             layer: layer.clone(),
             mode: LaneMode::Clip,
             end: LaneEnd::LoopToEnd,
+            transition: None,
             steps: Vec::new(),
         }),
         EditOp::RemoveLane { seq, lane } => {

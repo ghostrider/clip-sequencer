@@ -492,10 +492,12 @@ mod tests {
             layer: "BG".into(),
             mode: crate::model::LaneMode::Clip,
             end: LaneEnd::Hold,
+            transition: None,
             steps: vec![Step {
                 column: None,
                 clip: Some(r(Some(10), Some("Tunnel"), Some("tunnel.mov"))),
                 length: 8,
+                ..Default::default()
             }],
         };
         let res = resolve_lane(&lane, &idx);
@@ -637,10 +639,12 @@ mod tests {
             layer: layer.into(),
             mode: crate::model::LaneMode::Clip,
             end: LaneEnd::Hold,
+            transition: None,
             steps: vec![Step {
                 column: None,
                 clip: Some(r(Some(1), Some("A"), None)),
                 length: 8,
+                ..Default::default()
             }],
         };
         let res = resolve_lane(&lane("Layer #"), &idx);
@@ -661,10 +665,12 @@ mod tests {
             start: Start::Immediate,
             repeat: Repeat::Once,
             after_last_pass: AfterLastPass::Clear,
+            sections: Vec::new(),
             lanes: vec![Lane {
                 layer: "BG".into(),
                 mode: crate::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
+                transition: None,
                 steps,
             }],
         }
@@ -677,16 +683,19 @@ mod tests {
                 column: None,
                 clip: Some(r(Some(10), None, None)),
                 length: 8,
+                ..Default::default()
             },
             Step {
                 column: None,
                 clip: None,
                 length: 8,
+                ..Default::default()
             },
             Step {
                 column: None,
                 clip: Some(r(None, Some("Missing"), None)),
                 length: 8,
+                ..Default::default()
             },
         ]);
         let res = resolve_sequence(&seq, &base());
@@ -704,6 +713,7 @@ mod tests {
             column: None,
             clip: Some(r(None, Some("Smoke"), None)),
             length: 8,
+            ..Default::default()
         }]);
         assert!(resolve_sequence(&ok, &base()).is_complete());
     }
@@ -715,21 +725,25 @@ mod tests {
                 column: None,
                 clip: Some(r(Some(10), Some("Tunnel"), None)),
                 length: 8,
+                ..Default::default()
             },
             Step {
                 column: None,
                 clip: Some(r(Some(999), Some("Smoke"), None)),
                 length: 8,
+                ..Default::default()
             },
             Step {
                 column: None,
                 clip: Some(r(None, None, Some("strobe.mov"))),
                 length: 8,
+                ..Default::default()
             },
             Step {
                 column: None,
                 clip: None,
                 length: 8,
+                ..Default::default()
             },
         ]);
         let res = resolve_sequence(&seq, &base());
@@ -768,6 +782,7 @@ mod tests {
             layer: layer.into(),
             mode: LaneMode::Slot,
             end: LaneEnd::Hold,
+            transition: None,
             steps: columns.iter().map(|&c| Step::slot(c, 8)).collect(),
         }
     }
@@ -820,6 +835,7 @@ mod tests {
             layer: "BG".into(),
             mode: LaneMode::Clip,
             end: LaneEnd::Hold,
+            transition: None,
             steps: vec![
                 Step::clip(Some(r(None, Some("Smoke"), None)), 8),
                 Step::clip(None, 4),

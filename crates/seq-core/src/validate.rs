@@ -231,10 +231,12 @@ mod tests {
             start: Start::Immediate,
             repeat: Repeat::Once,
             after_last_pass: AfterLastPass::Clear,
+            sections: Vec::new(),
             lanes: vec![Lane {
                 layer: "BG".into(),
                 mode: crate::model::LaneMode::Clip,
                 end: LaneEnd::LoopToEnd,
+                transition: None,
                 steps: vec![Step {
                     column: None,
                     clip: Some(ClipRef {
@@ -242,6 +244,7 @@ mod tests {
                         ..Default::default()
                     }),
                     length: 8,
+                    ..Default::default()
                 }],
             }],
         }

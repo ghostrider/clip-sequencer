@@ -1,13 +1,17 @@
 //! Round-trip tests of the sequence file format against fixture files (SPEC §6).
 
+use seq_core::model::{Choice, Pick, Section, Transition, When};
 use seq_core::{
     from_json, to_json, AfterLastPass, LaneEnd, LaneMode, LoadError, Repeat, Start, Step,
     ValidationErrorKind,
 };
 use serde_json::Value;
 
+/// The example of SPEC §6 (format version 4).
 const SPEC_EXAMPLE: &str = include_str!("fixtures/spec-example.seq.json");
-/// The same document in format version 1 (lengths in eighths).
+/// The SPEC example as it was in format version 3 (before release 0.5).
+const SPEC_EXAMPLE_V3: &str = include_str!("fixtures/spec-example-v3.seq.json");
+/// [`SPEC_EXAMPLE_V3`] in format version 1 (lengths in eighths, no slot lane).
 const SPEC_EXAMPLE_V1: &str = include_str!("fixtures/spec-example-v1.seq.json");
 const FULL: &str = include_str!("fixtures/full.seq.json");
 const INVALID: &str = include_str!("fixtures/invalid.seq.json");
@@ -38,43 +42,102 @@ fn full_fixture_round_trips() {
 #[test]
 fn spec_example_maps_to_model() {
     let file = from_json(SPEC_EXAMPLE).unwrap();
-    assert_eq!(file.version, 3);
+    assert_eq!(file.version, 4);
     assert_eq!(file.composition, "MyShow");
     let seq = &file.decks["Act 1"].sequences[0];
     assert_eq!(seq.id.to_string(), "6f1c2a9e-0d5b-4c1e-9a0f-2f7d4c1b8e11");
     assert_eq!(seq.name, "Drop A");
-    assert_eq!(seq.start, Start::Immediate);
+    assert_eq!(seq.start, Start::Bar { bars: 4 });
     assert_eq!(seq.repeat, Repeat::Count { count: 4 });
     assert_eq!(seq.after_last_pass, AfterLastPass::Clear);
+    assert_eq!(
+        seq.sections,
+        [
+            Section {
+                at: 0,
+                name: "Intro".into()
+            },
+            Section {
+                at: 128,
+                name: "Drop".into()
+            }
+        ]
+    );
     let lane = &seq.lanes[0];
     assert_eq!(lane.layer, "BG");
     assert_eq!(lane.end, LaneEnd::LoopToEnd);
-    let clip = lane.steps[0].clip.as_ref().unwrap();
+    assert_eq!(lane.mode, LaneMode::Clip);
+    assert_eq!(
+        lane.transition,
+        Some(Transition {
+            length: 4,
+            blend: Some("Alpha".into())
+        })
+    );
+    let first = &lane.steps[0];
+    let clip = first.clip.as_ref().unwrap();
     assert_eq!(clip.id, Some(1712345));
     assert_eq!(clip.name.as_deref(), Some("Tunnel Red"));
     assert_eq!(clip.file.as_deref(), Some("tunnel_red.mov"));
-    assert_eq!(lane.steps[0].length, 32);
-    assert_eq!(lane.steps[1].clip, None);
-    assert_eq!(lane.mode, LaneMode::Clip);
+    assert_eq!(first.length, 32);
+    assert!(
+        matches!(&first.choices[..], [Some(Choice::Clip(c)), None] if c.name.as_deref() == Some("Tunnel Blue"))
+    );
+    assert_eq!(first.pick, Some(Pick::Cycle));
+    assert_eq!(lane.steps[1], Step::clip(None, 16));
+    let strobe = &lane.steps[2];
+    assert_eq!(strobe.when, Some(When::Last));
+    assert_eq!(
+        strobe.transition,
+        Some(Transition {
+            length: 0,
+            blend: None
+        })
+    );
     let slot = &seq.lanes[1];
     assert_eq!(slot.layer, "FG");
     assert_eq!(slot.mode, LaneMode::Slot);
+    assert_eq!(slot.transition, None);
     assert_eq!(
         slot.steps,
         [
-            Step::slot(Some(1), 16),
-            Step::slot(Some(2), 16),
+            Step {
+                when: Some(When::Cycle { pass: 2, of: 2 }),
+                ..Step::slot(Some(1), 16)
+            },
+            Step {
+                choices: vec![Some(Choice::Column(3)), Some(Choice::Column(4))],
+                pick: Some(Pick::Random),
+                ..Step::slot(Some(2), 16)
+            },
             Step::slot(None, 16)
         ]
     );
-    assert_eq!(seq.pass_length(), 48);
+    assert_eq!(seq.pass_length(), 64);
+}
+
+#[test]
+fn v3_file_migrates_unchanged_but_for_version_and_start() {
+    let file = from_json(SPEC_EXAMPLE_V3).unwrap();
+    assert_eq!(file.version, 4);
+    let mut expected: Value = serde_json::from_str(SPEC_EXAMPLE_V3).unwrap();
+    expected["version"] = 4.into();
+    for seq in expected["decks"]["Act 1"]["sequences"]
+        .as_array_mut()
+        .unwrap()
+    {
+        assert_eq!(seq["start"], "immediate");
+        seq["start"] = serde_json::json!({ "mode": "immediate" });
+    }
+    let written: Value = serde_json::from_str(&to_json(&file)).unwrap();
+    assert_eq!(written, expected);
 }
 
 #[test]
 fn v1_file_migrates_to_the_current_document() {
     // Lengths double (eighths -> sixteenths), everything else is unchanged. The v3 example also has
     // a slot lane, which v1 cannot have: compare without it.
-    let mut current = from_json(SPEC_EXAMPLE).unwrap();
+    let mut current = from_json(SPEC_EXAMPLE_V3).unwrap();
     for d in current.decks.values_mut() {
         for s in &mut d.sequences {
             s.lanes.retain(|l| l.mode == LaneMode::Clip);
