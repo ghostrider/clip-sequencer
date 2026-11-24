@@ -268,6 +268,8 @@ pub struct RuntimeState {
     pub rest: bool,
     pub osc: bool,
     pub running: Vec<RunView>,
+    /// Starts waiting for their beat or bar (SPEC §3.2), in the order they were made.
+    pub pending: Vec<PendingView>,
     /// Sequence being started after a deck switch.
     pub switching: Option<SwitchView>,
     pub last_osc: Option<OscView>,
@@ -297,6 +299,20 @@ pub struct ClockView {
     pub transport: Option<String>,
     /// Resolume source: in phase with Resolume's beat since the last resync.
     pub synced: bool,
+    /// The bar phase for quantized starts comes from a MIDI Start or a Resync (SPEC §3.2); false
+    /// while it counts from the first tick (`bar phase not synced`).
+    pub bar_synced: bool,
+}
+
+/// A start waiting for its boundary (SPEC §3.2).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PendingView {
+    pub seq: Uuid,
+    pub name: String,
+    pub from_seq_clip: bool,
+    pub mode: seq_core::Start,
+    /// Ticks until it starts, if the clock keeps running (24 per beat).
+    pub wait_ticks: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

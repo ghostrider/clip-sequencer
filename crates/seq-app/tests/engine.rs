@@ -317,6 +317,85 @@ async fn two_lane_sequence_plays_on_exact_ticks_and_is_confirmed() {
     h.app.shutdown().await;
 }
 
+/// SPEC §3.2: a sequence with start mode `bar` waits for the next bar of the bar phase; ▶ again
+/// starts it at once, Stop cancels, MIDI Start sets the phase (and never starts anything).
+#[tokio::test]
+async fn quantized_starts_wait_for_their_boundary() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    let set_start = |seq, start| {
+        h.cmd(EngineCommand::Edit {
+            op: EditOp::SetStart { seq, start },
+        })
+    };
+    set_start(SEQ_A, seq_core::Start::Bar { bars: 1 });
+    set_start(SEQ_B, seq_core::Start::Beat);
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_B && v.sequence.start == seq_core::Start::Beat)
+    })
+    .await;
+    let r = h.runtime(|r| !r.clock.bar_synced).await;
+    assert!(r.pending.is_empty());
+
+    h.ticks(10); // last tick: phase 9
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    let r = h.runtime(|r| r.pending.len() == 1).await;
+    assert_eq!((r.pending[0].seq, r.pending[0].wait_ticks), (SEQ_A, 87));
+    assert!(r.running.is_empty());
+    h.ticks(86);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(h.mock.osc_log().is_empty(), "nothing before the bar");
+    h.ticks(1);
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+    let sent = h.mock.osc_log().len();
+
+    // Stop cancels a waiting start: nothing is sent.
+    h.ticks(5);
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.cmd(EngineCommand::Stop { seq: SEQ_B });
+    h.runtime(|r| r.pending.is_empty()).await;
+    h.ticks(48);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), sent);
+
+    // ▶ again while waiting: at once.
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+
+    // MIDI Start: the next tick is bar 1, so a waiting start begins on it.
+    h.ticks(30);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    let r = h.runtime(|r| r.pending.len() == 1).await;
+    assert!(r.pending[0].wait_ticks > 1);
+    h.clock
+        .send(ClockEvent::Msg {
+            msg: ClockMsg::Start,
+            at: Instant::now(),
+        })
+        .unwrap();
+    let r = h
+        .runtime(|r| r.clock.bar_synced && r.pending.first().is_some_and(|p| p.wait_ticks == 1))
+        .await;
+    assert!(r.running.is_empty(), "MIDI Start starts nothing by itself");
+    h.ticks(1);
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn seq_clip_starts_its_sequence_and_finishing_clears_the_seq_layer() {
     let h = harness().await;

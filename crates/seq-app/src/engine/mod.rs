@@ -19,7 +19,7 @@ use seq_core::resolve::{refresh_ids, resolve_sequence, SequenceResolution};
 use seq_core::scheduler::{
     bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode,
 };
-use seq_core::{SeqFile, Sequence};
+use seq_core::{SeqFile, Sequence, Start};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
@@ -207,6 +207,9 @@ pub struct Engine {
     model_error: Option<String>,
     /// Snapshots of running sequences (for "edited · applies at next start") and their deck.
     snapshots: HashMap<Uuid, (String, Sequence)>,
+    /// Snapshots of starts waiting for their boundary (SPEC §3.2); moved to `snapshots` when the
+    /// scheduler reports them started.
+    queued: HashMap<Uuid, (String, Sequence)>,
     undo: Vec<SeqFile>,
     redo: Vec<SeqFile>,
 
@@ -240,6 +243,8 @@ pub struct Engine {
     lut_effects: Vec<LutEffect>,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
+    /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
+    bar_synced: bool,
     last_resync: Option<Instant>,
     ws_connected: bool,
     rest_ok: bool,
@@ -300,6 +305,7 @@ impl Engine {
             model: None,
             model_error: None,
             snapshots: HashMap::new(),
+            queued: HashMap::new(),
             undo: Vec::new(),
             redo: Vec::new(),
             last_layer_trigger: HashMap::new(),
@@ -320,6 +326,7 @@ impl Engine {
             tempo_ctl: None,
             lut_effects: Vec::new(),
             phase_synced: false,
+            bar_synced: false,
             last_resync: None,
             ws_connected: false,
             rest_ok: false,
@@ -381,11 +388,23 @@ impl Engine {
     /// Resync (SPEC §3.1): `at` is beat 1; every running sequence jumps to its start.
     fn on_resync(&mut self, at: Instant) {
         self.phase_synced = true;
+        self.bar_synced = true;
         let running = self.scheduler.running().count();
         log::info!("resync from Resolume: {running} running sequence(s) back to bar 1");
         self.request_upcoming_slots(at);
         let actions = self.scheduler.rewind_all();
         self.execute(actions);
+        // This moment is bar 0 (SPEC §3.2): waiting starts begin together with the rewind.
+        let actions = self.scheduler.phase_reset_now();
+        self.execute(actions);
+        self.runtime_dirty = true;
+    }
+
+    /// The bar phase is unknown again (clock (re)connected, source switched, Resolume lost): it
+    /// counts from the next tick until a MIDI Start or Resync (SPEC §3.2).
+    fn bar_phase_unknown(&mut self) {
+        self.scheduler.phase_reset_next_tick();
+        self.bar_synced = false;
         self.runtime_dirty = true;
     }
 
@@ -469,12 +488,22 @@ impl Engine {
                     self.runtime_dirty = true;
                 }
             }
+            ClockEvent::Msg {
+                msg: ClockMsg::Start,
+                ..
+            } => {
+                // Sets the bar phase only; never restarts running sequences (SPEC §3).
+                log::info!("MIDI Start: the next tick is bar 1 for quantized starts");
+                self.scheduler.phase_reset_next_tick();
+                self.bar_synced = true;
+                self.runtime_dirty = true;
+            }
             ClockEvent::Msg { msg, .. } => log::info!("MIDI {msg:?} (ignored by sequences)"),
             ClockEvent::Resync { at } => self.on_resync(at),
             ClockEvent::Connected { port } => {
                 self.clock_connected = true;
                 self.clock_port = Some(port);
-                self.runtime_dirty = true;
+                self.bar_phase_unknown();
             }
             ClockEvent::Disconnected { reason } => {
                 if self.clock_connected {
@@ -504,6 +533,9 @@ impl Engine {
                 self.ws_connected = false;
                 // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
                 self.phase_synced = false;
+                if self.follows_resolume() {
+                    self.bar_phase_unknown();
+                }
                 self.feed_resolume_state();
                 self.runtime_dirty = true;
             }
@@ -928,6 +960,13 @@ impl Engine {
                             .map(|s| s.id)
                     });
                     match found {
+                        // Waiting for its boundary: the § clip takes over the waiting start
+                        // instead of making a second one (SPEC §7.1).
+                        Some(seq) if self.scheduler.is_pending(seq) => {
+                            self.scheduler
+                                .link_pending(seq, Origin::SeqClip { clip_id });
+                            self.runtime_dirty = true;
+                        }
                         Some(seq) => self.start_now(seq, Origin::SeqClip { clip_id }),
                         None => {
                             self.notice(format!("§ clip {name:?} matches no sequence in this deck"))
@@ -974,12 +1013,20 @@ impl Engine {
     }
 
     fn on_clip_disconnected(&mut self, clip_id: u64) {
+        let origin = Origin::SeqClip { clip_id };
         let runs: Vec<Uuid> = self
             .scheduler
             .status()
             .into_iter()
-            .filter(|r| r.origin == Origin::SeqClip { clip_id })
+            .filter(|r| r.origin == origin)
             .map(|r| r.seq)
+            .chain(
+                self.scheduler
+                    .pending()
+                    .into_iter()
+                    .filter(|p| p.origin == origin)
+                    .map(|p| p.seq),
+            )
             .collect();
         for seq in runs {
             let acts = self.scheduler.stop(seq, StopMode::AfterLastPass);
@@ -1047,6 +1094,7 @@ impl Engine {
                     self.clock_connected = false;
                     self.clock_running = false;
                     self.phase_synced = false;
+                    self.bar_phase_unknown();
                     self.tempo = TempoEstimator::new();
                     self.feed_resolume_state();
                     self.notice(match source {
@@ -1214,8 +1262,10 @@ impl Engine {
         self.runtime_dirty = true;
     }
 
-    /// Resolves and starts a sequence of the live deck.
+    /// Resolves and starts a sequence of the live deck by its start mode (SPEC §3.2). Starting a
+    /// sequence that already waits for its boundary starts it at once.
     fn start_now(&mut self, seq: Uuid, origin: Origin) {
+        let at_once = self.scheduler.is_pending(seq);
         let Some(index) = self.index.clone() else {
             return;
         };
@@ -1249,13 +1299,19 @@ impl Engine {
                 run_lane.layer_id = None; // lanes may not play on the SEQ layer
             }
         }
-        match self.scheduler.start(spec, origin) {
-            Ok(acts) => {
-                self.not_confirmed.retain(|(s, _), _| *s != seq);
-                self.snapshots.insert(seq, (live, sequence));
-                self.execute(acts);
+        let mode = if at_once {
+            Start::Immediate
+        } else {
+            sequence.start
+        };
+        let name = sequence.name.clone();
+        self.queued.insert(seq, (live, sequence));
+        match self.scheduler.start(spec, origin, mode) {
+            Ok(acts) => self.execute(acts),
+            Err(e) => {
+                self.queued.remove(&seq);
+                self.notice(format!("cannot start {name:?}: {e}"));
             }
-            Err(e) => self.notice(format!("cannot start {:?}: {e}", sequence.name)),
         }
         self.runtime_dirty = true;
     }
@@ -1297,8 +1353,29 @@ impl Engine {
                     }
                     self.runtime_dirty = true;
                 }
-                Action::Started { .. }
-                | Action::PassStarted { .. }
+                Action::Started { seq, .. } => {
+                    if let Some(snapshot) = self.queued.remove(&seq) {
+                        self.not_confirmed.retain(|(s, _), _| *s != seq);
+                        self.snapshots.insert(seq, snapshot);
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::Pending { seq, .. } => {
+                    if let Some(p) = self.scheduler.pending().iter().find(|p| p.seq == seq) {
+                        log::info!(
+                            "{:?} starts in {} tick(s) ({:?})",
+                            p.name,
+                            p.wait_ticks,
+                            p.mode
+                        );
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::PendingCancelled { seq, .. } => {
+                    self.queued.remove(&seq);
+                    self.runtime_dirty = true;
+                }
+                Action::PassStarted { .. }
                 | Action::StepStarted { .. }
                 | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
             }
@@ -1932,6 +2009,18 @@ impl Engine {
                 }
             })
             .collect();
+        let pending = self
+            .scheduler
+            .pending()
+            .into_iter()
+            .map(|p| PendingView {
+                seq: p.seq,
+                name: p.name,
+                from_seq_clip: origin_is_seq_clip(p.origin),
+                mode: p.mode,
+                wait_ticks: p.wait_ticks,
+            })
+            .collect();
         RuntimeState {
             clock: if self.follows_resolume() {
                 let ctl = self.tempo_ctl.as_ref().filter(|_| self.ws_connected);
@@ -1943,6 +2032,7 @@ impl Engine {
                     bpm: ctl.map(|t| t.bpm),
                     transport: ctl.map(|t| t.play.clone()),
                     synced: self.phase_synced,
+                    bar_synced: self.bar_synced,
                 }
             } else {
                 ClockView {
@@ -1953,6 +2043,7 @@ impl Engine {
                     bpm: self.clock_running.then(|| self.tempo.bpm()).flatten(),
                     transport: None,
                     synced: false,
+                    bar_synced: self.bar_synced,
                 }
             },
             ws: self.ws_connected,
@@ -1960,6 +2051,7 @@ impl Engine {
             rest: self.rest_ok,
             osc: self.osc_ok,
             running,
+            pending,
             switching: self.switch.as_ref().map(|s| SwitchView {
                 seq: s.seq,
                 deck: s.deck.clone(),
