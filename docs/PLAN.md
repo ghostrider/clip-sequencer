@@ -264,19 +264,19 @@ Decided with Uli on 2026-11-23/24 (background and rejected ideas: `docs/release-
 §9.4), in-app update (§15). Order: M19 first (everything else builds on the format); M21's probe needs Uli and
 Resolume and can run whenever he has time; the rest in the order below. One milestone at a time, as always.
 
-## M19 — Sequence file format v4 (SPEC §6)  ⟵ next
-- [ ] `seq-core` model: `start` object (`immediate` / `beat` / `bar` + `bars`), `sections`, lane and step
+## M19 — Sequence file format v4 (SPEC §6)  ✓ done 2026-11-24
+- [x] `seq-core` model: `start` object (`immediate` / `beat` / `bar` + `bars`), `sections`, lane and step
       `transition`, step `when`, `choices` + `pick`; strict serde forms (`deny_unknown_fields`, the repr pattern of
       `repeat`).
-- [ ] Load v1–v3 (`start: "immediate"` → object), v4; refuse > 4; first save writes v4 and keeps `.v<N>.bak`.
-- [ ] Validation for every new field (ranges, "only with" rules, kinds matching the lane mode, sorted sections).
-- [ ] Clip resolution (§4.3) and relink for every choice; unresolved marks per option.
-- [ ] Edit operations with undo (SPEC §9.6 list) and their protocol; round-trip, migration and validation tests.
-- [ ] The app keeps playing as before: new fields are carried but not acted on yet (the scheduler ignores them
+- [x] Load v1–v3 (`start: "immediate"` → object), v4; refuse > 4; first save writes v4 and keeps `.v<N>.bak`.
+- [x] Validation for every new field (ranges, "only with" rules, kinds matching the lane mode, sorted sections).
+- [x] Clip resolution (§4.3) and relink for every choice; unresolved marks per option.
+- [x] Edit operations with undo (SPEC §9.6 list) and their protocol; round-trip, migration and validation tests.
+- [x] The app keeps playing as before: new fields are carried but not acted on yet (the scheduler ignores them
       until their milestone); `--validate` reports v4 errors.
-- [ ] Samples: update `docs/samples/demo.seq.json` to v4 (keep a v3 copy for the migration test).
+- [x] Samples: update `docs/samples/demo.seq.json` to v4 (keep a v3 copy for the migration test).
 
-## M20 — Quantized start, cue, mute/solo (SPEC §3.2; G1, G2)
+## M20 — Quantized start, cue, mute/solo (SPEC §3.2; G1, G2)  ⟵ next
 - [ ] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
 - [ ] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
       freeze with the clock; `§` starts wait too; deck switch first. Unit tests on boundaries.
