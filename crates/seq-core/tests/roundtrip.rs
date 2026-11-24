@@ -172,7 +172,7 @@ fn invalid_fixture_reports_every_problem() {
         panic!("expected validation errors");
     };
     let kinds: Vec<_> = errors.iter().map(|e| &e.kind).collect();
-    assert_eq!(errors.len(), 6, "{errors:#?}");
+    assert_eq!(errors.len(), 13, "{errors:#?}");
     assert!(matches!(
         kinds[0],
         ValidationErrorKind::CountTooSmall { count: 1 }
@@ -185,9 +185,48 @@ fn invalid_fixture_reports_every_problem() {
         ValidationErrorKind::DuplicateName { first_index: 0, .. }
     ));
     assert!(matches!(kinds[5], ValidationErrorKind::NoLanes));
+    // Format v4 fields.
+    let v4: Vec<_> = errors[6..]
+        .iter()
+        .map(|e| (e.path.as_str(), &e.kind))
+        .collect();
+    let at = |rest: &str| format!(r#"decks["Act 1"].sequences[2] "Drop B".{rest}"#);
+    assert_eq!(
+        v4,
+        [
+            (
+                at("start.bars").as_str(),
+                &ValidationErrorKind::StartBars { bars: 3 }
+            ),
+            (
+                at("sections[1].at").as_str(),
+                &ValidationErrorKind::DuplicateSection { at: 8 }
+            ),
+            (
+                at("lanes[0].transition.length").as_str(),
+                &ValidationErrorKind::TransitionTooLong { length: 300 }
+            ),
+            (
+                at("lanes[0].steps[0].when").as_str(),
+                &ValidationErrorKind::CycleOutOfRange { pass: 1, of: 1 }
+            ),
+            (
+                at("lanes[0].steps[0].choices").as_str(),
+                &ValidationErrorKind::TooManyChoices { count: 4 }
+            ),
+            (
+                at("lanes[0].steps[0].choices[1]").as_str(),
+                &ValidationErrorKind::EmptyClipRef
+            ),
+            (
+                at("lanes[1].steps[0].choices[0]").as_str(),
+                &ValidationErrorKind::ZeroColumn
+            ),
+        ]
+    );
     let message = LoadError::Invalid(errors).to_string();
     assert!(
-        message.starts_with("6 problem(s) in sequence file:"),
+        message.starts_with("13 problem(s) in sequence file:"),
         "{message}"
     );
     assert!(message.contains(r#"decks["Act 1"].sequences[0] "Drop A".lanes[0].steps[0].length"#));

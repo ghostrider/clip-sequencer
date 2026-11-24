@@ -9,7 +9,10 @@ use std::fmt;
 
 use uuid::Uuid;
 
-use crate::model::{LaneMode, Repeat, SeqFile, Sequence};
+use crate::model::{
+    Choice, LaneMode, Repeat, SeqFile, Sequence, Start, Step, Transition, When, MAX_CHOICES,
+    MAX_CYCLE, MAX_NAME_CHARS, MAX_SECTIONS, MAX_TRANSITION_LENGTH, START_BARS,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{path}: {kind}")]
@@ -50,6 +53,45 @@ pub enum ValidationErrorKind {
         layer: String,
         first_lane: usize,
     },
+    /// `start.bars` not one of 1, 2, 4, 8, 16 (format v4).
+    StartBars {
+        bars: u32,
+    },
+    /// More than [`MAX_SECTIONS`] sections in one sequence.
+    TooManySections {
+        count: usize,
+    },
+    /// A section or blend mode name with no characters or more than [`MAX_NAME_CHARS`].
+    NameLength {
+        chars: usize,
+    },
+    /// Sections must be sorted by `at`.
+    SectionsNotSorted {
+        at: u64,
+        previous: u64,
+    },
+    /// Two sections at the same position.
+    DuplicateSection {
+        at: u64,
+    },
+    /// A transition longer than [`MAX_TRANSITION_LENGTH`] sixteenths.
+    TransitionTooLong {
+        length: u32,
+    },
+    /// A `cycle` condition outside `2 ≤ of ≤ 16`, `1 ≤ pass ≤ of`.
+    CycleOutOfRange {
+        pass: u32,
+        of: u32,
+    },
+    /// More than [`MAX_CHOICES`] choices.
+    TooManyChoices {
+        count: usize,
+    },
+    /// A choice of the other kind than the lane's mode (a column in a clip lane, a clip in a slot
+    /// lane).
+    ChoiceModeMismatch,
+    /// `pick` without `choices`.
+    PickWithoutChoices,
 }
 
 impl fmt::Display for ValidationErrorKind {
@@ -84,6 +126,42 @@ impl fmt::Display for ValidationErrorKind {
                 f,
                 "layer {layer:?} is already used by lanes[{first_lane}] of this sequence"
             ),
+            Self::StartBars { bars } => write!(
+                f,
+                "start bars must be 1, 2, 4, 8 or 16 (got {bars})"
+            ),
+            Self::TooManySections { count } => write!(
+                f,
+                "at most {MAX_SECTIONS} sections per sequence (got {count})"
+            ),
+            Self::NameLength { chars } => write!(
+                f,
+                "name must have 1 to {MAX_NAME_CHARS} characters (got {chars})"
+            ),
+            Self::SectionsNotSorted { at, previous } => write!(
+                f,
+                "sections must be sorted by position ({at} comes after {previous})"
+            ),
+            Self::DuplicateSection { at } => {
+                write!(f, "another section is already at position {at}")
+            }
+            Self::TransitionTooLong { length } => write!(
+                f,
+                "transition length must be 0 to {MAX_TRANSITION_LENGTH} sixteenths (got {length})"
+            ),
+            Self::CycleOutOfRange { pass, of } => write!(
+                f,
+                "condition cycle needs 2 <= of <= {MAX_CYCLE} and 1 <= pass <= of (got pass {pass} of {of})"
+            ),
+            Self::TooManyChoices { count } => write!(
+                f,
+                "at most {MAX_CHOICES} choices besides the step's own (got {count})"
+            ),
+            Self::ChoiceModeMismatch => write!(
+                f,
+                "choice does not match the lane mode (clip lanes use clips, slot lanes columns)"
+            ),
+            Self::PickWithoutChoices => write!(f, "pick is only allowed together with choices"),
         }
     }
 }
@@ -154,6 +232,15 @@ fn validate_sequence(
             );
         }
     }
+    if let Start::Bar { bars } = seq.start {
+        if !START_BARS.contains(&bars) {
+            err(
+                format!("{seq_path}.start.bars"),
+                ValidationErrorKind::StartBars { bars },
+            );
+        }
+    }
+    validate_sections(seq, seq_path, err);
     if seq.lanes.is_empty() {
         err(format!("{seq_path}.lanes"), ValidationErrorKind::NoLanes);
     }
@@ -175,6 +262,9 @@ fn validate_sequence(
             );
         } else {
             layers.insert(&lane.layer, li);
+        }
+        if let Some(t) = &lane.transition {
+            validate_transition(t, &format!("{lane_path}.transition"), err);
         }
         for (ti, step) in lane.steps.iter().enumerate() {
             let step_path = format!("{lane_path}.steps[{ti}]");
@@ -201,9 +291,120 @@ fn validate_sequence(
                 LaneMode::Slot => step.clip.is_some(),
             };
             if mismatch {
-                err(step_path, ValidationErrorKind::StepModeMismatch);
+                err(step_path.clone(), ValidationErrorKind::StepModeMismatch);
             }
+            validate_step_v4(step, lane.mode, &step_path, err);
         }
+    }
+}
+
+fn validate_sections(
+    seq: &Sequence,
+    seq_path: &str,
+    err: &mut impl FnMut(String, ValidationErrorKind),
+) {
+    if seq.sections.len() > MAX_SECTIONS {
+        err(
+            format!("{seq_path}.sections"),
+            ValidationErrorKind::TooManySections {
+                count: seq.sections.len(),
+            },
+        );
+    }
+    let mut previous: Option<u64> = None;
+    for (i, section) in seq.sections.iter().enumerate() {
+        let path = format!("{seq_path}.sections[{i}]");
+        check_name(&section.name, format!("{path}.name"), err);
+        match previous {
+            Some(p) if section.at == p => err(
+                format!("{path}.at"),
+                ValidationErrorKind::DuplicateSection { at: section.at },
+            ),
+            Some(p) if section.at < p => err(
+                format!("{path}.at"),
+                ValidationErrorKind::SectionsNotSorted {
+                    at: section.at,
+                    previous: p,
+                },
+            ),
+            _ => {}
+        }
+        previous = Some(previous.map_or(section.at, |p| p.max(section.at)));
+    }
+}
+
+/// 1 to [`MAX_NAME_CHARS`] characters (Unicode scalar values).
+fn check_name(name: &str, path: String, err: &mut impl FnMut(String, ValidationErrorKind)) {
+    let chars = name.chars().count();
+    if chars == 0 || chars > MAX_NAME_CHARS {
+        err(path, ValidationErrorKind::NameLength { chars });
+    }
+}
+
+fn validate_transition(
+    t: &Transition,
+    path: &str,
+    err: &mut impl FnMut(String, ValidationErrorKind),
+) {
+    if t.length > MAX_TRANSITION_LENGTH {
+        err(
+            format!("{path}.length"),
+            ValidationErrorKind::TransitionTooLong { length: t.length },
+        );
+    }
+    if let Some(blend) = &t.blend {
+        check_name(blend, format!("{path}.blend"), err);
+    }
+}
+
+/// The format v4 step fields: condition, choices and pick, transition.
+fn validate_step_v4(
+    step: &Step,
+    mode: LaneMode,
+    step_path: &str,
+    err: &mut impl FnMut(String, ValidationErrorKind),
+) {
+    if let Some(When::Cycle { pass, of }) = step.when {
+        if !(2..=MAX_CYCLE).contains(&of) || pass < 1 || pass > of {
+            err(
+                format!("{step_path}.when"),
+                ValidationErrorKind::CycleOutOfRange { pass, of },
+            );
+        }
+    }
+    if step.choices.len() > MAX_CHOICES {
+        err(
+            format!("{step_path}.choices"),
+            ValidationErrorKind::TooManyChoices {
+                count: step.choices.len(),
+            },
+        );
+    }
+    for (ci, choice) in step.choices.iter().enumerate() {
+        let path = format!("{step_path}.choices[{ci}]");
+        match (mode, choice) {
+            (_, None) => {}
+            (LaneMode::Clip, Some(Choice::Clip(c))) => {
+                if c.is_empty() {
+                    err(path, ValidationErrorKind::EmptyClipRef);
+                }
+            }
+            (LaneMode::Slot, Some(Choice::Column(col))) => {
+                if *col == 0 {
+                    err(path, ValidationErrorKind::ZeroColumn);
+                }
+            }
+            _ => err(path, ValidationErrorKind::ChoiceModeMismatch),
+        }
+    }
+    if step.pick.is_some() && step.choices.is_empty() {
+        err(
+            format!("{step_path}.pick"),
+            ValidationErrorKind::PickWithoutChoices,
+        );
+    }
+    if let Some(t) = &step.transition {
+        validate_transition(t, &format!("{step_path}.transition"), err);
     }
 }
 
@@ -404,6 +605,202 @@ mod tests {
                 layer: "BG".into(),
                 first_lane: 0
             }]
+        );
+    }
+
+    #[test]
+    fn start_bars_must_be_a_power_of_two_up_to_16() {
+        for bars in START_BARS {
+            let mut s = seq("A", 1);
+            s.start = Start::Bar { bars };
+            assert_eq!(validate(&file_with("D", vec![s])), Ok(()), "{bars}");
+        }
+        for bars in [0, 3, 32] {
+            let mut s = seq("A", 1);
+            s.start = Start::Bar { bars };
+            assert_eq!(
+                kinds(&file_with("D", vec![s])),
+                vec![ValidationErrorKind::StartBars { bars }]
+            );
+        }
+    }
+
+    fn section(at: u64, name: &str) -> Section {
+        Section {
+            at,
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn sections_sorted_unique_named_and_limited() {
+        let mut s = seq("A", 1);
+        // Beyond the sequence's length is fine; names of 1 and 64 characters too.
+        s.sections = vec![
+            section(0, "I"),
+            section(16, &"ü".repeat(64)),
+            section(10_000, "Late"),
+        ];
+        assert_eq!(validate(&file_with("D", vec![s.clone()])), Ok(()));
+
+        s.sections = vec![
+            section(16, "B"),
+            section(8, "A"),
+            section(8, ""),
+            section(32, &"x".repeat(65)),
+        ];
+        let errs = validate(&file_with("D", vec![s.clone()])).unwrap_err();
+        let got: Vec<_> = errs.iter().map(|e| (e.path.as_str(), &e.kind)).collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    r#"decks["D"].sequences[0] "A".sections[1].at"#,
+                    &ValidationErrorKind::SectionsNotSorted {
+                        at: 8,
+                        previous: 16
+                    }
+                ),
+                (
+                    r#"decks["D"].sequences[0] "A".sections[2].name"#,
+                    &ValidationErrorKind::NameLength { chars: 0 }
+                ),
+                (
+                    r#"decks["D"].sequences[0] "A".sections[2].at"#,
+                    &ValidationErrorKind::SectionsNotSorted {
+                        at: 8,
+                        previous: 16
+                    }
+                ),
+                (
+                    r#"decks["D"].sequences[0] "A".sections[3].name"#,
+                    &ValidationErrorKind::NameLength { chars: 65 }
+                ),
+            ]
+        );
+
+        s.sections = vec![section(4, "A"), section(4, "B")];
+        assert_eq!(
+            kinds(&file_with("D", vec![s.clone()])),
+            vec![ValidationErrorKind::DuplicateSection { at: 4 }]
+        );
+
+        s.sections = (0..65).map(|i| section(i, "S")).collect();
+        assert_eq!(
+            kinds(&file_with("D", vec![s])),
+            vec![ValidationErrorKind::TooManySections { count: 65 }]
+        );
+    }
+
+    fn transition(length: u32, blend: Option<&str>) -> Transition {
+        Transition {
+            length,
+            blend: blend.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn transitions_on_lanes_and_steps() {
+        let mut s = seq("A", 1);
+        s.lanes[0].transition = Some(transition(256, Some("Alpha")));
+        s.lanes[0].steps[0].transition = Some(transition(0, None));
+        assert_eq!(validate(&file_with("D", vec![s.clone()])), Ok(()));
+
+        s.lanes[0].transition = Some(transition(257, Some("")));
+        s.lanes[0].steps[0].transition = Some(transition(4, Some(&"b".repeat(65))));
+        let errs = validate(&file_with("D", vec![s])).unwrap_err();
+        let got: Vec<_> = errs.iter().map(|e| (e.path.as_str(), &e.kind)).collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    r#"decks["D"].sequences[0] "A".lanes[0].transition.length"#,
+                    &ValidationErrorKind::TransitionTooLong { length: 257 }
+                ),
+                (
+                    r#"decks["D"].sequences[0] "A".lanes[0].transition.blend"#,
+                    &ValidationErrorKind::NameLength { chars: 0 }
+                ),
+                (
+                    r#"decks["D"].sequences[0] "A".lanes[0].steps[0].transition.blend"#,
+                    &ValidationErrorKind::NameLength { chars: 65 }
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn cycle_condition_ranges() {
+        let check = |pass, of| {
+            let mut s = seq("A", 1);
+            s.lanes[0].steps[0].when = Some(When::Cycle { pass, of });
+            kinds(&file_with("D", vec![s]))
+        };
+        for (pass, of) in [(1, 2), (2, 2), (1, 16), (16, 16), (3, 7)] {
+            assert_eq!(check(pass, of), vec![], "{pass} of {of}");
+        }
+        for (pass, of) in [(1, 1), (0, 4), (5, 4), (1, 17), (0, 0)] {
+            assert_eq!(
+                check(pass, of),
+                vec![ValidationErrorKind::CycleOutOfRange { pass, of }],
+                "{pass} of {of}"
+            );
+        }
+        let mut s = seq("A", 1);
+        s.lanes[0].steps[0].when = Some(When::NotLast);
+        assert_eq!(validate(&file_with("D", vec![s])), Ok(()));
+    }
+
+    fn named(name: &str) -> Option<Choice> {
+        Some(Choice::Clip(ClipRef {
+            name: Some(name.into()),
+            ..Default::default()
+        }))
+    }
+
+    #[test]
+    fn choices_kinds_count_and_pick() {
+        let mut s = seq("A", 1);
+        s.lanes[0].steps[0].choices = vec![named("B"), None, named("C")];
+        s.lanes[0].steps[0].pick = Some(Pick::Cycle);
+        assert_eq!(validate(&file_with("D", vec![s.clone()])), Ok(()));
+
+        s.lanes[0].steps[0].choices = vec![
+            named("B"),
+            Some(Choice::Column(2)),
+            Some(Choice::Clip(ClipRef::default())),
+            None,
+        ];
+        assert_eq!(
+            kinds(&file_with("D", vec![s.clone()])),
+            vec![
+                ValidationErrorKind::TooManyChoices { count: 4 },
+                ValidationErrorKind::ChoiceModeMismatch,
+                ValidationErrorKind::EmptyClipRef,
+            ]
+        );
+
+        s.lanes[0].steps[0].choices.clear();
+        assert_eq!(
+            kinds(&file_with("D", vec![s.clone()])),
+            vec![ValidationErrorKind::PickWithoutChoices]
+        );
+
+        // Slot lanes: columns >= 1 or rests.
+        let mut slot = seq("B", 2);
+        slot.lanes[0].mode = LaneMode::Slot;
+        slot.lanes[0].steps = vec![Step {
+            choices: vec![Some(Choice::Column(3)), None, Some(Choice::Column(0))],
+            ..Step::slot(Some(1), 8)
+        }];
+        assert_eq!(
+            kinds(&file_with("D", vec![slot.clone()])),
+            vec![ValidationErrorKind::ZeroColumn]
+        );
+        slot.lanes[0].steps[0].choices = vec![named("X")];
+        assert_eq!(
+            kinds(&file_with("D", vec![slot])),
+            vec![ValidationErrorKind::ChoiceModeMismatch]
         );
     }
 
