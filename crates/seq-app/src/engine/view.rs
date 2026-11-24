@@ -112,6 +112,8 @@ pub struct LaneResolutionView {
     /// `ok`, `missing`, `ambiguous` or `seq_layer`.
     pub layer: &'static str,
     pub steps: Vec<StepResolutionView>,
+    /// Per step, its `choices` (options 2…, format v4), resolved one by one; empty without choices.
+    pub choices: Vec<Vec<StepResolutionView>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -143,6 +145,48 @@ impl From<Methods> for MethodsView {
     }
 }
 
+fn step_view(s: &StepResolution) -> StepResolutionView {
+    match s {
+        StepResolution::Rest => StepResolutionView {
+            state: "rest",
+            clip_id: None,
+            by: None,
+            ambiguous: false,
+            other_layer: false,
+            methods: MethodsView::default(),
+        },
+        StepResolution::Resolved { clip, methods } => StepResolutionView {
+            state: "ok",
+            clip_id: Some(clip.clip_id),
+            by: Some(match clip.by {
+                ResolvedBy::Id => "id",
+                ResolvedBy::Name => "name",
+                ResolvedBy::File => "file",
+                ResolvedBy::Slot => "slot",
+            }),
+            ambiguous: clip.ambiguous,
+            other_layer: !clip.on_lane_layer,
+            methods: (*methods).into(),
+        },
+        StepResolution::Slot { clip, .. } => StepResolutionView {
+            state: if clip.is_some() { "slot" } else { "empty" },
+            clip_id: clip.map(|c| c.clip_id),
+            by: clip.map(|_| "slot"),
+            ambiguous: false,
+            other_layer: false,
+            methods: MethodsView::default(),
+        },
+        StepResolution::Unresolved { methods } => StepResolutionView {
+            state: "unresolved",
+            clip_id: None,
+            by: None,
+            ambiguous: false,
+            other_layer: false,
+            methods: (*methods).into(),
+        },
+    }
+}
+
 pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> ResolutionView {
     let lanes = res
         .lanes
@@ -158,55 +202,22 @@ pub fn resolution_view(res: &SequenceResolution, seq_layer_lanes: &[bool]) -> Re
                     LayerResolution::Ambiguous { .. } => "ambiguous",
                 }
             },
-            steps: l
-                .steps
+            steps: l.steps.iter().map(step_view).collect(),
+            choices: l
+                .choices
                 .iter()
-                .map(|s| match s {
-                    StepResolution::Rest => StepResolutionView {
-                        state: "rest",
-                        clip_id: None,
-                        by: None,
-                        ambiguous: false,
-                        other_layer: false,
-                        methods: MethodsView::default(),
-                    },
-                    StepResolution::Resolved { clip, methods } => StepResolutionView {
-                        state: "ok",
-                        clip_id: Some(clip.clip_id),
-                        by: Some(match clip.by {
-                            ResolvedBy::Id => "id",
-                            ResolvedBy::Name => "name",
-                            ResolvedBy::File => "file",
-                            ResolvedBy::Slot => "slot",
-                        }),
-                        ambiguous: clip.ambiguous,
-                        other_layer: !clip.on_lane_layer,
-                        methods: (*methods).into(),
-                    },
-                    StepResolution::Slot { clip, .. } => StepResolutionView {
-                        state: if clip.is_some() { "slot" } else { "empty" },
-                        clip_id: clip.map(|c| c.clip_id),
-                        by: clip.map(|_| "slot"),
-                        ambiguous: false,
-                        other_layer: false,
-                        methods: MethodsView::default(),
-                    },
-                    StepResolution::Unresolved { methods } => StepResolutionView {
-                        state: "unresolved",
-                        clip_id: None,
-                        by: None,
-                        ambiguous: false,
-                        other_layer: false,
-                        methods: (*methods).into(),
-                    },
-                })
+                .map(|c| c.iter().map(step_view).collect())
                 .collect(),
         })
         .collect::<Vec<_>>();
     ResolutionView {
-        complete: lanes
-            .iter()
-            .all(|l| l.layer == "ok" && l.steps.iter().all(|s| s.state != "unresolved")),
+        complete: lanes.iter().all(|l| {
+            l.layer == "ok"
+                && l.steps
+                    .iter()
+                    .chain(l.choices.iter().flatten())
+                    .all(|s| s.state != "unresolved")
+        }),
         lanes,
     }
 }

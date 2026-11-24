@@ -766,6 +766,34 @@ fn run_spec_from_sequence_and_resolution() {
     assert_eq!(rs.lanes[1].layer_id, None);
     assert_eq!(rs.pass_ticks(), 132);
     assert_eq!(rs.passes(), Some(2));
+
+    // Format v4 fields are carried but not acted on yet (M20–M22): the snapshot the scheduler gets
+    // is the same with all of them set, so it plays exactly as before.
+    use seq_core::model::{Choice, Pick, Section, Transition, When};
+    let mut v4 = sequence.clone();
+    v4.start = seq_core::Start::Bar { bars: 4 };
+    v4.sections = vec![Section {
+        at: 8,
+        name: "Drop".into(),
+    }];
+    v4.lanes[0].transition = Some(Transition {
+        length: 4,
+        blend: Some("Add".into()),
+    });
+    for (i, step) in v4.lanes[0].steps.iter_mut().enumerate() {
+        step.when = Some(When::Cycle { pass: 2, of: 2 });
+        step.choices = vec![None, named("Missing").map(Choice::Clip)];
+        step.pick = Some(if i % 2 == 0 {
+            Pick::Cycle
+        } else {
+            Pick::Random
+        });
+        step.transition = Some(Transition {
+            length: 0,
+            blend: None,
+        });
+    }
+    assert_eq!(RunSpec::new(&v4, &resolve_sequence(&v4, &idx)), rs);
 }
 
 /// (tick, column) of every slot trigger.

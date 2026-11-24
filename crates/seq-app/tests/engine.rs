@@ -545,6 +545,85 @@ async fn edits_are_validated_saved_and_undoable() {
     h.app.shutdown().await;
 }
 
+/// Format v4 edits (SPEC §9.6) go through the engine like the others: saved as version 4 (the
+/// harness file is version 1, kept as `.v1.bak`) and undone one by one.
+#[tokio::test]
+async fn format_v4_edits_are_saved_and_undoable() {
+    use seq_core::edit::EditOp;
+    use seq_core::model::{Choice, Pick};
+    let h = harness().await;
+    let seq_a = |s: &StructureState| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .find(|v| v.sequence.id == SEQ_A)
+            .map(|v| v.sequence.clone())
+            .unwrap()
+    };
+    for op in [
+        EditOp::SetStart {
+            seq: SEQ_A,
+            start: seq_core::Start::Bar { bars: 4 },
+        },
+        EditOp::AddSection {
+            seq: SEQ_A,
+            at: 16,
+            name: "Drop".into(),
+        },
+        EditOp::AddChoice {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            choice: None,
+        },
+        EditOp::SetPick {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            pick: Some(Pick::Cycle),
+        },
+    ] {
+        h.cmd(EngineCommand::Edit { op });
+    }
+    let s = h
+        .structure(|s| seq_a(s).lanes[0].steps[0].pick == Some(Pick::Cycle))
+        .await;
+    let seq = seq_a(&s);
+    assert_eq!(seq.start, seq_core::Start::Bar { bars: 4 });
+    assert_eq!(seq.sections.len(), 1);
+    assert_eq!(seq.lanes[0].steps[0].choices, [None::<Choice>]);
+
+    h.runtime(|r| r.saved > 0).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let text = std::fs::read_to_string(h.dir.path().join("dev.seq.json")).unwrap();
+    assert_eq!(seq_core::file_version(&text), Some(4));
+    assert_eq!(
+        seq_core::from_json(&text)
+            .unwrap()
+            .find_sequence(SEQ_A)
+            .unwrap()
+            .1,
+        &seq
+    );
+    assert!(h.dir.path().join("dev.seq.json.v1.bak").exists());
+
+    // Undo: pick, choice, section, start.
+    h.cmd(EngineCommand::Undo);
+    h.structure(|s| {
+        seq_a(s).lanes[0].steps[0].pick.is_none() && !seq_a(s).lanes[0].steps[0].choices.is_empty()
+    })
+    .await;
+    h.cmd(EngineCommand::Undo);
+    h.structure(|s| seq_a(s).lanes[0].steps[0].choices.is_empty())
+        .await;
+    h.cmd(EngineCommand::Undo);
+    h.structure(|s| seq_a(s).sections.is_empty()).await;
+    h.cmd(EngineCommand::Undo);
+    h.structure(|s| seq_a(s).start == seq_core::Start::Immediate)
+        .await;
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn editing_a_running_sequence_marks_it_edited() {
     use seq_core::edit::EditOp;
