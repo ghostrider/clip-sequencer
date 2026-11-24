@@ -14,10 +14,15 @@
 //! Timing: a start emits its first steps immediately (position 0). Each [`Scheduler::on_tick`]
 //! advances every running sequence by one tick (24 PPQN, 6 ticks per sixteenth) and emits what
 //! falls on that tick.
+//!
+//! Quantized starts (SPEC §3.2): the scheduler counts the **bar phase**, the ticks since the start
+//! of bar index 0. A start with mode `beat` or `bar` that is not processed on a matching boundary
+//! waits (*pending*) and begins on the first tick that is one; waiting freezes with the clock like
+//! running sequences do. The engine resets the phase on MIDI Start and Resync.
 
 use uuid::Uuid;
 
-use crate::model::{AfterLastPass, LaneEnd, Repeat, Sequence, TICKS_PER_SIXTEENTH};
+use crate::model::{AfterLastPass, LaneEnd, Repeat, Sequence, Start, TICKS_PER_SIXTEENTH};
 use crate::resolve::{LayerResolution, SequenceResolution, StepResolution};
 
 /// Ticks per beat (quarter note) and per bar in 4/4.
@@ -236,6 +241,16 @@ pub enum Action {
         reason: EndReason,
         origin: Origin,
     },
+    /// A start waits for its boundary (SPEC §3.2); [`Action::Started`] follows when it begins.
+    Pending {
+        seq: Uuid,
+        origin: Origin,
+    },
+    /// A waiting start was cancelled (Stop, Stop all) and will not begin.
+    PendingCancelled {
+        seq: Uuid,
+        origin: Origin,
+    },
 }
 
 /// A slot lane step that starts a given number of ticks from now (see
@@ -255,6 +270,17 @@ pub enum StartError {
     Empty,
     #[error("no lane of this sequence has a resolved layer")]
     NoPlayableLanes,
+}
+
+/// A start waiting for its boundary (see [`Scheduler::pending`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingStatus {
+    pub seq: Uuid,
+    pub name: String,
+    pub origin: Origin,
+    pub mode: Start,
+    /// Ticks until it begins (≥ 1), if the clock keeps running.
+    pub wait_ticks: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,9 +341,28 @@ struct Run {
     lanes: Vec<LaneRt>,
 }
 
+struct PendingStart {
+    spec: RunSpec,
+    origin: Origin,
+    mode: Start,
+}
+
+/// Ticks between two boundaries of a start mode; `None` for `immediate`.
+fn period(mode: Start) -> Option<u64> {
+    match mode {
+        Start::Immediate => None,
+        Start::Beat => Some(TICKS_PER_BEAT),
+        Start::Bar { bars } => Some(TICKS_PER_BAR * u64::from(bars.max(1))),
+    }
+}
+
 #[derive(Default)]
 pub struct Scheduler {
     runs: Vec<Run>,
+    pending: Vec<PendingStart>,
+    /// Bar phase of the last tick (ticks since bar index 0 began); `None` until the first tick
+    /// after a reset, which is then phase 0.
+    phase: Option<u64>,
 }
 
 impl Scheduler {
@@ -327,6 +372,85 @@ impl Scheduler {
 
     pub fn is_running(&self, seq: Uuid) -> bool {
         self.runs.iter().any(|r| r.spec.seq_id == seq)
+    }
+
+    /// The sequence has a start waiting for its boundary.
+    pub fn is_pending(&self, seq: Uuid) -> bool {
+        self.pending.iter().any(|p| p.spec.seq_id == seq)
+    }
+
+    /// Starts waiting for their boundary, in the order they were made.
+    pub fn pending(&self) -> Vec<PendingStatus> {
+        self.pending
+            .iter()
+            .map(|p| PendingStatus {
+                seq: p.spec.seq_id,
+                name: p.spec.name.clone(),
+                origin: p.origin,
+                mode: p.mode,
+                wait_ticks: self.wait_ticks(p.mode),
+            })
+            .collect()
+    }
+
+    /// Ticks from the last tick to the next boundary of `mode` (1 before the first tick: that one
+    /// is phase 0, a boundary of every mode).
+    fn wait_ticks(&self, mode: Start) -> u64 {
+        match (self.phase, period(mode)) {
+            (None, _) | (_, None) => 1,
+            (Some(phase), Some(n)) => n - phase % n,
+        }
+    }
+
+    /// The last tick is a boundary of `mode` (always for `immediate`).
+    fn on_boundary(&self, mode: Start) -> bool {
+        match (period(mode), self.phase) {
+            (None, _) => true,
+            (Some(n), Some(phase)) => phase % n == 0,
+            (Some(_), None) => false,
+        }
+    }
+
+    /// MIDI Start (SPEC §3.2): the next tick is the start of bar index 0. Waiting starts wait for
+    /// their boundary counted from there.
+    pub fn phase_reset_next_tick(&mut self) {
+        self.phase = None;
+    }
+
+    /// Resync (SPEC §3.1): this moment is the start of bar index 0, the next tick has phase 1.
+    /// Every waiting start is on its boundary now and begins.
+    pub fn phase_reset_now(&mut self) -> Vec<Action> {
+        self.phase = Some(0);
+        let due = std::mem::take(&mut self.pending);
+        let mut out = Vec::new();
+        for p in due {
+            out.extend(self.begin(p.spec, p.origin));
+        }
+        out
+    }
+
+    /// Links a waiting start to `origin` (a `§` clip that connected while it waits, SPEC §7.1).
+    pub fn link_pending(&mut self, seq: Uuid, origin: Origin) {
+        if let Some(p) = self.pending.iter_mut().find(|p| p.spec.seq_id == seq) {
+            p.origin = origin;
+        }
+    }
+
+    /// Cancels a waiting start; nothing if there is none.
+    pub fn cancel_pending(&mut self, seq: Uuid) -> Vec<Action> {
+        let mut out = Vec::new();
+        self.pending.retain(|p| {
+            if p.spec.seq_id == seq {
+                out.push(Action::PendingCancelled {
+                    seq,
+                    origin: p.origin,
+                });
+                false
+            } else {
+                true
+            }
+        });
+        out
     }
 
     pub fn running(&self) -> impl Iterator<Item = Uuid> + '_ {
@@ -371,16 +495,35 @@ impl Scheduler {
             .collect()
     }
 
-    /// Starts (or restarts) a sequence now. Lanes of other sequences on the same layers are
-    /// taken over in the same call (SPEC §7.3).
-    pub fn start(&mut self, spec: RunSpec, origin: Origin) -> Result<Vec<Action>, StartError> {
-        let pass_ticks = spec.pass_ticks();
-        if pass_ticks == 0 {
+    /// Starts (or restarts) a sequence by its start mode (SPEC §3.2): now if `mode` is
+    /// `immediate` or the last tick is one of its boundaries, otherwise when the next boundary is
+    /// reached ([`Action::Pending`] now, [`Action::Started`] then). A waiting start of the same
+    /// sequence is replaced. Lanes of other sequences on the same layers are taken over when it
+    /// begins (SPEC §7.3).
+    pub fn start(
+        &mut self,
+        spec: RunSpec,
+        origin: Origin,
+        mode: Start,
+    ) -> Result<Vec<Action>, StartError> {
+        if spec.pass_ticks() == 0 {
             return Err(StartError::Empty);
         }
         if !spec.lanes.iter().any(RunLane::is_active) {
             return Err(StartError::NoPlayableLanes);
         }
+        let seq = spec.seq_id;
+        self.pending.retain(|p| p.spec.seq_id != seq);
+        if self.on_boundary(mode) {
+            return Ok(self.begin(spec, origin));
+        }
+        self.pending.push(PendingStart { spec, origin, mode });
+        Ok(vec![Action::Pending { seq, origin }])
+    }
+
+    /// Starts a checked spec now.
+    fn begin(&mut self, spec: RunSpec, origin: Origin) -> Vec<Action> {
+        let pass_ticks = spec.pass_ticks();
         let seq = spec.seq_id;
         let mut out = Vec::new();
 
@@ -452,18 +595,28 @@ impl Scheduler {
             }
         }
         self.runs.push(run);
-        Ok(out)
+        out
     }
 
+    /// Stops a sequence: cancels its waiting start and ends its run.
     pub fn stop(&mut self, seq: Uuid, mode: StopMode) -> Vec<Action> {
-        match self.runs.iter().position(|r| r.spec.seq_id == seq) {
-            Some(i) => self.end_run(i, mode, EndReason::Stopped),
-            None => Vec::new(),
+        let mut out = self.cancel_pending(seq);
+        if let Some(i) = self.runs.iter().position(|r| r.spec.seq_id == seq) {
+            out.extend(self.end_run(i, mode, EndReason::Stopped));
         }
+        out
     }
 
+    /// Cancels every waiting start and ends every run.
     pub fn stop_all(&mut self, mode: StopMode) -> Vec<Action> {
-        let mut out = Vec::new();
+        let mut out: Vec<Action> = self
+            .pending
+            .drain(..)
+            .map(|p| Action::PendingCancelled {
+                seq: p.spec.seq_id,
+                origin: p.origin,
+            })
+            .collect();
         while !self.runs.is_empty() {
             out.extend(self.end_run(0, mode, EndReason::Stopped));
         }
@@ -579,11 +732,26 @@ impl Scheduler {
         out
     }
 
-    /// Advances every running sequence by one tick.
+    /// Advances the bar phase and every running sequence by one tick. Waiting starts whose
+    /// boundary this tick is begin first (at position 0, taking over their layers before the
+    /// other sequences act on this tick).
     pub fn on_tick(&mut self) -> Vec<Action> {
+        self.phase = Some(self.phase.map_or(0, |p| p + 1));
         let mut out = Vec::new();
+        let mut begun = Vec::new();
+        let (due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| self.on_boundary(p.mode));
+        self.pending = waiting;
+        for p in due {
+            begun.push(p.spec.seq_id);
+            out.extend(self.begin(p.spec, p.origin));
+        }
         let mut finished = Vec::new();
         for (ri, run) in self.runs.iter_mut().enumerate() {
+            if begun.contains(&run.spec.seq_id) {
+                continue; // at position 0 on this tick
+            }
             run.pos += 1;
             let seq = run.spec.seq_id;
             if run.pos >= run.pass_ticks {
