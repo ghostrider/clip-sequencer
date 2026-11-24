@@ -3,6 +3,8 @@
 Status: concept agreed 2026-10-25. This document is the source of truth.
 Resolume API details were verified in Milestone 0 against Arena 7.28.1; endpoints, message shapes,
 timings and samples are in `docs/resolume-api-notes.md` (cited below as *notes §n*).
+Release 0.5 (decided 2026-11-23/24): file format v4 (§6), quantized start (§3.2), transitions per step (§7.7),
+starting a running sequence (§7.1), in-app update (§15).
 
 ## 1. Purpose
 
@@ -34,22 +36,21 @@ compensates latency itself.
 
 - **Input:** MIDI clock at 24 PPQN from a named MIDI input port (configurable), or ticks the app makes at
   Resolume's tempo (§3.1).
-  Messages used: Timing Clock (0xF8). Start (0xFA), Stop (0xFC) and Continue (0xFB)
-  are logged but **do not** affect running sequences (the Clock Shifter's resync
-  button sends Start; it must not restart sequences).
+  Messages used: Timing Clock (0xF8). Start (0xFA) sets the **bar phase** for quantized starts
+  (§3.2). Start, Stop (0xFC) and Continue (0xFB) are logged and **never** affect running sequences
+  (the Clock Shifter's resync button sends Start; it must not restart sequences).
 - **Grid:** 1/16 bar in 4/4 = one sixteenth note = **6 ticks**. All step lengths are
   integers in sixteenths (file format v2, 2026-11-01; v1 counted eighths, see §6). The editor
   snaps to eighths by default and to sixteenths with Shift (§9.3). Only 4/4 is supported.
-- **No quantization.** A sequence starts at the moment its start is processed. Its
-  internal position counts ticks from that moment. Step boundaries fire exactly
-  on the tick where they fall.
+- **Start:** a sequence starts on the tick its start mode gives (§3.2): the tick its start is
+  processed (`immediate`), or the next beat or bar. Its internal position counts ticks from that
+  tick. Step boundaries fire exactly on the tick where they fall.
 - **Trigger timing:** the OSC message for a step is sent on the tick the step begins.
   No lookahead. Resolume's Beat Snap must be **off** for clip triggers.
 - **Tempo:** derived from tick intervals (moving average) for display only.
 - **Clock loss:** if no tick arrives for > 2 beats at the last known tempo, running
   sequences **freeze** (position stops, no triggers), the UI shows "no clock".
   When ticks resume, sequences continue from where they froze.
-- **Data model is ready for quantization later:** `start` field, currently only `"immediate"`.
 
 ### 3.1 Resolume tempo as clock (M17, decided 2026-11-19)
 
@@ -72,7 +73,8 @@ beat phase (*notes §17*), so the app makes its own ticks.
   after a reload) only starts or stops the ticks, without a resync: the phase is unknown then.
 - **Resync:** a Resync press (the `resync` press update, not its release) restarts the tick phase at that
   moment **and jumps every playing sequence to its bar 1**: step 1 of each lane is triggered on the next
-  tick, the pass counter is kept. (Different from MIDI Start, which never restarts sequences, see above.)
+  tick, the pass counter is kept. It also sets the bar phase (§3.2). (Different from MIDI Start, which
+  never restarts sequences, see above.)
 - **Taps:** tempo changes from tapping arrive as tempo updates; a tap does not move the phase.
 - **Phase:** until the first Resync (or Play after Stop) the app's beat is not aligned with Resolume's;
   the clock chip shows `RESOLUME 128.0 BPM · press Resync` until then, `· synced` after.
@@ -80,6 +82,26 @@ beat phase (*notes §17*), so the app makes its own ticks.
   the phase is unknown again.
 - **Setting:** Preferences → Clock (`clock_source` in `settings.json`, `midi` by default); `--clock midi|resolume`
   wins for the run. The MIDI port stays saved while the source is Resolume. Switching takes effect at once.
+
+### 3.2 Quantized start (release 0.5, decided 2026-11-23)
+
+Each sequence has a **start mode** (`start` in the file, §6): `immediate` (as before), `beat` (the next beat) or
+`bar` with `bars` N ∈ {1, 2, 4, 8, 16} (the next bar whose index is a multiple of N).
+
+- **Bar phase:** bars are counted from the last **MIDI Start** (MIDI clock source) or the last **Resync** (Resolume
+  tempo source, §3.1): that tick is the start of bar index 0. Neither restarts running sequences (§3, §3.1 is
+  unchanged in that). Without either since the clock connected, the phase counts from the first tick received,
+  and the clock chip adds `· bar phase not synced`.
+- **Boundary:** a start processed exactly on a matching boundary tick starts on that tick; otherwise it waits for
+  the next one. A Resync or MIDI Start while a start waits moves the phase, and the wait is computed again.
+- **Waiting:** the card and the editor header show `starts in 3 beats` (`in 2 bars` for longer waits). **▶ again
+  while waiting** starts it at once; **Stop** cancels the wait. A start from a `§` clip (§7.1) waits the same way
+  and is linked to that clip as soon as it is pending. A deck switch (§7.2) happens first; the wait counts from the
+  moment the new deck is confirmed.
+- **Clock loss or pause** freezes a waiting start like a running sequence; it starts when the boundary is reached
+  after the ticks resume.
+- **Cue (G1):** a cued sequence uses its start mode by default; the cue can choose another point (e.g. the end of
+  the current pass of a running sequence). Specified with the cue milestone; the choice is not saved.
 
 ## 4. Resolume interface
 
@@ -182,7 +204,8 @@ Rules for slot lanes:
 
 - **Composition** — the open `.avc`. Sequences are stored per composition.
 - **Deck** — every sequence belongs to exactly one deck. Sequences never use clips from another deck.
-- **Sequence** — name, deck, repeat setting, end action, one or more lanes.
+- **Sequence** — name, deck, start mode (§3.2), repeat setting, end action, optional section markers, one or
+  more lanes.
 - **Lane** — targets one layer (by name), in `clip` or `slot` mode (§4.5). Has its own steps and its own length. Lanes can be
   reordered in the editor (order is display only). The lanes of one
   sequence target different layers. A lane without steps, or whose layer is not found, is silent.
@@ -192,6 +215,11 @@ Rules for slot lanes:
   lane started. The same applies to every clear of a lane (lane end `clear`, `after_last_pass`
   clear, stop all). An *unresolved* step triggers nothing, so the
   previous clip keeps playing through it.
+  A step can also have (format v4, §6): a **condition** (`when`: plays only on some passes; a step that
+  doesn't play sends nothing, so the previous clip keeps playing through it), **choices** (up to 3 more clips,
+  columns or rests, one picked each time the step plays), and a **transition** (how its clip comes in, §7.7;
+  a lane can set a default).
+- **Section** — a named marker at a grid position of a sequence ("Intro", "Drop"); shown in the editor only.
 - **Sequence length (one pass)** — the length of its longest lane.
 - **Lane end behaviour** (when a lane is shorter than the sequence):
   - `loop_to_end` — restart the lane's steps until the pass ends.
@@ -209,7 +237,7 @@ automatically. Sequences are grouped by deck name.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "composition": "MyShow",
   "decks": {
     "Act 1": {
@@ -217,16 +245,25 @@ automatically. Sequences are grouped by deck name.
         {
           "id": "6f1c2a9e-0d5b-4c1e-9a0f-2f7d4c1b8e11",
           "name": "Drop A",
-          "start": "immediate",
+          "start": { "mode": "bar", "bars": 4 },
           "repeat": { "mode": "count", "count": 4 },
           "after_last_pass": "clear",
+          "sections": [
+            { "at": 0, "name": "Intro" },
+            { "at": 128, "name": "Drop" }
+          ],
           "lanes": [
             {
               "layer": "BG",
               "end": "loop_to_end",
+              "transition": { "length": 4, "blend": "Alpha" },
               "steps": [
-                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32 },
-                { "clip": null, "length": 16 }
+                { "clip": { "id": 1712345, "name": "Tunnel Red", "file": "tunnel_red.mov" }, "length": 32,
+                  "choices": [ { "id": 1712399, "name": "Tunnel Blue", "file": "tunnel_blue.mov" }, null ],
+                  "pick": "cycle" },
+                { "clip": null, "length": 16 },
+                { "clip": { "id": 1712400, "name": "Strobe" }, "length": 16,
+                  "when": { "is": "last" }, "transition": { "length": 0 } }
               ]
             },
             {
@@ -234,8 +271,8 @@ automatically. Sequences are grouped by deck name.
               "mode": "slot",
               "end": "loop_to_end",
               "steps": [
-                { "column": 1, "length": 16 },
-                { "column": 2, "length": 16 },
+                { "column": 1, "length": 16, "when": { "is": "cycle", "pass": 2, "of": 2 } },
+                { "column": 2, "length": 16, "choices": [3, 4], "pick": "random" },
                 { "column": null, "length": 16 }
               ]
             }
@@ -247,19 +284,54 @@ automatically. Sequences are grouped by deck name.
 }
 ```
 
+- `start` (version 4): `{ "mode": "immediate" }` | `{ "mode": "beat" }` | `{ "mode": "bar", "bars": N }`,
+  N ∈ {1, 2, 4, 8, 16}, default 1 (then it may be left out); `bars` only with `"bar"`. Meaning: §3.2.
 - `repeat.mode`: `"once"` | `"count"` | `"infinite"`; `count` only with `"count"`.
 - `length`: integer, in sixteenths (16 = one bar), ≥ 1.
 - `mode` (lane, version 3): `"clip"` (default when omitted) | `"slot"` (§4.5). Steps of a clip
   lane have `clip` (object or `null` = rest); steps of a slot lane have `column` (integer ≥ 1,
   or `null` = rest). The other field is not allowed.
-- **Version 3** (M13, 2026-11-04) adds `mode` and `column`; lengths as in version 2. Version 2 files
-  load unchanged and are saved as version 3 (older builds cannot read version 3).
+- `sections` (sequence, version 4, optional): `[{ "at", "name" }]`. `at` in sixteenths from the start of the
+  sequence; sorted by `at`, no two at the same position, at most 64; `name` 1–64 characters. A section may lie
+  beyond the sequence's current length (shown greyed out); changing lanes never moves or deletes sections.
+  Guide lines every 8/16/32 bars are a view setting in `settings.json`, not part of this file.
+- `transition` (lane default and step, version 4, optional): `{ "length", "blend"? }`. `length` in sixteenths,
+  0–256 (`0` = cut); the UI shows it in beats. `blend`: a Resolume blend mode name, 1–64 characters; absent = keep
+  the layer's original blend mode. A step's own `transition` wins over the lane's. Which transition a step gets
+  and how it is applied: §7.7.
+- `when` (step, version 4, optional): plays the step only on some passes. The pass is the sequence's pass counter
+  (1-based, `pass 2 / 4` on the card); all loops of a short lane within one pass count as that pass.
+  - `{ "is": "first" }` / `{ "is": "not_first" }`: pass 1 / every pass but 1.
+  - `{ "is": "last" }` / `{ "is": "not_last" }`: the last pass / every pass but the last. With
+    `repeat: infinite` there is no last pass: `last` never plays, `not_last` always does (the step shows a warning).
+  - `{ "is": "cycle", "pass": A, "of": B }`: pass `p` plays if `(p − 1) mod B == A − 1`; `2 ≤ B ≤ 16`,
+    `1 ≤ A ≤ B`; shown as `A:B`. `pass` and `of` only with `"cycle"`.
+  - A step that doesn't play sends nothing: the previous clip keeps playing through it (as with an unresolved
+    step). For silence on some passes use a rest with a condition, or a rest among the `choices`.
+- `choices` + `pick` (step, version 4, optional): the step's own `clip` / `column` is option 1, `choices` adds 1–3
+  more of the same kind (clip references or `null` in clip lanes, columns ≥ 1 or `null` in slot lanes).
+  `pick`: `"random"` (default, may be left out) or `"cycle"`; only together with `choices`.
+  - `when` is checked first; an option is picked only when the step plays.
+  - `cycle`: option 1 the first time the step plays in a run, then 2, 3 …, wrapping; every play counts, loops
+    within a pass included; each start begins again at option 1.
+  - `random`: any option each time, the same one twice in a row allowed. `seq-core` gets the random seed from the
+    engine at start (no IO in `seq-core`, tests are repeatable).
+  - Each option is resolved by itself (§4.3); a picked unresolved option triggers nothing. Relink, the red
+    unresolved mark and the pre-show check cover every option.
+- **Version 4** (release 0.5, decided 2026-11-24) changes `start` from a string to an object and adds `sections`,
+  `transition`, `when`, `choices`, `pick`. All new fields are optional, so a v4 file that uses none of them
+  differs from v3 only in `version` and `start`.
+- **Version 3** (M13, 2026-11-04) adds `mode` and `column`; lengths as in version 2.
 - **Version 2** (2026-11-01) counts `length` in sixteenths.
 - **Version 1** (until 2026-11-01) had the same shape with `length` in eighths. It is still
-  read: lengths are doubled on load, so timing is unchanged. The first save writes the current
-  version and keeps the original as `<file>.v1.bak`.
-- Versions 1 and 2 cannot contain slot lanes. A file with a higher version than the app knows is
-  refused, not overwritten.
+  read: lengths are doubled on load, so timing is unchanged.
+- **Loading older versions:** v1–v3 load as before; their `start: "immediate"` becomes `{ "mode": "immediate" }`
+  (in v4 the string form is an error). No other field is added. The first save writes the current version and
+  keeps the original as `<file>.v<N>.bak`. Versions 1 and 2 cannot contain slot lanes. A file with a higher
+  version than the app knows is refused, not overwritten.
+- **Going back to 0.4:** 0.4.x cannot read version 4. The update rollback (§15) happens before the new version
+  saves anything; a manual downgrade later needs the `.v3.bak` (the manual says so).
+- Unknown fields are an error everywhere.
 - Writes are atomic (write temp file, rename). Autosave after edits (debounced ~1 s).
 - If a deck name in the file no longer exists in Resolume, its sequences are listed in the
   UI as **orphaned**, with an action "move to deck …".
@@ -276,15 +348,18 @@ automatically. Sequences are grouped by deck name.
   The placeholder clips should be invisible: use the `Blank` source (`source:///video/Blank`)
   and/or SEQ layer opacity 0. `connected` is still reported with layer opacity 0, master 0 or
   bypass on (*notes §7*).
+- The start happens on the tick its start mode gives (§3.2); until then it is *pending*.
 - On start, the engine takes a **snapshot** of the sequence. Edits made while it runs do
   **not** affect it; they apply at the next start (UI shows "edited · applies at next start").
-  The next pass of a repeating sequence is not a new start. Starting a running sequence again
-  restarts it with a fresh snapshot (layers it no longer uses get its `after_last_pass`).
-  *Known limitation (not fixed for now):* starting the same sequence from both the UI and its `§`
-  clip leaves the two out of step. A UI start while the `§` clip is connected restarts the run as a
-  UI start: clearing the SEQ layer no longer stops it, and clicking the still-connected `§` clip
-  does nothing. Each second start also jumps the sequence back to step 1. Start a sequence from one
-  place at a time. (Possible fix: a start of a running sequence keeps the run and its `§` link.)
+  The next pass of a repeating sequence is not a new start.
+- **Starting a running sequence** (release 0.5, decided 2026-11-23; replaces the earlier known limitation):
+  - **▶ in the app** restarts it from step 1 with a fresh snapshot (layers it no longer uses get its
+    `after_last_pass`), on the tick its start mode gives. Its link to a `§` clip is **kept**: clearing the SEQ
+    layer still stops it, and that `§` clip stays the connected one.
+  - **Its `§` clip connecting** while it runs (started from the app) **adopts the run**: no restart, no jump to
+    step 1; from then on the run is linked to that `§` clip like a run started from it.
+  - A `§` clip connecting while the sequence is pending (§3.2) links the pending start; it doesn't start a
+    second one.
 - When a sequence started from its `§` clip **finishes by itself**, the sequencer clears the SEQ
   layer (if that `§` clip is still the connected one), so the next click on it starts it again.
 
@@ -358,6 +433,56 @@ A button sets up the SEQ layer in Resolume so that every sequence of the **live 
 - Not in scope: syncing decks that are not live (that needs a deck switch), renaming `§` clips when a
   sequence is renamed (the old clip becomes an orphan and a new one is added), reordering clips.
 
+### 7.7 Transitions per step (release 0.5, decided 2026-11-23)
+
+A step can say **how its clip comes in**: a fade length and optionally a blend mode (`transition`, §6), with an
+optional default per lane. Resolume's **layer transition** is the means: the app sets it on the layer just before
+the step triggers. Clip-level transitions in the composition are never changed. Nothing is cleaned up by hand:
+when the sequence lets go of the layer, the layer gets back the transition it had before.
+
+*Resolume side (to be confirmed by the M21 probe, notes §19; until then nothing here is built):* each layer has
+`transition.duration` (ParamRange 0–10 s) and `transition.blend_mode` (ParamChoice), each with a parameter id; each
+clip has the same plus `layer_determined` (seen in `docs/samples/composition.json`). Open: setting them over the
+WebSocket, their units, whether a set that arrives just before an OSC `connect` already counts, whether a change
+disturbs a fade that is still running, whether a layer clear fades, and what `layer_determined` covers.
+
+**Which transition a step gets**
+1. its own `transition`, else
+2. the lane's `transition`, else
+3. if any step of the lane or the lane itself has a transition: the layer's **original** transition (the one it had
+   before the sequence took it), so a step without a value always looks the same, whatever ran before it;
+4. otherwise **Resolume's own**: the app never touches this layer's transition.
+
+**Sending**
+- The value goes out **ahead of the step**, separately from the trigger: at the latest one sixteenth before the
+  step starts, and only if it differs from what the layer has. For the first step of a run it goes out with the
+  start, before the first trigger. The trigger still goes out exactly on its tick (§3). The scheduler (pure)
+  decides the next step's pass condition and pick at that moment, so the transition matches the clip that will
+  play; a step that doesn't play sets nothing. (The exact lead time follows from the probe.)
+- The length is converted to seconds at the current tempo and sent again (throttled) when the tempo changes while
+  the value is set. Resolume's maximum is 10 s: a longer fade is capped and the step shows a warning.
+- `blend` is checked against the layer's option list from the composition. Unknown name: only the length is set,
+  warning on the step and in the pre-show check.
+- Clips whose own transition doesn't follow the layer (`layer_determined: false`) ignore the layer value: warning
+  on the step and in the pre-show check.
+- Set and restore are WebSocket messages from the engine's send path; the engine never waits for their answer
+  (CLAUDE.md: nothing on the timing path blocks).
+
+**Original and restore**
+- When a lane that uses transitions (rule 3) takes its layer, the app reads the layer's current transition (from the
+  composition it holds, kept up to date by a by-id subscription) and remembers it as the **original**, once per
+  layer.
+- A layer handed from one sequence to another (§7.3) keeps the first original, not the value in between.
+- When no running lane holds the layer any more (stop, finish, Stop all, a deck change, or a takeover by a lane
+  without transitions), the original is set back. A restore after a layer clear is sent after the clear.
+- **The user wins:** if the layer's transition changes in Resolume and the change isn't one the app sent, the
+  original is dropped and nothing is restored on that layer for this run: the user's value stays. The lane keeps
+  setting its steps' transitions (as with a manual override, the log says so).
+- **Crash or quit while holding a layer:** originals are also written to `<data-dir>/transitions-pending.json`
+  (composition name, layer id, original values). On the next connection to that composition the app restores them
+  and deletes the file. Entries whose layer is gone are dropped with a log line.
+- The log shows `transition on BG restored (0.0 s, Alpha)`.
+
 ## 8. Thumbnails
 
 - **Clip thumbnails** are fetched via REST for the active deck and cached on disk, keyed by clip
@@ -398,18 +523,37 @@ Single screen, everything controlled from here (no separate live view).
 - Context menu: rename, duplicate, delete (with confirmation).
 
 ### 9.3 Center: sequence editor
-- Header: name (editable), binding tag, start/length/end info, "edited · applies at next start"
+- Header: name (editable), binding tag, start mode (`Start: now / beat / bar / 2 · 4 · 8 · 16 bars`, §3.2),
+  `starts in …` while pending, start/length/end info, "edited · applies at next start"
   badge (only when running and edited), **Repeat** control (Once / ×N with number input / ∞),
   pass counter while running (`pass 2 / 4`), `+ Lane`, `Push thumbnail to Resolume`, Start/Stop.
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
-    (`Loop to end` / `Hold` / `Clear`), state pill (`idle` / `playing` / `yielded`; yielded has a
+    (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
+    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded`; yielded has a
     "Resume lane" action), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
     not confirmed (red top edge).
   - Playhead with `bar.beat` label while running.
+  - **Sections** (§6): named flags in the ruler at their position, with a thin line down through the lanes;
+    sections beyond the sequence's length greyed out. Add from the ruler's context menu or with `M` at the
+    playhead / selected step's start; drag to move (on the grid), double-click to rename, Del to delete.
+    Guide lines every 8/16/32 bars (or off) are a view setting.
+  - **Step badges** (format v4): a condition as a small chip in the block's top right (`2:4`, `1st`, `!1st`,
+    `last`, `!last`); choices as `1/3` with the pick (`⤨` random, `↻` cycle). The block shows option 1.
+  - **Transition display** (§7.7; colour token `--fade` in `tokens.css`, `themes.ts` and the mockup; sketch
+    `docs/images/transition-fade-sketch.png`):
+    - a **fade wedge** at the left edge, rising from bottom left to top right, on the grid scale: its width is
+      the fade length (a 1-beat fade covers the first beat of the block); `--fade`, translucent, under the name;
+    - the label in the length line: `↗ 1 beat · Alpha` (blend only when set), in narrow blocks `↗ 1`;
+    - a step's **own** transition solid, one **inherited** from the lane default as a dashed outline only;
+    - a **cut** (`0`) set on a step over a lane default: a short vertical bar at the left edge;
+    - a **fade longer than the step**: the wedge runs to the right edge and ends in `›`;
+    - **warnings** (capped at 10 s, unknown blend mode, clip with its own transition): the label in
+      `--err-text` with ⚠, the reason as tooltip and in the inspector;
+    - steps getting the original or Resolume's own transition show nothing.
 - Interactions:
   - Drag a clip from the browser onto a lane → appends or inserts a step (default length 16 = one bar).
   - Drag a block's right edge → resize, snapping to eighths (min 1/8); hold Shift to snap to
@@ -435,6 +579,9 @@ Single screen, everything controlled from here (no separate live view).
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
   in sixteenths with bars shown. For a slot step instead: column stepper (1 … column count) and the
   clip currently in that slot (or "empty → rest").
+  Format v4 (§6): **Transition** (inherit from lane / own: length in beats, blend mode from the layer's list,
+  warnings), **Play on** (always / first / not first / last / not last / A of B), **Choices** (the options with
+  thumbnails and resolution status, add, remove, reorder, relink each; pick random / cycle).
 
 ### 9.5 Status bar
 Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,
@@ -451,7 +598,9 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
   and immediately on structural changes. Includes connection status, decks, live deck,
   sequences (from file), runtime state (running, pass, position, lane states, confirmations).
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
-  `edit` operations, `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), and for the
+  `edit` operations (format v4 adds: set start mode, set/clear lane transition, set/clear step transition,
+  set/clear step condition, add/remove/reorder/relink a choice, set pick, add/move/rename/delete a section;
+  all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), and for the
   browser UI's File menu `reload_composition`, `save_now`). The live deck's `seq_sync` plan comes with
   the decks, `seq_sync_busy` with the runtime state. Edits are sent as operations, the engine applies them to the stored model, saves,
   and echoes the new state.
@@ -620,7 +769,7 @@ same-origin; the FFGL plugin and command-line tools send no `Origin`.
 
 ## 13. Out of scope (for now)
 
-Start quantization, time signatures other than 4/4, per-step parameter automation,
+Time signatures other than 4/4, per-step parameter automation (a step's transition, §7.7, is the one exception),
 cross-deck sequences, multi-user editing.
 
 ## 14. LUTs (M18, decided 2026-11-22)
@@ -690,3 +839,27 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
 - HTTP: `GET /api/luts/table?name=` (the baked table: size³ little-endian f32 RGB, red fastest; headers
   `x-lut-rev`, `x-lut-size`), `GET /api/luts/cube?name=` (export), `POST /api/luts/import?name=` (body: the
   `.cube` text; `{ ok, name }` or 400 `{ ok: false, error }`).
+
+## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23)
+
+The user can check by hand whether a newer release exists and install it from the app. Details (dialog texts,
+helper, file list) are worked out at the start of M14; what is decided:
+
+- **Only by hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar);
+  `seq-app-cli --check-update`. No automatic or background check, none at start-up, no setting for it.
+- **Check:** `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login), semver compare
+  with the running version, drafts and pre-releases ignored. In its own task, never on the timing path. Result:
+  "up to date", the new version with its release notes, or the error.
+- **Install (full replacement):** download the release zip to a temp folder and verify it against `SHA256SUMS.txt`
+  (and the signature once releases are signed). Not while a sequence runs (the button says why). The app quits; a
+  helper (shipped in the zip, or the new exe in a helper mode) waits for it to exit, moves the old files of the
+  `clip-sequencer` folder aside, moves the new ones in and starts the new version. Only that folder is touched,
+  never the data folder.
+- **Rollback:** the old files are deleted only after the new version has started and reported OK; otherwise the
+  helper puts them back and starts the old version. The new version saves no sequence file before it reports OK,
+  so a rolled-back 0.4 still reads it (§6).
+- **Failure:** folder not writable, download or verification failed → say why and offer the release page.
+- **FFGL plugin:** not replaced by the update (Resolume may hold it open); the existing "FFGL plugin update
+  available" hint takes over after the restart (§12.1).
+- **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app contacts GitHub only when
+  the user chooses Check for updates.
