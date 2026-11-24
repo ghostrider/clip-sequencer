@@ -133,6 +133,18 @@ fn v3_file_migrates_unchanged_but_for_version_and_start() {
     assert_eq!(written, expected);
 }
 
+/// The demo of `docs/samples` in format v4, and the same as 0.4.x saved it (version 3).
+const DEMO: &str = include_str!("../../../docs/samples/demo.seq.json");
+const DEMO_V3: &str = include_str!("../../../docs/samples/demo-v3.seq.json");
+
+#[test]
+fn demo_sample_round_trips_and_its_v3_copy_migrates_to_it() {
+    assert_round_trip(DEMO);
+    assert_eq!(seq_core::file_version(DEMO), Some(4));
+    assert_eq!(seq_core::file_version(DEMO_V3), Some(3));
+    assert_eq!(from_json(DEMO_V3).unwrap(), from_json(DEMO).unwrap());
+}
+
 #[test]
 fn v1_file_migrates_to_the_current_document() {
     // Lengths double (eighths -> sixteenths), everything else is unchanged. The v3 example also has
