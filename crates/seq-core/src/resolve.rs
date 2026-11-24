@@ -12,9 +12,13 @@
 //! Among several candidates the lane's layer wins, then a candidate that also matches the other
 //! feature, then the lowest (layer, column). Picking from more than one is flagged `ambiguous`
 //! so the UI can warn; it is still resolved, deterministically.
+//!
+//! A step's `choices` (format v4) are resolved the same way, each by itself; a step's own clip or
+//! column is option 1 and stays in [`LaneResolution::steps`], options 2… are in
+//! [`LaneResolution::choices`].
 
 use crate::index::{ClipInfo, CompositionIndex, LayerLookup};
-use crate::model::{ClipRef, Lane, LaneMode, Sequence, Step};
+use crate::model::{Choice, ClipRef, Lane, LaneMode, Sequence, Step};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolvedBy {
@@ -102,6 +106,8 @@ pub struct LaneResolution {
     pub layer: LayerResolution,
     /// Steps are resolved even when the layer is not, so the UI can show them.
     pub steps: Vec<StepResolution>,
+    /// Per step, its `choices` (options 2…) resolved one by one; empty for steps without choices.
+    pub choices: Vec<Vec<StepResolution>>,
 }
 
 impl LaneResolution {
@@ -120,13 +126,14 @@ pub struct SequenceResolution {
 }
 
 impl SequenceResolution {
-    /// Every lane has its layer and every non-rest clip step has a clip (slot steps never count
-    /// as unresolved: an empty slot is a rest).
+    /// Every lane has its layer and every non-rest clip step and choice has a clip (slot steps
+    /// never count as unresolved: an empty slot is a rest).
     pub fn is_complete(&self) -> bool {
         self.lanes.iter().all(|l| {
             l.layer_index().is_some()
                 && l.steps
                     .iter()
+                    .chain(l.choices.iter().flatten())
                     .all(|s| !matches!(s, StepResolution::Unresolved { .. }))
         })
     }
@@ -161,6 +168,39 @@ pub fn resolve_lane(lane: &Lane, index: &CompositionIndex) -> LaneResolution {
                 LaneMode::Slot => resolve_slot_step(s, lane_layer, index),
             })
             .collect(),
+        choices: lane
+            .steps
+            .iter()
+            .map(|s| {
+                s.choices
+                    .iter()
+                    .map(|c| resolve_option(c.as_ref(), lane.mode, lane_layer, index))
+                    .collect()
+            })
+            .collect(),
+    }
+}
+
+/// One option of a step (its own clip or column, or one of its `choices`) in a lane of `mode`.
+/// An option of the other kind than the lane's (refused by validation) resolves as a rest.
+pub fn resolve_option(
+    option: Option<&Choice>,
+    mode: LaneMode,
+    lane_layer: Option<usize>,
+    index: &CompositionIndex,
+) -> StepResolution {
+    match (mode, option) {
+        (LaneMode::Clip, Some(Choice::Clip(clip_ref))) => {
+            match resolve_clip(clip_ref, lane_layer, index) {
+                (Some(clip), methods) => StepResolution::Resolved { clip, methods },
+                (None, methods) => StepResolution::Unresolved { methods },
+            }
+        }
+        (LaneMode::Slot, Some(Choice::Column(column))) => StepResolution::Slot {
+            column: *column,
+            clip: lane_layer.and_then(|layer| slot_clip(index, layer, *column)),
+        },
+        _ => StepResolution::Rest,
     }
 }
 
@@ -190,12 +230,13 @@ pub fn slot_clip(index: &CompositionIndex, layer: usize, column: u32) -> Option<
     })
 }
 
-/// A lane's steps converted to `mode` (SPEC §9.3), lengths kept:
+/// A lane's steps converted to `mode` (SPEC §9.3), every option (the step's own and its
+/// `choices`) the same way; length, condition, pick and transition are kept:
 /// - clip → slot: the column of each resolved clip (on whatever layer it was found); unresolved
-///   steps become rests.
+///   options become rests.
 /// - slot → clip: the clip currently in each slot of the lane's layer; empty slots become rests.
 ///
-/// Without an index (deck never seen live) every step becomes a rest.
+/// Without an index (deck never seen live) every option becomes a rest.
 pub fn convert_steps(lane: &Lane, mode: LaneMode, index: Option<&CompositionIndex>) -> Vec<Step> {
     if lane.mode == mode {
         return lane.steps.clone();
@@ -204,26 +245,28 @@ pub fn convert_steps(lane: &Lane, mode: LaneMode, index: Option<&CompositionInde
         LayerLookup::Found(l) => Some(l.index),
         _ => None,
     });
+    let convert = |option: Option<Choice>| -> Option<Choice> {
+        let i = index?;
+        match (mode, option?) {
+            (LaneMode::Slot, Choice::Clip(clip_ref)) => resolve_clip(&clip_ref, lane_layer, i)
+                .0
+                .map(|c| Choice::Column(c.column as u32)),
+            (LaneMode::Clip, Choice::Column(col)) => i
+                .clip_at(lane_layer?, col as usize)
+                .filter(|c| !c.empty)
+                .map(|c| Choice::Clip(clip_ref_for(c))),
+            // Already of the target kind (not produced by a valid lane).
+            (_, other) => Some(other),
+        }
+    };
     lane.steps
         .iter()
-        .map(|s| match mode {
-            LaneMode::Slot => {
-                let column = index
-                    .and_then(|i| resolve_step(s, lane_layer, i).clip().copied())
-                    .map(|c| c.column as u32);
-                Step::slot(column, s.length)
-            }
-            LaneMode::Clip => {
-                let clip = index
-                    .zip(lane_layer)
-                    .zip(s.column)
-                    .and_then(|((i, l), col)| {
-                        i.clip_at(l, col as usize)
-                            .filter(|c| !c.empty)
-                            .map(clip_ref_for)
-                    });
-                Step::clip(clip, s.length)
-            }
+        .map(|s| {
+            let mut step = s.clone();
+            step.set_options(s.options().into_iter().map(convert).collect());
+            // `set_options` drops `pick` only when no choices are left; there are as many as before.
+            step.pick = s.pick;
+            step
         })
         .collect()
 }
@@ -339,17 +382,31 @@ fn pick<'a>(
 }
 
 /// Writes the id of every clip resolved by name or file back into the sequence (SPEC §4.3:
-/// "When resolution succeeds via 2 or 3, the stored id is refreshed"). Returns how many changed.
+/// "When resolution succeeds via 2 or 3, the stored id is refreshed"), choices included.
+/// Returns how many changed.
 pub fn refresh_ids(seq: &mut Sequence, resolution: &SequenceResolution) -> usize {
     let mut changed = 0;
+    let mut refresh = |clip_ref: Option<&mut ClipRef>, res: &StepResolution| {
+        let (Some(clip_ref), Some(resolved)) = (clip_ref, res.clip()) else {
+            return;
+        };
+        if resolved.by != ResolvedBy::Id && clip_ref.id != Some(resolved.clip_id) {
+            clip_ref.id = Some(resolved.clip_id);
+            changed += 1;
+        }
+    };
     for (lane, lane_res) in seq.lanes.iter_mut().zip(&resolution.lanes) {
-        for (step, step_res) in lane.steps.iter_mut().zip(&lane_res.steps) {
-            let (Some(clip_ref), Some(resolved)) = (step.clip.as_mut(), step_res.clip()) else {
+        for (si, (step, step_res)) in lane.steps.iter_mut().zip(&lane_res.steps).enumerate() {
+            refresh(step.clip.as_mut(), step_res);
+            let Some(choice_res) = lane_res.choices.get(si) else {
                 continue;
             };
-            if resolved.by != ResolvedBy::Id && clip_ref.id != Some(resolved.clip_id) {
-                clip_ref.id = Some(resolved.clip_id);
-                changed += 1;
+            for (choice, res) in step.choices.iter_mut().zip(choice_res) {
+                let clip_ref = match choice {
+                    Some(Choice::Clip(c)) => Some(c),
+                    _ => None,
+                };
+                refresh(clip_ref, res);
             }
         }
     }
@@ -878,5 +935,145 @@ mod tests {
         assert!(convert_steps(&clip_lane, LaneMode::Slot, None)
             .iter()
             .all(Step::is_rest));
+    }
+
+    fn clip_choice(id: Option<u64>, name: Option<&str>) -> Option<Choice> {
+        Some(Choice::Clip(r(id, name, None)))
+    }
+
+    #[test]
+    fn every_choice_resolves_by_itself() {
+        let step = Step {
+            choices: vec![
+                clip_choice(None, Some("Smoke")),
+                None,
+                clip_choice(None, Some("Missing")),
+            ],
+            ..Step::clip(Some(r(Some(10), None, None)), 8)
+        };
+        let res = resolve_sequence(&sequence(vec![step, Step::clip(None, 8)]), &base());
+        let lane = &res.lanes[0];
+        assert!(matches!(lane.steps[0], StepResolution::Resolved { .. }));
+        assert_eq!(lane.choices.len(), 2, "one entry per step");
+        assert!(lane.choices[1].is_empty());
+        let c = &lane.choices[0];
+        assert_eq!(
+            c[0].clip().map(|c| (c.clip_id, c.by)),
+            Some((11, ResolvedBy::Name))
+        );
+        assert_eq!(c[1], StepResolution::Rest);
+        assert!(
+            matches!(c[2], StepResolution::Unresolved { methods } if methods.name == Some(false))
+        );
+        // An unresolved choice makes the sequence incomplete, like an unresolved step.
+        assert!(!res.is_complete());
+    }
+
+    #[test]
+    fn slot_choices_resolve_to_their_slots() {
+        let mut lane = slot_lane("BG", &[Some(2)]);
+        lane.steps[0].choices = vec![Some(Choice::Column(1)), None, Some(Choice::Column(9))];
+        let res = resolve_lane(&lane, &base());
+        let current: Vec<_> = res.choices[0]
+            .iter()
+            .map(|s| s.current_clip().map(|c| c.clip_id))
+            .collect();
+        assert_eq!(current, [Some(10), None, None]);
+        assert_eq!(res.choices[0][1], StepResolution::Rest);
+        assert!(matches!(
+            res.choices[0][2],
+            StepResolution::Slot {
+                column: 9,
+                clip: None
+            }
+        ));
+    }
+
+    #[test]
+    fn refresh_ids_covers_choices() {
+        let mut seq = sequence(vec![Step {
+            choices: vec![
+                clip_choice(None, Some("Smoke")),
+                clip_choice(Some(20), Some("Strobe")),
+            ],
+            ..Step::clip(Some(r(None, Some("Tunnel"), None)), 8)
+        }]);
+        let res = resolve_sequence(&seq, &base());
+        assert_eq!(refresh_ids(&mut seq, &res), 2);
+        let step = &seq.lanes[0].steps[0];
+        assert_eq!(step.clip.as_ref().unwrap().id, Some(10));
+        assert_eq!(
+            step.choices,
+            [
+                clip_choice(Some(11), Some("Smoke")),
+                clip_choice(Some(20), Some("Strobe"))
+            ]
+        );
+    }
+
+    #[test]
+    fn mode_conversion_converts_choices_and_keeps_the_rest() {
+        use crate::model::{Pick, Transition, When};
+        let idx = base();
+        let clip_lane = Lane {
+            layer: "BG".into(),
+            mode: LaneMode::Clip,
+            end: LaneEnd::Hold,
+            transition: Some(Transition {
+                length: 4,
+                blend: None,
+            }),
+            steps: vec![Step {
+                when: Some(When::NotFirst),
+                choices: vec![
+                    clip_choice(None, Some("Tunnel")),
+                    None,
+                    clip_choice(None, Some("Missing")),
+                ],
+                pick: Some(Pick::Cycle),
+                transition: Some(Transition {
+                    length: 0,
+                    blend: Some("Add".into()),
+                }),
+                ..Step::clip(Some(r(None, Some("Smoke"), None)), 8)
+            }],
+        };
+        let slots = convert_steps(&clip_lane, LaneMode::Slot, Some(&idx));
+        let s = &slots[0];
+        assert_eq!(s.column, Some(3));
+        assert_eq!(
+            s.choices,
+            [Some(Choice::Column(1)), None, None],
+            "unresolved option -> rest"
+        );
+        assert_eq!(
+            (s.when, s.pick, &s.transition, s.length),
+            (
+                Some(When::NotFirst),
+                Some(Pick::Cycle),
+                &clip_lane.steps[0].transition,
+                8
+            )
+        );
+
+        let slot_lane = Lane {
+            mode: LaneMode::Slot,
+            steps: slots,
+            ..clip_lane
+        };
+        let back = convert_steps(&slot_lane, LaneMode::Clip, Some(&idx));
+        assert_eq!(
+            back[0].choices,
+            [
+                Some(Choice::Clip(r(
+                    Some(10),
+                    Some("Tunnel"),
+                    Some("tunnel.mov")
+                ))),
+                None,
+                None
+            ]
+        );
+        assert_eq!(back[0].pick, Some(Pick::Cycle));
     }
 }
