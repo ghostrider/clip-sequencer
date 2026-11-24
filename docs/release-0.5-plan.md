@@ -1,5 +1,8 @@
 # Release 0.5.0 — feature plan (draft, 2026-11-23)
 
+**Moved into `docs/PLAN.md` (M19–M26, M14) and `docs/SPEC.md` on 2026-11-24.** Those are the source of truth;
+this file keeps the discussion (options, rejected and parked ideas). Where it differs, PLAN and SPEC win.
+
 Status: proposal for discussion. Nothing here is decided until it moves into `docs/PLAN.md` as a milestone.
 Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in Resolume** (transitions) and
 **closing the loose ends** of earlier milestones.
@@ -8,7 +11,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 
 | # | Item | Size | Proposal |
 |---|------|------|----------|
-| A | Transitions per step (lane default), through the layer transition, restored when the sequence stops (new M19) | L | **must**, headline feature |
+| A | Transitions per step (lane default), through the layer transition, restored when the sequence stops (M21) | L | **must**, headline feature |
 | B | Open live and Windows checks from M6, M13, M15, M18, M10 soak | S–M | **must**, before tagging |
 | C | Fix the "started twice" limitation (UI start + `§` clip, SPEC §7.1) | M | **must** (decided 2026-11-23) |
 | D | In-app update check (M14, planned 2026-11-04) | L | **must** (decided 2026-11-23) |
@@ -18,7 +21,7 @@ Last release: 0.4.0 (2026-11-22, LUTs). Themes for 0.5: **smoother playback in R
 
 ---
 
-## A. Layer transitions (proposed M19)
+## A. Layer transitions (M21)
 
 **Changed 2026-11-23:** the transition is chosen **per step**, with a default per lane; the app sets the layer
 transition just before each step. Details and the editor display: `docs/format-v4-draft.md`. The text below

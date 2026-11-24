@@ -1,5 +1,8 @@
 # Sequence file format version 4 — draft (2026-11-23)
 
+**Merged into `docs/SPEC.md` on 2026-11-24** (§3.2, §5, §6, §7.7, §9.3, §9.4, §9.6). The SPEC is the source of
+truth; this draft is kept as the record of how the format was decided.
+
 Status: **draft for approval**. Nothing is built. Once approved, this text replaces SPEC §6 (and adds to §3, §5,
 §7), and `crates/seq-core` gets the model, validation, migration and tests. Release plan: `docs/release-0.5-plan.md`.
 
