@@ -81,7 +81,8 @@
     }
     if (e.key === ' ' && view && deck) {
       e.preventDefault();
-      app.toggle(view, deck);
+      if (e.shiftKey) app.cue(view, deck); // SPEC §3.3
+      else app.toggle(view, deck);
       return;
     }
     const sel = app.selectedStep;

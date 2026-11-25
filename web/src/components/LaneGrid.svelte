@@ -162,6 +162,7 @@
       {#each seq.lanes as lane, li (li)}
         {@const res = view.resolution?.lanes[li]}
         {@const state = laneState(li)}
+        {@const rlane = run?.lanes[li]}
         <div class="lanehead" class:bad={res && res.layer !== 'ok'}>
           <div class="row-between">
             <select class="layer-select mono" value={lane.layer} title={res?.layer === 'ok' ? 'layer' : `layer ${res?.layer}`}
@@ -194,9 +195,21 @@
               onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
               {#each ends as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
             </select>
-            <span class="pill" class:playing={state === 'playing'} class:yielded={state === 'yielded' || state === 'resume_pending'}>
-              {state === 'resume_pending' ? 'resuming' : state === 'taken_over' ? 'taken over' : state}
-            </span>
+            {#if rlane?.silent}
+              <span class="pill muted" title={rlane.mute ? 'Muted: counts, sends nothing' : 'Another lane is soloed'}>muted</span>
+            {:else}
+              <span class="pill" class:playing={state === 'playing'} class:yielded={state === 'yielded' || state === 'resume_pending'}>
+                {state === 'resume_pending' ? 'resuming' : state === 'taken_over' ? 'taken over' : state}
+              </span>
+            {/if}
+            {#if run && rlane && state !== 'idle' && state !== 'taken_over'}
+              <div class="mode-switch" role="group" aria-label="Mute and solo">
+                <button aria-pressed={rlane.mute} title="Mute: clear the layer, keep counting; back at the next step"
+                  onclick={() => app.send({ cmd: 'set_lane_mute', seq: seq.id, lane: li, on: !rlane.mute })}>M</button>
+                <button aria-pressed={rlane.solo} title="Solo: mute the other lanes of this sequence"
+                  onclick={() => app.send({ cmd: 'set_lane_solo', seq: seq.id, lane: li, on: !rlane.solo })}>S</button>
+              </div>
+            {/if}
             {#if state === 'yielded'}
               <button class="btn ghost" onclick={() => app.send({ cmd: 'resume_lane', seq: seq.id, lane: li })}>Resume lane</button>
             {/if}

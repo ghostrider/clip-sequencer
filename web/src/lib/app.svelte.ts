@@ -3,7 +3,7 @@
 
 import { applyTheme, resolveTheme } from './themes';
 import type {
-  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
+  Appearance, ClipRef, ClipView, Command, CueAt, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
   RunView, RuntimeState, SequenceView, Start, Step, StructureState, Uuid, VersionInfo,
 } from './types';
 
@@ -279,6 +279,17 @@ class AppState {
     this.send({ cmd: 'start', seq: id });
   }
 
+  /** Shift+▶ / Shift+Space / "Cue at…": cue a sequence of the live deck (SPEC §3.3). */
+  cue(view: SequenceView, deck: DeckView, at: CueAt = { at: 'start_mode' }) {
+    if (!deck.live) return; // a cue never switches decks
+    this.send({ cmd: 'cue', seq: view.sequence.id, ...at });
+  }
+
+  /** Cancels a waiting start: the cue, or a plain start of `seq`. */
+  cancelWaiting(p: PendingView) {
+    this.send(p.cue ? { cmd: 'cancel_cue' } : { cmd: 'stop', seq: p.seq });
+  }
+
   uniqueName(deck: DeckView, base: string): string {
     const taken = new Set(deck.sequences.map((s) => s.sequence.name));
     if (!taken.has(base)) return base;
@@ -341,6 +352,13 @@ export function startsIn(waitTicks: number): string {
   if (beats <= 4) return `starts in ${beats} ${beats === 1 ? 'beat' : 'beats'}`;
   const bars = Math.ceil(waitTicks / 96);
   return `starts in ${bars} bars`;
+}
+
+/** `CUED · in 2 bars`, `CUED · at end of pass`, or `starts in 3 beats` for a plain waiting start. */
+export function waitLabel(p: PendingView): string {
+  if (!p.cue) return startsIn(p.wait_ticks);
+  if (p.end_of_pass) return 'CUED · at end of pass';
+  return `CUED · ${startsIn(p.wait_ticks).replace('starts ', '')}`;
 }
 
 /** Start modes in the editor header (SPEC §9.3): now, beat, bar, 2 · 4 · 8 · 16 bars. */

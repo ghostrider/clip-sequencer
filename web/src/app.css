@@ -73,6 +73,7 @@ button, input, select { font: inherit; }
 .pill { font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); color: var(--text-2); }
 .pill.playing { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent-text); }
 .pill.yielded { border-color: var(--err-line); background: var(--err-bg); color: var(--err-text); }
+.pill.muted { border-style: dashed; color: var(--muted); }
 
 .tracks { flex: 1 1 auto; position: relative; min-width: 0; }
 .ruler { height: var(--ruler-h); border-bottom: 1px solid var(--line); display: flex; }

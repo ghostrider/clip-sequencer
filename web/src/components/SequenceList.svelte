@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, SIXTEENTHS_PER_BAR, repeatLabel, startsIn } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, repeatLabel, waitLabel } from '../lib/app.svelte';
   import type { SequenceView } from '../lib/types';
   import SeqSyncDialog from './SeqSyncDialog.svelte';
 
@@ -129,7 +129,13 @@
             {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} {bars(v) === '1' ? 'bar' : 'bars'} · {repeatLabel(v.sequence.repeat)}
           </div>
           <div class="bind" class:bad={b.bad}>{b.text}</div>
-          {#if waiting}<div class="bind waiting">{startsIn(waiting.wait_ticks)}</div>{/if}
+          {#if waiting}
+            <div class="bind waiting">
+              {waitLabel(waiting)}
+              {#if waiting.cue}<button class="linkish" aria-label="Cancel the cue" title="Cancel the cue"
+                onclick={(e) => { e.stopPropagation(); app.cancelWaiting(waiting); }}>×</button>{/if}
+            </div>
+          {/if}
         </div>
         <div class="spacer"></div>
         {#if deck && !deck.orphaned}
@@ -137,11 +143,12 @@
             class={deck.live || running ? 'icon-btn' : 'btn'}
             class:running
             aria-label={`${running ? 'Stop' : waiting ? 'Start now' : 'Start'} ${v.sequence.name}`}
-            title={waiting ? 'Start now' : undefined}
             disabled={app.runtime?.switching?.seq === v.sequence.id}
+            title={waiting ? 'Start now' : deck.live ? 'Shift+click: cue it (plays next)' : undefined}
             onclick={(e) => {
               e.stopPropagation();
-              app.toggle(v, deck);
+              if (e.shiftKey && deck.live) app.cue(v, deck);
+              else app.toggle(v, deck);
             }}
           >
             {#if app.runtime?.switching?.seq === v.sequence.id}switching…{:else if running}■{:else if deck.live}▶{:else}▶ {deck.name}{/if}
@@ -162,6 +169,16 @@
 {#if menu}
   {@const v = menu.view}
   <div class="menu" style:left={`${menu.x}px`} style:top={`${menu.y}px`} role="menu">
+    {#if deck?.live}
+      <div class="menu-sep">Cue at…</div>
+      <button role="menuitem" onclick={() => { app.cue(v, deck); menu = null; }}>its start mode</button>
+      {#each app.runtime?.running ?? [] as r (r.seq)}
+        <button role="menuitem" onclick={() => { app.cue(v, deck, { at: 'end_of_pass', of: r.seq }); menu = null; }}>end of the pass of {r.name}</button>
+      {/each}
+      <button role="menuitem" onclick={() => { app.cue(v, deck, { at: 'bars_8' }); menu = null; }}>next 8 bars</button>
+      <button role="menuitem" onclick={() => { app.cue(v, deck, { at: 'bars_16' }); menu = null; }}>next 16 bars</button>
+      <div class="menu-sep"></div>
+    {/if}
     <button role="menuitem" onclick={() => startRename(v)}>Rename</button>
     <button role="menuitem" onclick={() => duplicate(v)}>Duplicate</button>
     <button role="menuitem" class="danger" onclick={() => { confirmDelete = v; menu = null; }}>Delete…</button>

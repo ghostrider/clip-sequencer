@@ -243,6 +243,10 @@ export interface LutEffect {
 
 export interface RunLaneView {
   state: 'idle' | 'playing' | 'yielded' | 'resume_pending' | 'taken_over';
+  /** Mute and solo (SPEC §7.8); `silent`: sends nothing now (muted, or another lane is soloed). */
+  mute: boolean;
+  solo: boolean;
+  silent: boolean;
   step: number | null;
   not_confirmed: number[];
 }
@@ -285,10 +289,18 @@ export interface PendingView {
   seq: Uuid;
   name: string;
   from_seq_clip: boolean;
-  mode: Start;
+  /** The start mode boundary it waits for; `null` when a cue waits for `end_of_pass`. */
+  mode: Start | null;
+  /** A cue waiting for the end of the current pass of this running sequence (SPEC §3.3). */
+  end_of_pass: Uuid | null;
+  /** A cue: what plays stops when it starts. */
+  cue: boolean;
   /** Ticks until it starts (24 per beat). */
   wait_ticks: number;
 }
+
+/** Cue points (SPEC §3.3). */
+export type CueAt = { at: 'start_mode' } | { at: 'bars_8' } | { at: 'bars_16' } | { at: 'end_of_pass'; of: Uuid };
 
 export interface RuntimeState {
   clock: ClockView;
@@ -348,6 +360,10 @@ export type EditOp =
 
 export type Command =
   | { cmd: 'start'; seq: Uuid }
+  | ({ cmd: 'cue'; seq: Uuid } & CueAt)
+  | { cmd: 'cancel_cue' }
+  | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
+  | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
   | { cmd: 'stop_all' }
   | { cmd: 'resume_lane'; seq: Uuid; lane: number }

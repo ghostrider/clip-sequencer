@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, formatLength, startsIn, START_MODES, sameStart } from '../lib/app.svelte';
+  import { app, formatLength, waitLabel, START_MODES, sameStart } from '../lib/app.svelte';
   import type { Repeat } from '../lib/types';
   import LaneGrid from './LaneGrid.svelte';
 
@@ -68,7 +68,7 @@
         >{s.after_last_pass}</button>
       </span>
       {#if run?.edited}<span class="tag pending">● edited · applies at next start</span>{/if}
-      {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{startsIn(waiting.wait_ticks)}</span>{/if}
+      {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{waitLabel(waiting)}</span>{/if}
       <div class="spacer"></div>
       <div class="repeat startmode" role="group" aria-label="Start mode">
         <span>Start</span>
@@ -91,10 +91,12 @@
       <button class="btn" onclick={addLane} disabled={!app.freeLayer(s.lanes.map((l) => l.layer))}>+ Lane</button>
       <button class="btn" disabled={!deck.live || !view.binding} title={!deck.live ? 'Only for the live deck' : !view.binding ? 'Needs a § clip on the SEQ layer' : ''}
         onclick={() => app.send({ cmd: 'push_thumbnail', seq: s.id })}>Push thumbnail to Resolume</button>
-      <button class="btn primary" disabled={deck.orphaned || app.runtime?.switching?.seq === s.id} onclick={() => app.toggle(view, deck)}>
+      <button class="btn primary" disabled={deck.orphaned || app.runtime?.switching?.seq === s.id}
+        title={deck.live ? 'Shift+click: cue it (plays next, at its start mode)' : ''}
+        onclick={(e) => (e.shiftKey && deck.live ? app.cue(view, deck) : app.toggle(view, deck))}>
         {#if app.runtime?.switching?.seq === s.id}switching…{:else if run}■ Stop{:else if waiting}▶ Start now{:else if deck.live}▶ Start{:else}▶ Start on {deck.name}{/if}
       </button>
-      {#if waiting}<button class="btn" onclick={() => app.send({ cmd: 'stop', seq: s.id })}>Cancel</button>{/if}
+      {#if waiting}<button class="btn" onclick={() => app.cancelWaiting(waiting)}>Cancel</button>{/if}
     </div>
 
     <LaneGrid {view} {deck} />
