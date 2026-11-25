@@ -350,6 +350,24 @@ enum ClientMsg {
     Start {
         seq: Uuid,
     },
+    /// SPEC §3.3.
+    Cue {
+        seq: Uuid,
+        #[serde(flatten)]
+        at: crate::engine::CuePoint,
+    },
+    CancelCue,
+    /// SPEC §7.8.
+    SetLaneMute {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
+    SetLaneSolo {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
     Stop {
         seq: Uuid,
     },
@@ -623,6 +641,10 @@ fn handle(ctx: &ServerCtx, text: &str) {
     };
     let engine_cmd = match cmd {
         ClientMsg::Start { seq } => EngineCommand::Start { seq },
+        ClientMsg::Cue { seq, at } => EngineCommand::Cue { seq, at },
+        ClientMsg::CancelCue => EngineCommand::CancelCue,
+        ClientMsg::SetLaneMute { seq, lane, on } => EngineCommand::SetLaneMute { seq, lane, on },
+        ClientMsg::SetLaneSolo { seq, lane, on } => EngineCommand::SetLaneSolo { seq, lane, on },
         ClientMsg::Stop { seq } => EngineCommand::Stop { seq },
         ClientMsg::StopAll => EngineCommand::StopAll,
         ClientMsg::ResumeLane { seq, lane } => EngineCommand::ResumeLane { seq, lane },
@@ -1097,5 +1119,65 @@ async fn static_file(uri: Uri) -> Response {
             "UI not built: run `npm run build` in web/",
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SEQ: &str = "00000000-0000-0000-0000-00000000000a";
+
+    #[test]
+    fn cue_and_mute_messages_parse() {
+        let p = |t: String| serde_json::from_str::<ClientMsg>(&t).unwrap();
+        let seq: Uuid = SEQ.parse().unwrap();
+        for (at, want) in [
+            ("start_mode", crate::engine::CuePoint::StartMode),
+            ("bars_8", crate::engine::CuePoint::Bars8),
+            ("bars_16", crate::engine::CuePoint::Bars16),
+        ] {
+            let m = p(format!(r#"{{"cmd":"cue","seq":"{SEQ}","at":"{at}"}}"#));
+            assert!(matches!(m, ClientMsg::Cue { seq: s, at: a } if s == seq && a == want));
+        }
+        let of = Uuid::from_u128(0xb);
+        let m = p(format!(
+            r#"{{"cmd":"cue","seq":"{SEQ}","at":"end_of_pass","of":"{of}"}}"#
+        ));
+        assert!(matches!(
+            m,
+            ClientMsg::Cue {
+                at: crate::engine::CuePoint::EndOfPass { of: o },
+                ..
+            } if o == of
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"cancel_cue"}"#.into()),
+            ClientMsg::CancelCue
+        ));
+        assert!(matches!(
+            p(format!(
+                r#"{{"cmd":"set_lane_mute","seq":"{SEQ}","lane":1,"on":true}}"#
+            )),
+            ClientMsg::SetLaneMute {
+                lane: 1,
+                on: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            p(format!(
+                r#"{{"cmd":"set_lane_solo","seq":"{SEQ}","lane":0,"on":false}}"#
+            )),
+            ClientMsg::SetLaneSolo {
+                lane: 0,
+                on: false,
+                ..
+            }
+        ));
+        assert!(serde_json::from_str::<ClientMsg>(&format!(
+            r#"{{"cmd":"cue","seq":"{SEQ}","at":"later"}}"#
+        ))
+        .is_err());
     }
 }

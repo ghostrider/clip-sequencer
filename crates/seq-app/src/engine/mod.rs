@@ -17,7 +17,7 @@ use seq_core::edit::EditOp;
 use seq_core::index::{ClipInfo, ClipState, CompositionIndex, LayerLookup};
 use seq_core::resolve::{refresh_ids, resolve_sequence, SequenceResolution};
 use seq_core::scheduler::{
-    bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode,
+    bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode, Wait,
 };
 use seq_core::{SeqFile, Sequence, Start};
 use tokio::sync::{mpsc, watch};
@@ -28,11 +28,43 @@ use crate::settings::ClockSourceKind;
 use crate::storage::{Storage, StorageError};
 use view::*;
 
+/// Where a cue starts (SPEC §3.3). JSON: `"at": "start_mode" | "bars_8" | "bars_16"`, or
+/// `"at": "end_of_pass", "of": <running sequence id>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "at", rename_all = "snake_case")]
+pub enum CuePoint {
+    StartMode,
+    EndOfPass {
+        of: Uuid,
+    },
+    #[serde(rename = "bars_8")]
+    Bars8,
+    #[serde(rename = "bars_16")]
+    Bars16,
+}
+
 /// Commands from the UI (and the CLI).
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
     Start {
         seq: Uuid,
+    },
+    /// Cue a sequence of the live deck (SPEC §3.3).
+    Cue {
+        seq: Uuid,
+        at: CuePoint,
+    },
+    CancelCue,
+    /// Mute or solo a lane of a running sequence (SPEC §7.8).
+    SetLaneMute {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
+    SetLaneSolo {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
     },
     /// Start a sequence of the live deck by name (CLI `--start`). Waits until Resolume and the
     /// sequence file are loaded.
@@ -1039,6 +1071,19 @@ impl Engine {
     pub fn on_command(&mut self, cmd: EngineCommand) {
         match cmd {
             EngineCommand::Start { seq } => self.start(seq),
+            EngineCommand::Cue { seq, at } => self.cue(seq, at),
+            EngineCommand::CancelCue => {
+                let acts = self.scheduler.cancel_cue();
+                self.execute(acts);
+            }
+            EngineCommand::SetLaneMute { seq, lane, on } => {
+                let acts = self.scheduler.set_mute(seq, lane, on);
+                self.execute(acts);
+            }
+            EngineCommand::SetLaneSolo { seq, lane, on } => {
+                let acts = self.scheduler.set_solo(seq, lane, on);
+                self.execute(acts);
+            }
             EngineCommand::StartByName { name } => {
                 self.deferred_start = Some(name);
                 self.try_deferred_start();
@@ -1266,22 +1311,65 @@ impl Engine {
     /// sequence that already waits for its boundary starts it at once.
     fn start_now(&mut self, seq: Uuid, origin: Origin) {
         let at_once = self.scheduler.is_pending(seq);
-        let Some(index) = self.index.clone() else {
+        let Some((live, sequence, spec)) = self.run_spec(seq) else {
             return;
         };
-        let Some(live) = index.live_deck.clone() else {
+        let mode = if at_once {
+            Start::Immediate
+        } else {
+            sequence.start
+        };
+        let name = sequence.name.clone();
+        self.queued.insert(seq, (live, sequence));
+        match self.scheduler.start(spec, origin, mode) {
+            Ok(acts) => self.execute(acts),
+            Err(e) => {
+                self.queued.remove(&seq);
+                self.notice(format!("cannot start {name:?}: {e}"));
+            }
+        }
+        self.runtime_dirty = true;
+    }
+
+    /// Cues a sequence of the live deck (SPEC §3.3).
+    fn cue(&mut self, seq: Uuid, at: CuePoint) {
+        let Some((live, sequence, spec)) = self.run_spec(seq) else {
             return;
         };
-        let Some(model) = self.model.as_mut() else {
-            return;
+        let wait = match at {
+            CuePoint::StartMode => Wait::Mode(sequence.start),
+            CuePoint::Bars8 => Wait::Mode(Start::Bar { bars: 8 }),
+            CuePoint::Bars16 => Wait::Mode(Start::Bar { bars: 16 }),
+            CuePoint::EndOfPass { of } => Wait::EndOfPass(of),
         };
+        let name = sequence.name.clone();
+        self.queued.insert(seq, (live, sequence));
+        match self.scheduler.cue(spec, Origin::Ui, wait) {
+            Ok(acts) => {
+                log::info!("cued {name:?} ({at:?})");
+                self.execute(acts);
+            }
+            Err(e) => {
+                self.queued.remove(&seq);
+                self.notice(format!("cannot cue {name:?}: {e}"));
+            }
+        }
+        self.runtime_dirty = true;
+    }
+
+    /// The snapshot and run spec of a sequence of the live deck, resolved now (ids refreshed and
+    /// saved). `None` with a notice when it is not in the live deck.
+    fn run_spec(&mut self, seq: Uuid) -> Option<(String, Sequence, RunSpec)> {
+        let index = self.index.clone()?;
+        let live = index.live_deck.clone()?;
+        let model = self.model.as_mut()?;
         let Some(sequence) = model
             .decks
             .get_mut(&live)
             .and_then(|d| d.sequences.iter_mut().find(|s| s.id == seq))
         else {
             self.notice("sequence is not in the live deck");
-            return;
+            return None;
         };
         let resolution = resolve_sequence(sequence, &index);
         let refreshed = refresh_ids(sequence, &resolution) > 0;
@@ -1299,21 +1387,7 @@ impl Engine {
                 run_lane.layer_id = None; // lanes may not play on the SEQ layer
             }
         }
-        let mode = if at_once {
-            Start::Immediate
-        } else {
-            sequence.start
-        };
-        let name = sequence.name.clone();
-        self.queued.insert(seq, (live, sequence));
-        match self.scheduler.start(spec, origin, mode) {
-            Ok(acts) => self.execute(acts),
-            Err(e) => {
-                self.queued.remove(&seq);
-                self.notice(format!("cannot start {name:?}: {e}"));
-            }
-        }
-        self.runtime_dirty = true;
+        Some((live, sequence, spec))
     }
 
     // ---- actions ----
@@ -1363,11 +1437,33 @@ impl Engine {
                 Action::Pending { seq, .. } => {
                     if let Some(p) = self.scheduler.pending().iter().find(|p| p.seq == seq) {
                         log::info!(
-                            "{:?} starts in {} tick(s) ({:?})",
+                            "{:?} starts in {} tick(s) ({:?}{})",
                             p.name,
                             p.wait_ticks,
-                            p.mode
+                            p.wait,
+                            if p.cue { ", cue" } else { "" }
                         );
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::LaneMuteChanged { seq, lane, silent } => {
+                    let layer = self
+                        .snapshots
+                        .get(&seq)
+                        .and_then(|(_, s)| s.lanes.get(lane))
+                        .map(|l| l.layer.clone())
+                        .unwrap_or_default();
+                    let (bar, beat) = self
+                        .scheduler
+                        .status()
+                        .iter()
+                        .find(|r| r.seq == seq)
+                        .map(|r| bar_beat(r.pos))
+                        .unwrap_or((1, 1));
+                    if silent {
+                        log::info!("{layer} muted at {bar}.{beat}");
+                    } else {
+                        log::info!("{layer} unmuted at {bar}.{beat} (plays from its next step)");
                     }
                     self.runtime_dirty = true;
                 }
@@ -1993,6 +2089,9 @@ impl Engine {
                         .enumerate()
                         .map(|(i, l)| RunLaneView {
                             state: lane_state_name(l.state),
+                            mute: l.mute,
+                            solo: l.solo,
+                            silent: l.silent,
                             step: if l.state == LaneState::Inactive {
                                 None
                             } else {
@@ -2017,7 +2116,15 @@ impl Engine {
                 seq: p.seq,
                 name: p.name,
                 from_seq_clip: origin_is_seq_clip(p.origin),
-                mode: p.mode,
+                mode: match p.wait {
+                    Wait::Mode(mode) => Some(mode),
+                    Wait::EndOfPass(_) => None,
+                },
+                end_of_pass: match p.wait {
+                    Wait::EndOfPass(of) => Some(of),
+                    Wait::Mode(_) => None,
+                },
+                cue: p.cue,
                 wait_ticks: p.wait_ticks,
             })
             .collect();

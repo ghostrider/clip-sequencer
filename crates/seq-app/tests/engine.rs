@@ -396,6 +396,76 @@ async fn quantized_starts_wait_for_their_boundary() {
     h.app.shutdown().await;
 }
 
+/// SPEC §3.3: a cue starts at its point and stops what plays; §7.8: mute clears the layer once,
+/// the lane counts silently and plays again at its next step.
+#[tokio::test]
+async fn cue_replaces_what_plays_and_mute_silences_a_lane() {
+    use seq_app::engine::CuePoint;
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetStart {
+            seq: SEQ_A,
+            start: seq_core::Start::Bar { bars: 1 },
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_A && v.sequence.start != seq_core::Start::Immediate)
+    })
+    .await;
+    h.ticks(1); // phase 0
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.running.len() == 1).await;
+    h.ticks(10);
+    h.cmd(EngineCommand::Cue {
+        seq: SEQ_A,
+        at: CuePoint::StartMode,
+    });
+    let r = h
+        .runtime(|r| r.pending.first().is_some_and(|p| p.cue))
+        .await;
+    assert_eq!(r.pending[0].wait_ticks, 86);
+    assert_eq!(r.pending[0].mode, Some(seq_core::Start::Bar { bars: 1 }));
+    h.ticks(85);
+    h.runtime(|r| r.running.iter().map(|x| x.seq).collect::<Vec<_>>() == [SEQ_B])
+        .await;
+    h.ticks(1);
+    let r = h
+        .runtime(|r| r.running.iter().map(|x| x.seq).collect::<Vec<_>>() == [SEQ_A])
+        .await;
+    assert!(r.pending.is_empty());
+
+    // Mute lane 0 (L2): cleared at once, then silent; unmuted it plays at its next step (tick 96).
+    h.mock.clear_osc_log();
+    h.ticks(10);
+    h.cmd(EngineCommand::SetLaneMute {
+        seq: SEQ_A,
+        lane: 0,
+        on: true,
+    });
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.lanes[0].silent))
+        .await;
+    assert!(r.running[0].lanes[0].mute && !r.running[0].lanes[1].silent);
+    assert_eq!(h.osc(2).await, clear(2).to_vec());
+    h.cmd(EngineCommand::SetLaneMute {
+        seq: SEQ_A,
+        lane: 0,
+        on: false,
+    });
+    h.runtime(|r| r.running.first().is_some_and(|x| !x.lanes[0].silent))
+        .await;
+    h.ticks(85);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2, "nothing while unmuting");
+    h.ticks(1);
+    assert_eq!(h.osc(3).await[2], connect(2, 3));
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn seq_clip_starts_its_sequence_and_finishing_clears_the_seq_layer() {
     let h = harness().await;

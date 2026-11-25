@@ -310,7 +310,12 @@ pub struct PendingView {
     pub seq: Uuid,
     pub name: String,
     pub from_seq_clip: bool,
-    pub mode: seq_core::Start,
+    /// The start mode boundary it waits for; `None` when a cue waits for `end_of_pass`.
+    pub mode: Option<seq_core::Start>,
+    /// A cue waiting for the end of the current pass of this running sequence (SPEC §3.3).
+    pub end_of_pass: Option<Uuid>,
+    /// A cue: what plays stops when it starts.
+    pub cue: bool,
     /// Ticks until it starts, if the clock keeps running (24 per beat).
     pub wait_ticks: u64,
 }
@@ -347,6 +352,10 @@ pub struct RunView {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunLaneView {
+    /// Muted by hand, soloed, and whether it sends nothing now (SPEC §7.8).
+    pub mute: bool,
+    pub solo: bool,
+    pub silent: bool,
     /// `idle`, `playing`, `yielded`, `resume_pending`, `taken_over`.
     pub state: &'static str,
     pub step: Option<usize>,

@@ -513,7 +513,7 @@ with every lane unmuted.
 - A muted lane keeps its layer (§7.3): another sequence starting on that layer takes it over as usual, and a clip
   started by hand on it yields it (§7.3; unmuting then also resumes it). Muting a yielded lane clears the layer.
 - Stopping and finishing apply as usual; a muted lane's layer is already dark.
-- The log says `BG muted at 3.2` / `BG unmuted (plays from 4.1)`.
+- The log says `BG muted at 3.2` / `BG unmuted at 3.4 (plays from its next step)`.
 
 ## 8. Thumbnails
 
