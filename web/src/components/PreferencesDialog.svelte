@@ -84,6 +84,8 @@
           onclick={() => (app.prefsTab = 'clock')}>Clock</button>
         <button class="tab" role="tab" aria-selected={app.prefsTab === 'appearance'} aria-controls="prefs-appearance"
           onclick={() => (app.prefsTab = 'appearance')}>Appearance</button>
+        <button class="tab" role="tab" aria-selected={app.prefsTab === 'updates'} aria-controls="prefs-updates"
+          onclick={() => (app.prefsTab = 'updates')}>Updates</button>
       </div>
       <div class="prefs-body">
       <div class="prefs-group" id="prefs-clock" role="tabpanel" aria-label="Clock" hidden={app.prefsTab !== 'clock'}>
@@ -150,6 +152,17 @@
         <p class="meta">The theme shows at once; Save keeps it, Cancel goes back. Saved in the app's settings, so the
           desktop window and every browser show the same theme.</p>
         <ThemeSettings bind:selected={theme} bind:dirty={themeDirty} />
+      </div>
+      <div class="prefs-group" id="prefs-updates" role="tabpanel" aria-label="Updates" hidden={app.prefsTab !== 'updates'}>
+        <label class="radio">
+          <input type="checkbox" checked={app.update?.startup_check ?? true}
+            onchange={(e) => app.send({ cmd: 'set_update_check', on: (e.currentTarget as HTMLInputElement).checked })} />
+          <span>Check for updates at start-up</span>
+        </label>
+        <p class="meta">Once per start the app asks GitHub for the latest release (nothing else is sent). It asks before
+          downloading anything. Applies at once.</p>
+        <div><button class="btn" onclick={() => app.checkForUpdates()}>Check now</button>
+          <span class="meta">This is version {app.update?.current ?? app.version?.version ?? '?'}.</span></div>
       </div>
       </div>
       <div class="actions">

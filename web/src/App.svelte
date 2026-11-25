@@ -14,6 +14,7 @@
   import LicensesDialog from './components/LicensesDialog.svelte';
   import ShortcutsDialog from './components/ShortcutsDialog.svelte';
   import PluginDialog from './components/PluginDialog.svelte';
+  import UpdateDialog from './components/UpdateDialog.svelte';
   import LutTab from './components/LutTab.svelte';
   import Splitter from './components/Splitter.svelte';
 
@@ -141,3 +142,4 @@
 {#if app.dialog === 'licenses'}<LicensesDialog />{/if}
 {#if app.dialog === 'shortcuts'}<ShortcutsDialog />{/if}
 {#if app.dialog === 'ffgl'}<PluginDialog />{/if}
+{#if app.updateOpen}<UpdateDialog />{/if}

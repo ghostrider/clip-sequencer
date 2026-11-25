@@ -365,6 +365,10 @@ export type Command =
   | ({ cmd: 'cue'; seq: Uuid } & CueAt)
   | { cmd: 'cancel_cue' }
   | { cmd: 'set_guide_lines'; every: number | null }
+  | { cmd: 'check_update' }
+  | { cmd: 'update_answer'; skip: boolean }
+  | { cmd: 'install_update' }
+  | { cmd: 'set_update_check'; on: boolean }
   | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
@@ -391,6 +395,40 @@ export type Command =
   | { cmd: 'lut_update'; name: string; grade: Grade; curves: Curves }
   | { cmd: 'lut_clear_base'; name: string }
   | { cmd: 'lut_apply'; name: string; file_param: number };
+
+/** In-app update (SPEC §15), `update` message. */
+export interface Release {
+  version: string;
+  notes: string;
+  page: string;
+  zip_name: string;
+  zip_url: string;
+  zip_size: number;
+  sums_url: string;
+}
+
+export type CheckResult =
+  | { state: 'up_to_date'; current: string }
+  | { state: 'available'; current: string; release: Release }
+  | { state: 'error'; current: string; message: string };
+
+export type UpdatePhase =
+  | { state: 'downloading'; done: number; total: number }
+  | { state: 'restarting' }
+  | { state: 'failed'; message: string };
+
+export interface UpdateView {
+  current: string;
+  checking: boolean;
+  result: CheckResult | null;
+  /** The start-up check found a version to offer: ask Download and install / Skip this version / Later. */
+  ask: boolean;
+  phase: UpdatePhase | null;
+  /** Why this copy can't update itself (not a release folder, folder not writable). */
+  blocked: string | null;
+  startup_check: boolean;
+  releases_page: string;
+}
 
 /** Theme settings from the app (`appearance` message, SPEC §9.7). */
 export interface Appearance {

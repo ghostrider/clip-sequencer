@@ -4,7 +4,7 @@
 import { applyTheme, resolveTheme } from './themes';
 import type {
   Appearance, ClipRef, ClipView, Command, CueAt, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
-  Repeat, RunView, RuntimeState, SequenceView, Start, Step, StructureState, Uuid, VersionInfo, When,
+  Repeat, RunView, RuntimeState, SequenceView, Start, Step, StructureState, UpdateView, Uuid, VersionInfo, When,
 } from './types';
 
 /** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 LUTs, Ctrl+3 Console. */
@@ -66,7 +66,10 @@ class AppState {
   /** Preferences dialog (clock source and MIDI input, theme). */
   prefsOpen = $state(false);
   /** Preferences tab shown when it opens (the clock chip opens the Clock tab). */
-  prefsTab = $state<'clock' | 'appearance'>('clock');
+  prefsTab = $state<'clock' | 'appearance' | 'updates'>('clock');
+  /** In-app update state (SPEC §15) and whether its dialog is open. */
+  update = $state<UpdateView | null>(null);
+  updateOpen = $state(false);
   /** Theme settings from the app (SPEC §9.7). */
   appearance = $state<Appearance>({ theme: null, custom_themes: [], guide_lines: null });
   /** True while Preferences shows a theme that is not saved yet: updates from the app do not repaint. */
@@ -128,6 +131,11 @@ class AppState {
       } else if (msg.type === 'log') this.addLogs(msg.data);
       else if (msg.type === 'log_stats') this.logStats = msg.data;
       else if (msg.type === 'luts') this.luts = msg.data;
+      else if (msg.type === 'update') {
+        this.update = msg.data;
+        // The start-up check found something to offer, or an install runs: show the dialog.
+        if (msg.data.ask || msg.data.phase) this.updateOpen = true;
+      }
       else if (msg.type === 'appearance') {
         this.appearance = msg.data;
         if (!this.themePreview) this.applySavedTheme();
@@ -165,6 +173,12 @@ class AppState {
   }
 
   // ---- menus (M11 Phase F) ----
+
+  /** Help → Check for updates… */
+  checkForUpdates() {
+    this.updateOpen = true;
+    this.send({ cmd: 'check_update' });
+  }
 
   openDialog(d: InfoDialog) {
     this.prefsOpen = false;

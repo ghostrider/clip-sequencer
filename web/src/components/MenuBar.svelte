@@ -53,6 +53,7 @@
       label: 'Help',
       items: [
         { label: 'Keyboard shortcuts', run: () => app.openDialog('shortcuts') },
+        { label: 'Check for updates…', run: () => app.checkForUpdates() },
         { label: 'User manual ↗', run: desktop ? shell('open_manual') : external(app.links.manual) },
         { label: 'Report an issue ↗', run: desktop ? shell('open_issue') : external(app.links.issues) },
         'sep',
