@@ -204,6 +204,10 @@ The UI server listens on `127.0.0.1` only, so the UI and its API are reachable f
 else; there is no option to open it to the network. It has no login: anything running on the machine can use
 it, like Resolume's own webserver. To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
+The app asks GitHub for the latest release once at each start (Preferences → Updates turns that off; `--no-update-check`
+for one run) and when you choose Help → Check for updates, and installs a new version only when you say so. It sends
+nothing else anywhere.
+
 ## Building from source
 
 Needs Windows, [Rust](https://rustup.rs/) (stable, MSVC toolchain), Node.js 20.19+ or 22.12+, and for the

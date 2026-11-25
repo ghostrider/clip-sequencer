@@ -220,7 +220,7 @@ Tasks:
 - [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
       changelog, landing page.
 
-## M14 — In-app update  (planned 2026-11-04, not started; part of release 0.5.0, SPEC §15)
+## M14 — In-app update  (planned 2026-11-04; built 2026-11-25, Windows test with Uli open; SPEC §15)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.
 
@@ -247,12 +247,14 @@ Open points for the SPEC section:
 - **Console program:** `seq-app-cli --check-update` (and possibly `--update`).
 
 Tasks (to refine when it starts):
-- [ ] SPEC section: the menu entry, the dialog, the check, the replacement once decided, failure and rollback.
-- [ ] Update check (GitHub API, version compare) with tests against a local fake release server.
-- [ ] Menu entry Help → Check for updates… (native menu and browser UI menu bar) and the result dialog
-      ("up to date" / new version with notes / error).
-- [ ] Download, verification and binary replacement (after the decision).
-- [ ] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
+- [x] SPEC section: the menu entry, the dialog, the check, the replacement once decided, failure and rollback.
+- [x] Update check (GitHub API, version compare) with tests against a local fake release server.
+- [x] Menu entry Help → Check for updates… (one menu bar for the desktop app and the browser UI since 0.4) and the
+      result dialog ("up to date" / new version with notes / error); the check at start-up with Download and install /
+      Skip this version / Later; Preferences → Updates.
+- [x] Download, verification and binary replacement (helper = the new seq-app-cli, decided 2026-11-25), with
+      rollback; `scripts/fake-update-source.mjs` and `--update-source` for testing (docs/RELEASING.md).
+- [x] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
 - [ ] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin.
 
 ---

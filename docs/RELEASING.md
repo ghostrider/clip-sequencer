@@ -66,6 +66,27 @@ version x.y.z" in each page footer). Open https://ghostrider.github.io/clip-sequ
 The plugin's debug symbols (`symbols-x.y.z` artifact of the release run) are kept for 30 days; download and keep
 them if you want to read crash dumps of this version later.
 
+## Testing the in-app update (SPEC §15)
+
+The app asks `https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest`; the hidden option
+`--update-source <url>` points it at a local stand-in instead, so a real release zip can be tested end to end
+before it is published:
+
+1. Build two versions with `scripts\release.ps1`: the one to update *from* (say 0.5.0) and a newer one (say 0.5.1,
+   version bumped only locally). Unpack the older zip somewhere writable, e.g. `D:\test\clip-sequencer`.
+2. Serve the newer zip: `node scripts/fake-update-source.mjs release\clip-sequencer-0.5.1-windows-x64.zip`
+   (port 8765; `--notes "…"` for the release notes, `--prerelease` to check that one is ignored).
+3. Start the older version with `seq-app.exe --update-source http://127.0.0.1:8765` (or `seq-app-cli.exe`;
+   `seq-app-cli --check-update --update-source …` only prints the result: exit 0 up to date, 2 available, 1 error).
+4. Check: the question at start-up (Download and install / Skip / Later), Skip (not asked again at the next start,
+   still offered by Help → Check for updates), the install while a sequence runs (refused), the install itself
+   (the new version starts and says *Updated to 0.5.1*; `update-<date>.log` in the log folder), no server running
+   (only a log line at start-up, an error by hand), a read-only folder, Resolume running with the plugin loaded.
+5. Rollback: serve a zip whose `seq-app.exe` doesn't start (for example one that exits at once); the old version must
+   come back and say *Update to … failed*.
+
+The real endpoint can be checked read-only any time: `seq-app-cli --check-update`.
+
 ## If something is wrong
 
 - **Before publishing:** delete the draft release and the tag (`git push --delete origin vx.y.z`,

@@ -57,9 +57,23 @@ open Microsoft's [download page](https://developer.microsoft.com/microsoft-edge/
 
 ## Updating
 
+From version 0.5.0 on the app looks for a new version once at each start. When there is one, it asks: **Download
+and install**, **Skip this version** (not offered at start-up again) or **Later** (asked again at the next start).
+**Help → Check for updates…** checks any time. Turn the check at start-up off in **Preferences → Updates**.
+
+**Download and install** needs no sequence running or waiting. The app downloads the release from GitHub, checks it,
+quits and starts the new version in the same folder. If the new version doesn't start, the old one comes back and
+says why. This works when the `clip-sequencer` folder is one you unpacked from the release zip and can write to (not
+in `Program Files`); otherwise the dialog says so and offers the release page.
+
+By hand (or from 0.4.x, which can't update itself):
+
 1. Quit the sequencer (**File → Quit** or Ctrl+Q).
 2. Unzip the new version, into a new place or over the old `clip-sequencer` folder.
 3. Start the new `seq-app.exe`.
+
+The FFGL plugin in Resolume is not part of an update: after one, the status bar may say *FFGL plugin update
+available*; install it from there with Resolume closed ([The FFGL plugin](ffgl-plugin.md)).
 
 Your sequences, settings and caches are not in the app folder but in the data folder
 (`%APPDATA%\clip-sequencer`, see [Files and data](files.md)), so they carry over. Read the

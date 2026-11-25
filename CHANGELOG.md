@@ -21,6 +21,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Section markers** in the editor ("Intro", "Drop"): add with M or from the ruler, drag, rename, delete. View →
   Guide lines draws a line every 8, 16 or 32 bars.
 - **LUT test photos:** the 24 images of the Kodak test suite in the LUT tab's preview.
+- **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
+  (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
+  program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up
+  off in Preferences → Updates. `seq-app-cli --check-update` prints the result.
 
 ### Changed
 
