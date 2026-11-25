@@ -2084,7 +2084,10 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
         .await
         .unwrap();
     let first = appearance(&mut a, |_| true).await;
-    assert_eq!(first, json!({"theme": null, "custom_themes": []}));
+    assert_eq!(
+        first,
+        json!({"theme": null, "custom_themes": [], "guide_lines": null})
+    );
 
     let theme = json!({
         "id": "custom-0a1b", "name": "Club night", "base": "ink",
@@ -2130,6 +2133,17 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     assert!(got["theme"].is_null(), "{got}");
     let saved = seq_app::settings::Settings::load(dir.path());
     assert_eq!((saved.theme, saved.custom_themes.len()), (None, 0));
+
+    // Editor guide lines (SPEC §9.3): 8, 16 or 32 bars or off; other values are refused.
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": 12})).await;
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": 16})).await;
+    appearance(&mut b, |d| d["guide_lines"] == 16).await;
+    assert_eq!(
+        seq_app::settings::Settings::load(dir.path()).guide_lines,
+        Some(16)
+    );
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": null})).await;
+    appearance(&mut b, |d| d["guide_lines"].is_null()).await;
     app.shutdown().await;
 }
 

@@ -107,7 +107,13 @@ pub struct Settings {
     /// Themes the user saved.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_themes: Vec<CustomTheme>,
+    /// Editor guide lines every 8, 16 or 32 bars (SPEC §9.3); `None` = off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guide_lines: Option<u32>,
 }
+
+/// Bar counts the editor's guide lines can use (SPEC §9.3).
+pub const GUIDE_LINES: [u32; 3] = [8, 16, 32];
 
 /// Serialises read-modify-write of the settings file (Preferences, FFGL dialog, theme commands).
 static UPDATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -166,6 +172,7 @@ mod tests {
             ffgl_dir: Some(PathBuf::from("D:/Resolume/plugins")),
             theme: Some("custom-1a2b".into()),
             custom_themes: vec![theme("custom-1a2b")],
+            guide_lines: Some(16),
         };
         s.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), s);

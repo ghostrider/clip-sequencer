@@ -59,11 +59,14 @@ pub struct ServerCtx {
     pub luts: Arc<crate::luts::LutLibrary>,
 }
 
-/// The theme part of the settings, as sent to the UI (`appearance` message).
+/// The look part of the settings, as sent to the UI (`appearance` message): theme and the
+/// editor's guide lines.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Appearance {
     pub theme: Option<String>,
     pub custom_themes: Vec<CustomTheme>,
+    /// Guide lines every this many bars (SPEC §9.3); `None` = off.
+    pub guide_lines: Option<u32>,
 }
 
 impl From<&Settings> for Appearance {
@@ -71,6 +74,7 @@ impl From<&Settings> for Appearance {
         Appearance {
             theme: s.theme.clone(),
             custom_themes: s.custom_themes.clone(),
+            guide_lines: s.guide_lines,
         }
     }
 }
@@ -421,6 +425,10 @@ enum ClientMsg {
     DeleteTheme {
         id: String,
     },
+    /// View menu: editor guide lines every 8, 16 or 32 bars, or `null` = off (SPEC §9.3).
+    SetGuideLines {
+        every: Option<u32>,
+    },
     /// LUT tab (SPEC §14): a new LUT, a copy of `from` or one that changes nothing.
     LutCreate {
         name: String,
@@ -525,7 +533,8 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                     Ok(
                         cmd @ (ClientMsg::SetTheme { .. }
                         | ClientMsg::SaveTheme { .. }
-                        | ClientMsg::DeleteTheme { .. }),
+                        | ClientMsg::DeleteTheme { .. }
+                        | ClientMsg::SetGuideLines { .. }),
                     ) => {
                         theme_command(&ctx, cmd).await;
                         continue;
@@ -712,6 +721,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::SetTheme { .. }
         | ClientMsg::SaveTheme { .. }
         | ClientMsg::DeleteTheme { .. }
+        | ClientMsg::SetGuideLines { .. }
         | ClientMsg::LutCreate { .. }
         | ClientMsg::LutRename { .. }
         | ClientMsg::LutDelete { .. }
@@ -874,6 +884,19 @@ async fn theme_command(ctx: &ServerCtx, cmd: ClientMsg) {
                 if s.theme.as_deref() == Some(id.as_str()) {
                     s.theme = None;
                 }
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SetGuideLines { every } => {
+            update_appearance(ctx, move |s| {
+                if let Some(n) = every {
+                    anyhow::ensure!(
+                        crate::settings::GUIDE_LINES.contains(&n),
+                        "guide lines every 8, 16 or 32 bars (got {n})"
+                    );
+                }
+                s.guide_lines = every;
                 Ok(())
             })
             .await;
@@ -1154,6 +1177,14 @@ mod tests {
         assert!(matches!(
             p(r#"{"cmd":"cancel_cue"}"#.into()),
             ClientMsg::CancelCue
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_guide_lines","every":16}"#.into()),
+            ClientMsg::SetGuideLines { every: Some(16) }
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_guide_lines","every":null}"#.into()),
+            ClientMsg::SetGuideLines { every: None }
         ));
         assert!(matches!(
             p(format!(

@@ -634,7 +634,8 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
   set/clear step condition, add/remove/reorder/relink a choice, set pick, add/move/rename/delete a section;
   all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), `cue` with `seq` and
   `at` (`start_mode`, `end_of_pass` with the running sequence's id, `bars_8`, `bars_16`) and `cancel_cue` (§3.3),
-  `set_lane_mute` / `set_lane_solo` with `seq`, `lane`, `on` (§7.8), and for the
+  `set_lane_mute` / `set_lane_solo` with `seq`, `lane`, `on` (§7.8), `set_guide_lines` with `every` (8, 16, 32 or
+  `null` = off; saved as `guide_lines` in `settings.json`, sent back in `appearance`, §9.3), and for the
   browser UI's File menu `reload_composition`, `save_now`). The live deck's `seq_sync` plan comes with
   the decks, `seq_sync_busy` with the runtime state. Edits are sent as operations, the engine applies them to the stored model, saves,
   and echoes the new state.
