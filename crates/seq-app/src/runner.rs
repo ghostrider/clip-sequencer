@@ -260,6 +260,18 @@ pub async fn run(
     );
     report(&progress, STEPS, "Ready", false);
 
+    // In-app update (SPEC §15): report ok to the helper (before anything can save a sequence file), then the
+    // start-up check in the background.
+    let data_dir = config.data_dir();
+    if let Some(notice) = crate::update_ctl::after_start(&config, &data_dir) {
+        let _ = app.commands.send(EngineCommand::Notice(notice));
+    }
+    if !config.no_update_check
+        && crate::settings::Settings::load(&data_dir).update_check != Some(false)
+    {
+        app.update.check(true);
+    }
+
     if let Some(name) = &config.start {
         let _ = app
             .commands

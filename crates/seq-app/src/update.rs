@@ -11,6 +11,20 @@ use sha2::{Digest, Sha256};
 
 /// Where releases are asked for. `--update-source` replaces it for tests (SPEC §15).
 pub const DEFAULT_SOURCE: &str = "https://api.github.com";
+static SOURCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Sets the source for this process (`--update-source`); the first call wins.
+pub fn set_source(url: Option<&str>) {
+    if let Some(url) = url {
+        let _ = SOURCE.set(url.trim_end_matches('/').to_owned());
+    }
+}
+
+/// [`DEFAULT_SOURCE`], or what `--update-source` set.
+pub fn source() -> &'static str {
+    SOURCE.get().map_or(DEFAULT_SOURCE, String::as_str)
+}
+
 /// `owner/name` of the repository whose releases are offered.
 pub const REPO: &str = "ghostrider/clip-sequencer";
 /// Release page shown when something fails.

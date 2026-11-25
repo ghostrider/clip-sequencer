@@ -22,6 +22,7 @@ pub mod thumbs;
 pub mod ui_port;
 pub mod update;
 pub mod update_apply;
+pub mod update_ctl;
 
 /// Product name shown in the window title, splash and `/api/version`. A placeholder until the
 /// open-source release names the project (docs/M11-open-source-release.md, Phase A).

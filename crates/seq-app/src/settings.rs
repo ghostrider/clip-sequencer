@@ -110,6 +110,12 @@ pub struct Settings {
     /// Editor guide lines every 8, 16 or 32 bars (SPEC §9.3); `None` = off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guide_lines: Option<u32>,
+    /// Check for updates at start-up (SPEC §15); `None` = on (the default), `Some(false)` = off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_check: Option<bool>,
+    /// A version the user chose to skip at the start-up question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_skipped: Option<String>,
 }
 
 /// Bar counts the editor's guide lines can use (SPEC §9.3).
@@ -173,6 +179,8 @@ mod tests {
             theme: Some("custom-1a2b".into()),
             custom_themes: vec![theme("custom-1a2b")],
             guide_lines: Some(16),
+            update_check: Some(false),
+            update_skipped: Some("0.5.1".into()),
         };
         s.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), s);

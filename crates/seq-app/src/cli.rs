@@ -45,11 +45,17 @@ pub fn main(exe: Exe) -> ExitCode {
     if exe == Exe::Console {
         config.headless = true;
     }
+    if config.apply_update {
+        // The update helper (SPEC §15): before logging and the data folder, which the old app still uses.
+        return apply_update(&config);
+    }
+    crate::update::set_source(config.update_source.as_deref());
     let console_only = config.headless
         || config.validate.is_some()
         || config.list_midi_ports
         || config.clock_debug
-        || config.install_ffgl;
+        || config.install_ffgl
+        || config.check_update;
     if gui_exe && console_only {
         // A GUI program started from a terminal runs in the background and gets no Ctrl+C.
         eprintln!(
@@ -64,7 +70,8 @@ pub fn main(exe: Exe) -> ExitCode {
     let runs = config.validate.is_none()
         && !config.list_midi_ports
         && !config.clock_debug
-        && !config.install_ffgl;
+        && !config.install_ffgl
+        && !config.check_update;
     // Before anything opens files there: the default data folder was renamed.
     let migration = if runs || config.install_ffgl {
         crate::config::migrate_data_dir(&mut config)
@@ -107,6 +114,10 @@ pub fn main(exe: Exe) -> ExitCode {
                 ExitCode::FAILURE
             }
         };
+    }
+
+    if config.check_update {
+        return check_update();
     }
 
     if config.install_ffgl {
@@ -240,6 +251,76 @@ fn attach_parent_console() {
 fn attach_parent_console() {}
 
 /// `--install-ffgl` (SPEC §12.1): install or update the bundled plugin; never downgrades; creates the folder.
+/// `--check-update` (SPEC §15): 0 = up to date, 2 = update available, 1 = error.
+fn check_update() -> ExitCode {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let client = crate::update::client(crate::VERSION);
+    match rt.block_on(crate::update::check(
+        &client,
+        crate::update::source(),
+        crate::VERSION,
+    )) {
+        crate::update::CheckResult::UpToDate { current } => {
+            println!("Clip Sequencer {current} is up to date.");
+            ExitCode::SUCCESS
+        }
+        crate::update::CheckResult::Available { current, release } => {
+            println!(
+                "Version {} is available (you have {current}): {}",
+                release.version, release.page
+            );
+            if !release.notes.is_empty() {
+                println!("\n{}", release.notes);
+            }
+            ExitCode::from(2)
+        }
+        crate::update::CheckResult::Error { message, .. } => {
+            eprintln!("Update check failed: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `--apply-update` (hidden): the update helper, run as the new seq-app-cli from the temp folder (SPEC §15).
+fn apply_update(config: &Config) -> ExitCode {
+    let (Some(target), Some(pid), Some(restart), Some(from), Some(to)) = (
+        config.update_target.clone(),
+        config.update_wait_pid,
+        config.update_restart.clone(),
+        config.update_from.clone(),
+        config.update_to.clone(),
+    ) else {
+        eprintln!("--apply-update needs --update-target, --update-wait-pid, --update-restart, --update-from, --update-to");
+        return ExitCode::from(2);
+    };
+    let Some(source) = crate::update_ctl::program_folder() else {
+        return ExitCode::FAILURE;
+    };
+    let plan = crate::update_apply::Plan {
+        target,
+        source,
+        wait_pid: pid,
+        restart,
+        restart_args: config.update_restart_arg.clone(),
+        from,
+        to,
+    };
+    let mut procs = crate::update_apply::SystemProcs::default();
+    match crate::update_apply::apply(&plan, &mut procs, crate::update_apply::WAIT_OK) {
+        crate::update_apply::Outcome::Updated => ExitCode::SUCCESS,
+        _ => ExitCode::FAILURE,
+    }
+}
+
 fn install_ffgl(config: &Config) -> ExitCode {
     use crate::ffgl_install as ffgl;
     let (dir, _) = ffgl::configured_dir(config.ffgl_dir.as_deref(), &config.data_dir());

@@ -143,6 +143,8 @@ pub struct App {
     runtime_file: Option<std::path::PathBuf>,
     /// The MIDI clock input (`None` with `ClockSource::Channel`).
     pub clock: Option<std::sync::Arc<ClockControl>>,
+    /// In-app update (SPEC §15): the start-up check is started by the runner.
+    pub update: std::sync::Arc<crate::update_ctl::UpdateCtl>,
 }
 
 impl App {
@@ -277,6 +279,12 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
     });
 
     let (thumbs_ready_tx, thumbs_ready) = tokio::sync::watch::channel(false);
+    let update = crate::update_ctl::UpdateCtl::new(
+        data_dir.clone(),
+        outputs.runtime.clone(),
+        cfg.shell.clone(),
+        cfg.quit.clone(),
+    );
     let ui_addr = match cfg.ui {
         Some(std_listener) => {
             std_listener.set_nonblocking(true)?;
@@ -317,6 +325,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
                     ))
                     .0,
                 ),
+                update: update.clone(),
             };
             tokio::spawn(async move {
                 if let Err(e) = crate::server::serve(listener, ctx).await {
@@ -346,6 +355,7 @@ pub fn start(cfg: AppConfig) -> anyhow::Result<App> {
         saver_task,
         shutdown: shutdown_tx,
         clock,
+        update,
     })
 }
 

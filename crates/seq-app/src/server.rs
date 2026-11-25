@@ -57,6 +57,8 @@ pub struct ServerCtx {
     pub appearance: Arc<watch::Sender<Appearance>>,
     /// The LUT library (SPEC §14); every UI gets it on connect and on each change.
     pub luts: Arc<crate::luts::LutLibrary>,
+    /// In-app update (SPEC §15); every UI gets its state (`update`) on connect and on each change.
+    pub update: Arc<crate::update_ctl::UpdateCtl>,
 }
 
 /// The look part of the settings, as sent to the UI (`appearance` message): theme and the
@@ -425,6 +427,18 @@ enum ClientMsg {
     DeleteTheme {
         id: String,
     },
+    /// Help → Check for updates… (SPEC §15).
+    CheckUpdate,
+    /// The answer to the start-up question: `skip` = Skip this version, else Later.
+    UpdateAnswer {
+        skip: bool,
+    },
+    /// Download and install the version found by the last check.
+    InstallUpdate,
+    /// Preferences → Check for updates at start-up.
+    SetUpdateCheck {
+        on: bool,
+    },
     /// View menu: editor guide lines every 8, 16 or 32 bars, or `null` = off (SPEC §9.3).
     SetGuideLines {
         every: Option<u32>,
@@ -472,6 +486,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
     let mut runtime = ctx.runtime.clone();
     let mut appearance = ctx.appearance.subscribe();
     let mut luts = ctx.luts.subscribe();
+    let mut update = ctx.update.subscribe();
     // Log records go out only while this UI shows its Console tab; the stats (error count for
     // the tab's badge, dropped records) always.
     let mut logs: Option<broadcast::Receiver<LogRecord>> = None;
@@ -484,6 +499,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
         msg("runtime", &*runtime.borrow_and_update()),
         msg("log_stats", &stats),
         msg("appearance", &*appearance.borrow_and_update()),
+        msg("update", &*update.borrow_and_update()),
         {
             luts.borrow_and_update();
             msg("luts", &ctx.luts.view())
@@ -506,6 +522,10 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
             },
             r = appearance.changed() => match r {
                 Ok(()) => msg("appearance", &*appearance.borrow_and_update()),
+                Err(_) => return,
+            },
+            r = update.changed() => match r {
+                Ok(()) => msg("update", &*update.borrow_and_update()),
                 Err(_) => return,
             },
             r = luts.changed() => match r {
@@ -669,6 +689,10 @@ fn handle(ctx: &ServerCtx, text: &str) {
             tokio::spawn(push_thumbnail(ctx.clone(), seq));
             return;
         }
+        ClientMsg::CheckUpdate => return ctx.update.check(false),
+        ClientMsg::UpdateAnswer { skip } => return ctx.update.answer(skip),
+        ClientMsg::InstallUpdate => return ctx.update.install(),
+        ClientMsg::SetUpdateCheck { on } => return ctx.update.set_startup_check(on),
         ClientMsg::Shell { action } => {
             if let Some(shell) = &ctx.shell {
                 let _ = shell.send(action);
