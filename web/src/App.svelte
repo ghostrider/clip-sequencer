@@ -76,7 +76,19 @@
     }
     if (e.key === 'Escape') {
       app.selectedStep = null;
+      app.selectedSection = null;
       app.relinking = false;
+      return;
+    }
+    if (view && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      app.addSectionHere(view); // SPEC §9.3
+      return;
+    }
+    if (view && app.selectedSection != null && (e.key === 'Delete' || e.key === 'Backspace')) {
+      e.preventDefault();
+      app.edit({ op: 'delete_section', seq: view.sequence.id, section: app.selectedSection });
+      app.selectedSection = null;
       return;
     }
     if (e.key === ' ' && view && deck) {

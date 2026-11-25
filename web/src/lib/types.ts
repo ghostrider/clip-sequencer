@@ -364,6 +364,7 @@ export type Command =
   | { cmd: 'start'; seq: Uuid }
   | ({ cmd: 'cue'; seq: Uuid } & CueAt)
   | { cmd: 'cancel_cue' }
+  | { cmd: 'set_guide_lines'; every: number | null }
   | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
@@ -393,6 +394,8 @@ export type Command =
 
 /** Theme settings from the app (`appearance` message, SPEC §9.7). */
 export interface Appearance {
+  /** Editor guide lines every 8, 16 or 32 bars, or `null` = off (SPEC §9.3). */
+  guide_lines: number | null;
   /** Selected theme id; `null` = the default. */
   theme: string | null;
   custom_themes: CustomTheme[];

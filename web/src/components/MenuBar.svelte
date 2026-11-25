@@ -39,6 +39,11 @@
         { label: 'LUTs', hint: 'Ctrl+2', run: () => app.setTab('luts') },
         { label: 'Console', hint: 'Ctrl+3', run: () => app.setTab('console') },
         'sep',
+        ...([null, 8, 16, 32] as const).map((every) => ({
+          label: `${app.appearance.guide_lines === every ? '✓ ' : '\u2003'}${every ? `Guide lines every ${every} bars` : 'No guide lines'}`,
+          run: () => app.send({ cmd: 'set_guide_lines', every }),
+        })),
+        'sep',
         { label: 'Zoom in', hint: desktop ? 'Ctrl+=' : undefined, run: desktop ? shell('zoom_in') : () => app.zoomUi(0.1) },
         { label: 'Zoom out', hint: desktop ? 'Ctrl+-' : undefined, run: desktop ? shell('zoom_out') : () => app.zoomUi(-0.1) },
         { label: 'Reset zoom', hint: desktop ? 'Ctrl+0' : undefined, run: desktop ? shell('zoom_reset') : () => app.zoomUi(null) },

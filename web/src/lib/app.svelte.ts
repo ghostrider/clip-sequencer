@@ -68,7 +68,7 @@ class AppState {
   /** Preferences tab shown when it opens (the clock chip opens the Clock tab). */
   prefsTab = $state<'clock' | 'appearance'>('clock');
   /** Theme settings from the app (SPEC §9.7). */
-  appearance = $state<Appearance>({ theme: null, custom_themes: [] });
+  appearance = $state<Appearance>({ theme: null, custom_themes: [], guide_lines: null });
   /** True while Preferences shows a theme that is not saved yet: updates from the app do not repaint. */
   themePreview = false;
   /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
@@ -87,6 +87,8 @@ class AppState {
   search = $state('');
   /** Waiting for a clip click in the browser to relink the selected step. */
   relinking = $state(false);
+  /** Selected section marker of the selected sequence (index in its sorted list; SPEC §9.3). */
+  selectedSection = $state<number | null>(null);
   /** What a clip click relinks (format v4 choices): the step itself, a new choice, or choice option `n` (1…). */
   relinkTarget = $state<'step' | 'add' | number>('step');
   /** Pending deck-switch confirmation (SPEC §7.2 step 1). */
@@ -285,6 +287,30 @@ class AppState {
   cue(view: SequenceView, deck: DeckView, at: CueAt = { at: 'start_mode' }) {
     if (!deck.live) return; // a cue never switches decks
     this.send({ cmd: 'cue', seq: view.sequence.id, ...at });
+  }
+
+  /**
+   * `M` (SPEC §9.3): a section at the playhead while the sequence runs, else at the selected step's start.
+   * Named `Section N` with the first free N.
+   */
+  addSectionHere(view: SequenceView) {
+    const run = this.run(view.sequence.id);
+    let at: number | null = null;
+    if (run) {
+      at = Math.floor(run.pos / TICKS_PER_SIXTEENTH);
+    } else if (this.selectedStep) {
+      const { lane, index } = this.selectedStep;
+      at = view.sequence.lanes[lane]?.steps.slice(0, index).reduce((a, s) => a + s.length, 0) ?? null;
+    }
+    if (at == null) return;
+    this.addSection(view, at);
+  }
+
+  addSection(view: SequenceView, at: number) {
+    const taken = new Set((view.sequence.sections ?? []).map((s) => s.name));
+    let n = (view.sequence.sections?.length ?? 0) + 1;
+    while (taken.has(`Section ${n}`)) n++;
+    this.edit({ op: 'add_section', seq: view.sequence.id, at, name: `Section ${n}` });
   }
 
   /** Cancels a waiting start: the cue, or a plain start of `seq`. */

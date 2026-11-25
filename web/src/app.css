@@ -103,6 +103,13 @@ button, input, select { font: inherit; }
 .step .badges { position: absolute; top: 3px; right: 8px; display: flex; gap: 3px; pointer-events: auto; }
 .step .badge { font: 600 9px var(--mono); padding: 0 4px; border-radius: var(--radius-sm); background: var(--accent-bg); color: var(--accent-text); border: 1px solid var(--accent-line); white-space: nowrap; }
 .step .badge.bad { background: var(--err-bg); color: var(--err-text); border-color: var(--err-line); }
+.section-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--info-text); opacity: .6; pointer-events: none; }
+.section-line.beyond, .section-flag.beyond { opacity: .35; }
+.section-line.selected { width: 2px; opacity: 1; }
+.section-flag { position: absolute; top: calc(var(--ruler-h) - 17px); max-width: 160px; padding: 0 5px; font: 600 10px var(--mono); line-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--bg); background: var(--info-text); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; cursor: grab; touch-action: none; user-select: none; z-index: 2; }
+.section-flag.selected { outline: 2px solid var(--accent); }
+.section-flag .rename { font: inherit; width: 120px; padding: 0 2px; }
+.guide-line { position: absolute; top: var(--ruler-h); bottom: 0; width: 0; border-left: 1px dashed var(--line-strong); pointer-events: none; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; }
 .playhead-label { position: absolute; top: 2px; transform: translateX(-50%); background: var(--accent); color: var(--accent-ink); font: 600 10px var(--mono); padding: 1px 5px; border-radius: var(--radius-sm); }
 .hint { font-size: 12px; color: var(--muted); }

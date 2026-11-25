@@ -19,9 +19,73 @@
 
   let totalSixteenths = $derived.by(() => {
     const longest = Math.max(0, ...seq.lanes.map((l, li) => l.steps.reduce((a, s, i) => a + len(li, i, s), 0)));
-    const bars = Math.max(4, Math.ceil(longest / SIXTEENTHS_PER_BAR) + 1);
+    // Sections beyond the end stay visible (SPEC §6: changing lanes never moves or deletes them).
+    const lastSection = Math.max(0, ...(seq.sections ?? []).map((s) => s.at + 1));
+    const bars = Math.max(4, Math.ceil(Math.max(longest, lastSection) / SIXTEENTHS_PER_BAR) + 1);
     return bars * SIXTEENTHS_PER_BAR;
   });
+
+  // ---- section markers (SPEC §6 sections, §9.3) ----
+  let sections = $derived(seq.sections ?? []);
+  let guideEvery = $derived(app.appearance.guide_lines);
+  let secDrag = $state<{ index: number; startX: number; startAt: number; at: number; active: boolean } | null>(null);
+  let secRename = $state<{ index: number; text: string } | null>(null);
+  let rulerMenu = $state<{ x: number; y: number; at: number; index: number | null } | null>(null);
+
+  function sectionAt(index: number): number {
+    return secDrag?.index === index ? secDrag.at : sections[index].at;
+  }
+
+  /** Grid position under clientX in `el` (the ruler or the tracks), snapped to eighths or, with Shift, sixteenths. */
+  function gridAt(el: HTMLElement, clientX: number, fine: boolean): number {
+    const raw = (clientX - el.getBoundingClientRect().left) / zoom;
+    const snap = fine ? 1 : SNAP_SIXTEENTHS;
+    return Math.max(0, Math.round(raw / snap) * snap);
+  }
+
+  function flagDown(e: PointerEvent, index: number) {
+    if (e.button !== 0 || secRename) return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    secDrag = { index, startX: e.clientX, startAt: sections[index].at, at: sections[index].at, active: false };
+  }
+  function flagMove(e: PointerEvent) {
+    if (!secDrag) return;
+    if (!secDrag.active && Math.abs(e.clientX - secDrag.startX) < 4) return;
+    secDrag.active = true;
+    const snap = e.shiftKey ? 1 : SNAP_SIXTEENTHS;
+    const raw = secDrag.startAt + (e.clientX - secDrag.startX) / zoom;
+    secDrag.at = Math.max(0, Math.round(raw / snap) * snap);
+  }
+  function flagUp(index: number) {
+    const d = secDrag;
+    secDrag = null;
+    app.selectedStep = null;
+    if (!d || !d.active || d.at === d.startAt) {
+      app.selectedSection = index;
+      return;
+    }
+    app.edit({ op: 'move_section', seq: seq.id, section: index, at: d.at });
+    // Its place in the sorted list after the move.
+    app.selectedSection = sections.filter((s, i) => i !== index && s.at < d.at).length;
+  }
+  function commitRename() {
+    const r = secRename;
+    secRename = null;
+    if (!r) return;
+    const name = r.text.trim();
+    if (name && name !== sections[r.index]?.name) app.edit({ op: 'rename_section', seq: seq.id, section: r.index, name });
+  }
+  function rulerContext(e: MouseEvent, index: number | null) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ruler = (e.currentTarget as HTMLElement).closest('.tracks')?.querySelector('.ruler') as HTMLElement;
+    rulerMenu = { x: e.clientX, y: e.clientY, at: gridAt(ruler, e.clientX, e.shiftKey), index };
+  }
+  function autofocus(el: HTMLInputElement) {
+    el.focus();
+    el.select();
+  }
   let bars = $derived(totalSixteenths / SIXTEENTHS_PER_BAR);
   // Sixteenth ticks on the ruler once they are far enough apart to read.
   let fineRuler = $derived(zoom >= 6);
@@ -69,6 +133,7 @@
       : { clip: JSON.parse(data), length: SIXTEENTHS_PER_BAR };
     app.edit({ op: 'insert_step', seq: seq.id, lane, index, step });
     app.selectedStep = { lane, index };
+    app.selectedSection = null;
   }
 
   // ---- resize by the right edge ----
@@ -112,6 +177,7 @@
   function stepUp(lane: number, index: number) {
     const d = drag;
     drag = null;
+    app.selectedSection = null;
     if (!d || !d.active) {
       app.selectedStep = { lane, index };
       return;
@@ -219,7 +285,8 @@
     </div>
 
     <div class="tracks">
-      <div class="ruler">
+      <div class="ruler" role="presentation" oncontextmenu={(e) => rulerContext(e, null)}
+        title="Right-click: add a section here · M adds one at the playhead or the selected step">
         {#each Array(bars) as _, b (b)}
           <div class="bar" style:flex={`0 0 ${SIXTEENTHS_PER_BAR * zoom}px`}>
             <div class="num">{b + 1}</div>
@@ -293,6 +360,26 @@
           {/if}
         </div>
       {/each}
+      {#if guideEvery}
+        {#each Array(Math.floor(totalSixteenths / (guideEvery * SIXTEENTHS_PER_BAR))) as _, g (g)}
+          {#if g > 0}<div class="guide-line" style:left={`${g * guideEvery * SIXTEENTHS_PER_BAR * zoom}px`}></div>{/if}
+        {/each}
+      {/if}
+      {#each sections as sec, i (i)}
+        {@const x = sectionAt(i) * zoom}
+        {@const beyond = sectionAt(i) >= view.pass_sixteenths}
+        <div class="section-line" class:beyond class:selected={app.selectedSection === i} style:left={`${x}px`}></div>
+        <div class="section-flag" class:beyond class:selected={app.selectedSection === i} style:left={`${x}px`}
+          role="button" tabindex="-1" title={`${sec.name} · bar ${Math.floor(sectionAt(i) / SIXTEENTHS_PER_BAR) + 1}${beyond ? ' · beyond the end of the sequence' : ''} · drag to move, double-click to rename, Del deletes`}
+          onpointerdown={(e) => flagDown(e, i)} onpointermove={flagMove} onpointerup={() => flagUp(i)} onpointercancel={() => (secDrag = null)}
+          ondblclick={() => (secRename = { index: i, text: sec.name })} oncontextmenu={(e) => rulerContext(e, i)}>
+          {#if secRename?.index === i}
+            <input class="rename" maxlength="64" bind:value={secRename.text} use:autofocus onblur={commitRename}
+              onpointerdown={(e) => e.stopPropagation()}
+              onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') secRename = null; }} />
+          {:else}{sec.name}{/if}
+        </div>
+      {/each}
       {#if run}
         {@const x = (run.pos / TICKS_PER_SIXTEENTH) * zoom}
         <div class="playhead" style:left={`${x}px`}></div>
@@ -301,3 +388,19 @@
     </div>
   </div>
 </div>
+
+<svelte:window onclick={() => (rulerMenu = null)} />
+{#if rulerMenu}
+  {@const m = rulerMenu}
+  <div class="menu" style:left={`${m.x}px`} style:top={`${m.y}px`} role="menu">
+    {#if m.index == null}
+      <button role="menuitem" onclick={() => { app.addSection(view, m.at); rulerMenu = null; }}>
+        Add section at bar {Math.floor(m.at / SIXTEENTHS_PER_BAR) + 1}{m.at % SIXTEENTHS_PER_BAR ? ` + ${formatLength(m.at % SIXTEENTHS_PER_BAR)}` : ''}
+      </button>
+    {:else}
+      {@const idx = m.index}
+      <button role="menuitem" onclick={() => { secRename = { index: idx, text: sections[idx].name }; rulerMenu = null; }}>Rename</button>
+      <button role="menuitem" class="danger" onclick={() => { app.edit({ op: 'delete_section', seq: seq.id, section: idx }); app.selectedSection = null; rulerMenu = null; }}>Delete</button>
+    {/if}
+  </div>
+{/if}
