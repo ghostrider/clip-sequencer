@@ -544,6 +544,91 @@ async fn pass_conditions_and_choices_play() {
     h.app.shutdown().await;
 }
 
+/// SPEC §7.1, started from Resolume then ▶ in the app: it restarts from step 1 and stays linked
+/// to its § clip, so clearing the SEQ layer still stops it.
+#[tokio::test]
+async fn restart_from_the_app_keeps_the_seq_clip_link() {
+    let h = harness().await;
+    h.mock.manual_connect(4, 1); // "§ Drop"
+    h.runtime(|r| r.running.first().is_some_and(|x| x.from_seq_clip))
+        .await;
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.ticks(40);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    // Step 1 again (L2 TWISTED, L1 TIME_TRAVEL), still linked.
+    assert_eq!(h.osc(4).await[2..], [connect(2, 1), connect(1, 2)]);
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.pos == 0))
+        .await;
+    assert!(r.running[0].from_seq_clip);
+    // Clearing the SEQ layer in Resolume stops it.
+    h.mock.manual_clear(4);
+    h.runtime(|r| r.running.is_empty()).await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.1, started from the app, then its § clip connects: the clip adopts the run (no
+/// restart), and finishing clears the SEQ layer like a run started from the clip.
+#[tokio::test]
+async fn seq_clip_adopts_a_sequence_started_in_the_app() {
+    let h = harness().await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.ticks(40);
+    h.runtime(|r| r.running.first().is_some_and(|x| x.pos == 40))
+        .await;
+    h.mock.manual_connect(4, 1);
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.from_seq_clip))
+        .await;
+    assert_eq!(r.running[0].pos, 40, "no jump to step 1");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2, "no restart");
+    // It finishes at tick 192; the SEQ layer is cleared because the § clip is linked now.
+    h.ticks(152);
+    h.runtime(|r| r.running.is_empty()).await;
+    let [s1, s2] = clear(4);
+    let log = h.osc(8).await;
+    assert!(log.ends_with(&[s1, s2]), "{log:?}");
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.1, waiting for its bar after ▶ in the app: its § clip connecting links the waiting
+/// start, it doesn't start a second one.
+#[tokio::test]
+async fn seq_clip_links_a_waiting_start() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetStart {
+            seq: SEQ_A,
+            start: seq_core::Start::Bar { bars: 1 },
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_A && v.sequence.start != seq_core::Start::Immediate)
+    })
+    .await;
+    h.ticks(10);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.mock.manual_connect(4, 1);
+    let r = h
+        .runtime(|r| r.pending.first().is_some_and(|p| p.from_seq_clip))
+        .await;
+    assert!(r.running.is_empty());
+    h.ticks(87);
+    let r = h
+        .runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    assert!(r.running[0].from_seq_clip);
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn seq_clip_starts_its_sequence_and_finishing_clears_the_seq_layer() {
     let h = harness().await;

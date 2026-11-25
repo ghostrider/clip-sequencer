@@ -157,6 +157,11 @@ impl Mock {
         self.shared.apply(|s| s.connect(layer, column));
     }
 
+    /// Simulates clearing a layer in Resolume's UI (its clips disconnect).
+    pub fn manual_clear(&self, layer: usize) {
+        self.shared.apply(|s| s.clear_layer(layer));
+    }
+
     /// Current `connected` value of a clip.
     pub fn clip_state(&self, layer: usize, column: usize) -> Option<String> {
         self.shared.state.lock().unwrap().clip_state(layer, column)

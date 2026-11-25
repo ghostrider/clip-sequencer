@@ -999,6 +999,12 @@ impl Engine {
                                 .link_pending(seq, Origin::SeqClip { clip_id });
                             self.runtime_dirty = true;
                         }
+                        // Already running (started from the app): the § clip adopts the run, no
+                        // restart (SPEC §7.1).
+                        Some(seq) if self.scheduler.adopt(seq, Origin::SeqClip { clip_id }) => {
+                            log::info!("§ clip {name:?} connected: linked to the running sequence");
+                            self.runtime_dirty = true;
+                        }
                         Some(seq) => self.start_now(seq, Origin::SeqClip { clip_id }),
                         None => {
                             self.notice(format!("§ clip {name:?} matches no sequence in this deck"))

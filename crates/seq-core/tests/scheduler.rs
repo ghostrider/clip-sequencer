@@ -1695,3 +1695,54 @@ fn a_restart_starts_unmuted_and_unknown_lanes_are_ignored() {
         .unwrap();
     assert!(s.status()[0].lanes.iter().all(|l| !l.mute && !l.silent));
 }
+
+// ---- starting a running sequence (SPEC §7.1) ----
+
+fn origin_of(s: &Scheduler, id: u128) -> Origin {
+    s.status().iter().find(|r| r.seq == seq(id)).unwrap().origin
+}
+
+#[test]
+fn restarting_from_the_app_keeps_the_seq_clip_link() {
+    let linked = Origin::SeqClip { clip_id: 77 };
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), linked, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 30);
+    let acts = s
+        .start(one_clip(1, 500, 11), Origin::Ui, Start::Immediate)
+        .unwrap();
+    assert!(acts.contains(&Action::Started {
+        seq: seq(1),
+        origin: linked
+    }));
+    assert_eq!(origin_of(&s, 1), linked);
+    assert_eq!(s.status()[0].pos, 0, "from step 1");
+    // A quantized restart keeps it too, when it begins.
+    s.start(one_clip(1, 500, 12), Origin::Ui, Start::Bar { bars: 1 })
+        .unwrap();
+    ticks(&mut s, BAR);
+    assert_eq!(origin_of(&s, 1), linked);
+    // Stopping as the § clip would (its disconnect) still finds the run.
+    assert!(s
+        .status()
+        .iter()
+        .any(|r| r.origin == Origin::SeqClip { clip_id: 77 }));
+}
+
+#[test]
+fn a_seq_clip_adopts_a_running_sequence_without_a_restart() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 40);
+    assert!(s.adopt(seq(1), Origin::SeqClip { clip_id: 5 }));
+    let st = &s.status()[0];
+    assert_eq!((st.origin, st.pos), (Origin::SeqClip { clip_id: 5 }, 40));
+    assert!(!s.adopt(seq(2), Origin::SeqClip { clip_id: 5 }));
+    // Nothing is sent by the adoption itself; the run goes on as before.
+    let log = ticks(&mut s, BAR - 40);
+    assert_eq!(triggers(&log), [(BAR - 40, 10)]);
+}

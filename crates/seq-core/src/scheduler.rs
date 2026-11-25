@@ -589,6 +589,18 @@ impl Scheduler {
         out
     }
 
+    /// Its `§` clip connected while the sequence runs (SPEC §7.1): the run is linked to that clip
+    /// from now on, without a restart. Returns whether a run was adopted.
+    pub fn adopt(&mut self, seq: Uuid, origin: Origin) -> bool {
+        match self.runs.iter_mut().find(|r| r.spec.seq_id == seq) {
+            Some(run) => {
+                run.origin = origin;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Links a waiting start to `origin` (a `§` clip that connected while it waits, SPEC §7.1).
     pub fn link_pending(&mut self, seq: Uuid, origin: Origin) {
         if let Some(p) = self.pending.iter_mut().find(|p| p.spec.seq_id == seq) {
@@ -832,10 +844,21 @@ impl Scheduler {
         out
     }
 
-    /// Starts a checked spec now.
+    /// Starts a checked spec now. Restarting a run that is linked to its `§` clip keeps that link
+    /// (SPEC §7.1: ▶ in the app restarts it, clearing the SEQ layer still stops it).
     fn begin(&mut self, spec: RunSpec, origin: Origin) -> Vec<Action> {
         let pass_ticks = spec.pass_ticks();
         let seq = spec.seq_id;
+        let origin = match (
+            origin,
+            self.runs
+                .iter()
+                .find(|r| r.spec.seq_id == seq)
+                .map(|r| r.origin),
+        ) {
+            (Origin::Ui, Some(linked @ Origin::SeqClip { .. })) => linked,
+            _ => origin,
+        };
         let mut out = Vec::new();
 
         // Take over layers from running sequences (including an earlier run of this one).
