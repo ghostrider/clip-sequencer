@@ -924,9 +924,10 @@ user can check by hand any time; an update is installed from the app. The first 
   program folder, its own process id, the exe to start again (`seq-app.exe` or `seq-app-cli.exe`) and that exe's
   arguments, then quits like File → Quit. Running from the temp folder, the helper locks nothing in the program
   folder.
-- The helper waits for the old process to end (at most 30 s; else it stops and changes nothing), moves every entry
-  of the program folder into `.update-backup\<old version>\` inside it, copies the new files in and starts the new
-  exe with the old arguments plus `--after-update <ok file>`.
+- The helper waits for the old process to end (at most 30 s; else it stops and changes nothing), moves the entries
+  of the program folder that the new release also has (the exes, `ffgl\`, the texts; anything else the user keeps
+  there stays) into `.update-backup\<old version>\` inside it, copies the new ones in and starts the new exe
+  with the old arguments plus `--after-update <ok file>`. A folder without `seq-app-cli.exe` is not touched.
 - The new version writes the ok file when its start-up is done ("Ready") and before it saves any sequence file (so a
   rolled-back older version still reads them, §6). It shows *Updated to 0.5.1* and deletes leftover
   `clip-sequencer-update-*` temp folders.
