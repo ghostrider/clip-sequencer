@@ -15,15 +15,35 @@
 | From | Start | Stop |
 |---|---|---|
 | The app | ▶ on the card or in the editor, or **Space** | ■, **Space** again, or **Stop all** |
+| The app, next up | **Shift**+▶ or **Shift+Space** (a cue, see below) | × on the cue, or **Stop all** |
 | Resolume | click the `§ <name>` clip on the SEQ layer | click another SEQ clip, or clear the SEQ layer |
 
-- A sequence starts **at once**, on the next clock tick, not on the next bar. Start it on the beat.
+- **When it starts** is the sequence's **start mode**, in the editor header: **now** (on the next clock tick), on
+  the next **beat**, on the next **bar**, or on the next bar that is a multiple of **2, 4, 8 or 16** bars. While it
+  waits, the card and the header say `starts in 3 beats`; press ▶ again to start it at once, or **Cancel**.
+- Bars are counted from the last **MIDI Start** of your clock (or the last **Resync** in Resolume when the app
+  follows Resolume's tempo). Neither restarts a sequence that is playing. Until one arrives, bars count from the
+  first clock tick and the clock chip says `bar phase not synced`.
 - When it stops (or after its last pass), its layers are cleared, or keep their last clips if it is set to *hold*.
 - Starting a sequence that is already running starts it again from the beginning.
 - **Start a sequence from one place at a time.** If you start it in the app while its `§` clip in Resolume is still
   playing, the two get out of step: clearing the SEQ layer then doesn't stop it, and clicking the `§` clip does
   nothing until the layer is cleared. Stop it the same way you started it.
 - **Stop all** stops everything and clears every layer the sequencer used, also lanes you took over by hand.
+
+## Cueing the next sequence
+
+A **cue** says "play this next": **Shift**+click ▶ (or **Shift+Space**) and the sequence starts at its start mode;
+at that moment everything else that plays stops. Right-click a card and choose **Cue at…** for other points: the
+**end of the current pass** of a playing sequence, or the next **8** or **16** bars. There is one cue at a time (a
+new one replaces it); the card shows `CUED · in 2 bars`. Click × on it to cancel, or ▶ to start it now. Only
+sequences of the live deck can be cued.
+
+## Muting and soloing lanes
+
+While a sequence runs, each lane has **M** (mute) and **S** (solo). A muted lane's layer goes dark at once; the lane
+keeps counting and comes back in time at its next step when you unmute it. Solo mutes the other lanes of that
+sequence (you can solo several). Mute and solo are not saved: the next start plays every lane.
 
 ## Two sequences at once
 

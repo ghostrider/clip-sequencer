@@ -7,6 +7,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Start mode** per sequence (sequence file format **v4**): start now, on the next beat, on the next bar, or on the
+  next 2, 4, 8 or 16 bars. Bars count from the clock's MIDI Start (or Resolume's Resync); the card and the editor
+  show `starts in …` while a start waits.
+- **Cue:** Shift+▶ or Shift+Space cues a sequence to play next; at its cue point (its start mode, the end of a
+  playing sequence's pass, or the next 8 or 16 bars) it starts and everything else stops.
+- **Mute and solo** per lane of a running sequence: a muted lane goes dark, keeps counting and comes back in time.
+
+### Changed
+
+- Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
+  original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added
