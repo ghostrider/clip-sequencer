@@ -19,6 +19,12 @@
 //! of bar index 0. A start with mode `beat` or `bar` that is not processed on a matching boundary
 //! waits (*pending*) and begins on the first tick that is one; waiting freezes with the clock like
 //! running sequences do. The engine resets the phase on MIDI Start and Resync.
+//!
+//! A **cue** (SPEC §3.3) is a waiting start that replaces what plays: when it begins, every other
+//! run ends. There is at most one. Its point is a start mode or the end of a running sequence's pass.
+//!
+//! **Mute and solo** (SPEC §7.8) are per lane of a run: a silenced lane keeps counting but sends
+//! nothing; its layer is cleared once when it falls silent.
 
 use uuid::Uuid;
 
@@ -246,10 +252,16 @@ pub enum Action {
         seq: Uuid,
         origin: Origin,
     },
-    /// A waiting start was cancelled (Stop, Stop all) and will not begin.
+    /// A waiting start was cancelled (Stop, Stop all, a newer cue) and will not begin.
     PendingCancelled {
         seq: Uuid,
         origin: Origin,
+    },
+    /// Mute or solo changed a lane (SPEC §7.8); `silent`: it sends nothing now.
+    LaneMuteChanged {
+        seq: Uuid,
+        lane: usize,
+        silent: bool,
     },
 }
 
@@ -272,13 +284,25 @@ pub enum StartError {
     NoPlayableLanes,
 }
 
+/// What a waiting start waits for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    /// A boundary of this start mode on the bar phase (SPEC §3.2).
+    Mode(Start),
+    /// The end of the current pass of this running sequence (cues only, SPEC §3.3); at once if it
+    /// is not running.
+    EndOfPass(Uuid),
+}
+
 /// A start waiting for its boundary (see [`Scheduler::pending`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingStatus {
     pub seq: Uuid,
     pub name: String,
     pub origin: Origin,
-    pub mode: Start,
+    pub wait: Wait,
+    /// A cue (SPEC §3.3): every other run ends when it begins.
+    pub cue: bool,
     /// Ticks until it begins (≥ 1), if the clock keeps running.
     pub wait_ticks: u64,
 }
@@ -286,6 +310,11 @@ pub struct PendingStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaneStatus {
     pub state: LaneState,
+    /// Muted by hand (SPEC §7.8).
+    pub mute: bool,
+    pub solo: bool,
+    /// Sends nothing: muted, or another lane of the run is soloed and this one is not.
+    pub silent: bool,
     pub layer_id: Option<u64>,
     /// Current step, `None` before/after the lane's steps (hold/clear lanes past their end).
     pub step: Option<usize>,
@@ -307,6 +336,10 @@ pub struct RunStatus {
 
 struct LaneRt {
     state: LaneState,
+    mute: bool,
+    solo: bool,
+    /// Effective mute: `mute`, or a solo elsewhere in the run and none here.
+    silent: bool,
     /// Start position of each step within the lane.
     starts: Vec<u64>,
     len: u64,
@@ -344,7 +377,8 @@ struct Run {
 struct PendingStart {
     spec: RunSpec,
     origin: Origin,
-    mode: Start,
+    wait: Wait,
+    cue: bool,
 }
 
 /// Ticks between two boundaries of a start mode; `None` for `immediate`.
@@ -387,10 +421,35 @@ impl Scheduler {
                 seq: p.spec.seq_id,
                 name: p.spec.name.clone(),
                 origin: p.origin,
-                mode: p.mode,
-                wait_ticks: self.wait_ticks(p.mode),
+                wait: p.wait,
+                cue: p.cue,
+                wait_ticks: self.wait_ticks_for(p.wait),
             })
             .collect()
+    }
+
+    fn wait_ticks_for(&self, wait: Wait) -> u64 {
+        match wait {
+            Wait::Mode(mode) => self.wait_ticks(mode),
+            Wait::EndOfPass(seq) => self
+                .runs
+                .iter()
+                .find(|r| r.spec.seq_id == seq)
+                .map_or(1, |r| r.pass_ticks.saturating_sub(r.pos).max(1)),
+        }
+    }
+
+    /// The waiting start is due on the tick being processed (after the phase moved, before the
+    /// runs advance).
+    fn due(&self, wait: Wait) -> bool {
+        match wait {
+            Wait::Mode(mode) => self.on_boundary(mode),
+            Wait::EndOfPass(seq) => self
+                .runs
+                .iter()
+                .find(|r| r.spec.seq_id == seq)
+                .is_none_or(|r| r.pos + 1 >= r.pass_ticks),
+        }
     }
 
     /// Ticks from the last tick to the next boundary of `mode` (1 before the first tick: that one
@@ -421,10 +480,13 @@ impl Scheduler {
     /// Every waiting start is on its boundary now and begins.
     pub fn phase_reset_now(&mut self) -> Vec<Action> {
         self.phase = Some(0);
-        let due = std::mem::take(&mut self.pending);
+        let (due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| matches!(p.wait, Wait::Mode(_)));
+        self.pending = waiting;
         let mut out = Vec::new();
         for p in due {
-            out.extend(self.begin(p.spec, p.origin));
+            out.extend(self.begin_pending(p));
         }
         out
     }
@@ -484,6 +546,9 @@ impl Scheduler {
                     .zip(&r.spec.lanes)
                     .map(|(rt, lane)| LaneStatus {
                         state: rt.state,
+                        mute: rt.mute,
+                        solo: rt.solo,
+                        silent: rt.silent,
                         layer_id: lane.layer_id,
                         step: match rt.state {
                             LaneState::Inactive => None,
@@ -513,12 +578,159 @@ impl Scheduler {
             return Err(StartError::NoPlayableLanes);
         }
         let seq = spec.seq_id;
+        // Starting a cued sequence again starts it at once and still replaces what plays.
+        let cue = self.pending.iter().any(|p| p.spec.seq_id == seq && p.cue);
         self.pending.retain(|p| p.spec.seq_id != seq);
+        let p = PendingStart {
+            spec,
+            origin,
+            wait: Wait::Mode(mode),
+            cue,
+        };
         if self.on_boundary(mode) {
-            return Ok(self.begin(spec, origin));
+            return Ok(self.begin_pending(p));
         }
-        self.pending.push(PendingStart { spec, origin, mode });
+        self.pending.push(p);
         Ok(vec![Action::Pending { seq, origin }])
+    }
+
+    /// Cues a sequence (SPEC §3.3): it begins when `wait` is reached and every other run ends
+    /// then. Replaces an earlier cue and a waiting start of the same sequence. A cue whose point
+    /// is reached now (a boundary tick, or the end of a pass of a sequence that is not running)
+    /// begins at once.
+    pub fn cue(
+        &mut self,
+        spec: RunSpec,
+        origin: Origin,
+        wait: Wait,
+    ) -> Result<Vec<Action>, StartError> {
+        if spec.pass_ticks() == 0 {
+            return Err(StartError::Empty);
+        }
+        if !spec.lanes.iter().any(RunLane::is_active) {
+            return Err(StartError::NoPlayableLanes);
+        }
+        let seq = spec.seq_id;
+        let mut out = Vec::new();
+        self.pending.retain(|p| {
+            let drop = p.cue || p.spec.seq_id == seq;
+            if drop && p.spec.seq_id != seq {
+                out.push(Action::PendingCancelled {
+                    seq: p.spec.seq_id,
+                    origin: p.origin,
+                });
+            }
+            !drop
+        });
+        let p = PendingStart {
+            spec,
+            origin,
+            wait,
+            cue: true,
+        };
+        let now = match wait {
+            Wait::Mode(mode) => self.on_boundary(mode),
+            Wait::EndOfPass(of) => !self.is_running(of),
+        };
+        if now {
+            out.extend(self.begin_pending(p));
+        } else {
+            self.pending.push(p);
+            out.push(Action::Pending { seq, origin });
+        }
+        Ok(out)
+    }
+
+    /// The cue, if any: (sequence, what it waits for).
+    pub fn cued(&self) -> Option<(Uuid, Wait)> {
+        self.pending
+            .iter()
+            .find(|p| p.cue)
+            .map(|p| (p.spec.seq_id, p.wait))
+    }
+
+    /// Cancels the cue, if any.
+    pub fn cancel_cue(&mut self) -> Vec<Action> {
+        match self.cued() {
+            Some((seq, _)) => self.cancel_pending(seq),
+            None => Vec::new(),
+        }
+    }
+
+    /// Begins a waiting start; a cue then ends every other run.
+    fn begin_pending(&mut self, p: PendingStart) -> Vec<Action> {
+        let seq = p.spec.seq_id;
+        let mut out = self.begin(p.spec, p.origin);
+        if p.cue {
+            while let Some(i) = self.runs.iter().position(|r| r.spec.seq_id != seq) {
+                out.extend(self.end_run(i, StopMode::AfterLastPass, EndReason::Stopped));
+            }
+        }
+        out
+    }
+
+    /// Mutes or unmutes a lane of a running sequence (SPEC §7.8).
+    pub fn set_mute(&mut self, seq: Uuid, lane: usize, on: bool) -> Vec<Action> {
+        match self.lane_rt(seq, lane) {
+            Some(rt) => rt.mute = on,
+            None => return Vec::new(),
+        }
+        self.apply_mutes(seq)
+    }
+
+    /// Solos or unsolos a lane of a running sequence (SPEC §7.8).
+    pub fn set_solo(&mut self, seq: Uuid, lane: usize, on: bool) -> Vec<Action> {
+        match self.lane_rt(seq, lane) {
+            Some(rt) => rt.solo = on,
+            None => return Vec::new(),
+        }
+        self.apply_mutes(seq)
+    }
+
+    fn lane_rt(&mut self, seq: Uuid, lane: usize) -> Option<&mut LaneRt> {
+        self.runs
+            .iter_mut()
+            .find(|r| r.spec.seq_id == seq)?
+            .lanes
+            .get_mut(lane)
+    }
+
+    /// Recomputes which lanes of a run are silent. A lane falling silent clears its layer if it
+    /// owns it; a lane coming back plays from its next step (a yielded one resumes there too).
+    fn apply_mutes(&mut self, seq: Uuid) -> Vec<Action> {
+        let Some(run) = self.runs.iter_mut().find(|r| r.spec.seq_id == seq) else {
+            return Vec::new();
+        };
+        let any_solo = run.lanes.iter().any(|l| l.solo);
+        let mut out = Vec::new();
+        for (lane, rt) in run.lanes.iter_mut().enumerate() {
+            let silent = rt.mute || (any_solo && !rt.solo);
+            if silent == rt.silent {
+                continue;
+            }
+            rt.silent = silent;
+            out.push(Action::LaneMuteChanged { seq, lane, silent });
+            if silent && rt.state.owns_layer() {
+                out.push(Action::Clear {
+                    seq,
+                    lane,
+                    layer_id: run.spec.lanes[lane]
+                        .layer_id
+                        .expect("owning lane has a layer"),
+                });
+            }
+            if !silent && matches!(rt.state, LaneState::Yielded { .. }) {
+                rt.state = LaneState::Yielded {
+                    resume_pending: true,
+                };
+                out.push(Action::LaneStateChanged {
+                    seq,
+                    lane,
+                    state: rt.state,
+                });
+            }
+        }
+        out
     }
 
     /// Starts a checked spec now.
@@ -574,6 +786,9 @@ impl Scheduler {
                     } else {
                         LaneState::Inactive
                     },
+                    mute: false,
+                    solo: false,
+                    silent: false,
                     starts,
                     len: at,
                 }
@@ -603,6 +818,15 @@ impl Scheduler {
         let mut out = self.cancel_pending(seq);
         if let Some(i) = self.runs.iter().position(|r| r.spec.seq_id == seq) {
             out.extend(self.end_run(i, mode, EndReason::Stopped));
+            // A cue waiting for the end of this run's pass starts now (SPEC §3.3).
+            if let Some(i) = self
+                .pending
+                .iter()
+                .position(|p| p.wait == Wait::EndOfPass(seq))
+            {
+                let p = self.pending.remove(i);
+                out.extend(self.begin_pending(p));
+            }
         }
         out
     }
@@ -695,7 +919,7 @@ impl Scheduler {
                             resume_pending: true
                         }
                 );
-                if !will_play {
+                if !will_play || rt.silent {
                     continue;
                 }
                 let spec = &run.spec.lanes[lane];
@@ -739,13 +963,12 @@ impl Scheduler {
         self.phase = Some(self.phase.map_or(0, |p| p + 1));
         let mut out = Vec::new();
         let mut begun = Vec::new();
-        let (due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.pending)
-            .into_iter()
-            .partition(|p| self.on_boundary(p.mode));
+        let pending = std::mem::take(&mut self.pending);
+        let (due, waiting): (Vec<_>, Vec<_>) = pending.into_iter().partition(|p| self.due(p.wait));
         self.pending = waiting;
         for p in due {
             begun.push(p.spec.seq_id);
-            out.extend(self.begin(p.spec, p.origin));
+            out.extend(self.begin_pending(p));
         }
         let mut finished = Vec::new();
         for (ri, run) in self.runs.iter_mut().enumerate() {
@@ -782,6 +1005,7 @@ impl Scheduler {
                 } else if end == LaneEnd::Clear
                     && run.pos == rt.len
                     && rt.state == LaneState::Playing
+                    && !rt.silent
                 {
                     // Lane shorter than the pass ran out: clear and stay silent.
                     out.push(Action::Clear {
@@ -857,7 +1081,7 @@ fn boundary(run: &mut Run, lane: usize, step: Option<usize>) -> Vec<Action> {
 fn step_actions(run: &Run, lane: usize, step: usize) -> Vec<Action> {
     let seq = run.spec.seq_id;
     let mut out = vec![Action::StepStarted { seq, lane, step }];
-    if run.lanes[lane].state != LaneState::Playing {
+    if run.lanes[lane].state != LaneState::Playing || run.lanes[lane].silent {
         return out;
     }
     let layer_id = run.spec.lanes[lane]
