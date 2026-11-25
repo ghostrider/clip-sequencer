@@ -100,8 +100,26 @@ Each sequence has a **start mode** (`start` in the file, §6): `immediate` (as b
   moment the new deck is confirmed.
 - **Clock loss or pause** freezes a waiting start like a running sequence; it starts when the boundary is reached
   after the ticks resume.
-- **Cue (G1):** a cued sequence uses its start mode by default; the cue can choose another point (e.g. the end of
-  the current pass of a running sequence). Specified with the cue milestone; the choice is not saved.
+- **Cue (G1):** §3.3.
+
+### 3.3 Cue (release 0.5, decided 2026-11-25)
+
+A **cue** says "play this next": the cued sequence starts at a cue point and **every other running sequence stops
+there** (layers the cued one also uses are taken over as in §7.3; the others get their `after_last_pass`). Cues are
+not saved.
+
+- **How:** Shift+click on ▶ (card or editor header) or Shift+Space with the sequence selected cues it at its start
+  mode (§3.2). The card's context menu **Cue at…** offers the cue points: *start mode* · *end of the current pass of
+  <running sequence>* (one entry per running sequence) · *next 8 bars* · *next 16 bars*. Only sequences of the live
+  deck can be cued (a cue never switches decks).
+- **Cue points:** *start mode* and *next 8 / 16 bars* wait on the bar phase like a quantized start (§3.2; 8 and 16
+  bars are the `bar` boundaries with N = 8 or 16). *End of the current pass* is the tick where that sequence's pass
+  ends; if that sequence stops or finishes earlier, the cue starts then. With nothing running, a cue is a start.
+- **One cue:** a new cue replaces the previous one. ▶ on the cued sequence starts it at once (replacing what plays);
+  Stop on it, or × on its badge, cancels the cue. Stop all cancels it too.
+- **Waiting:** the card shows `CUED · in 2 bars` (`· at end of pass` for that point), the editor header the same. A
+  cue freezes with the clock like a quantized start, and a phase reset (MIDI Start, Resync) computes its wait again.
+- A cued sequence that is already running restarts at the cue point (§7.1), the others stop.
 
 ## 4. Resolume interface
 
@@ -483,6 +501,20 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
   and deletes the file. Entries whose layer is gone are dropped with a log line.
 - The log shows `transition on BG restored (0.0 s, Alpha)`.
 
+### 7.8 Mute and solo (release 0.5, decided 2026-11-25)
+
+Live switches per lane of a **running** sequence (G2). They belong to that run: not saved, and a restart starts
+with every lane unmuted.
+
+- **Mute:** the lane's layer is cleared at once (if the lane was playing); the lane keeps counting but sends nothing
+  (no triggers, no clears). **Unmute:** it plays again from its next step boundary, in time, like "Resume lane".
+- **Solo:** while any lane of the sequence is soloed, every lane of it that is not soloed is muted (several solos
+  are allowed). Removing the last solo brings the other lanes back, except those muted by hand.
+- A muted lane keeps its layer (§7.3): another sequence starting on that layer takes it over as usual, and a clip
+  started by hand on it yields it (§7.3; unmuting then also resumes it). Muting a yielded lane clears the layer.
+- Stopping and finishing apply as usual; a muted lane's layer is already dark.
+- The log says `BG muted at 3.2` / `BG unmuted (plays from 4.1)`.
+
 ## 8. Thumbnails
 
 - **Clip thumbnails** are fetched via REST for the active deck and cached on disk, keyed by clip
@@ -530,8 +562,8 @@ Single screen, everything controlled from here (no separate live view).
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded`; yielded has a
-    "Resume lane" action), delete lane.
+    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted`; yielded has a
+    "Resume lane" action), **M** and **S** buttons while the sequence runs (§7.8), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
@@ -560,7 +592,7 @@ Single screen, everything controlled from here (no separate live view).
     sixteenths (min 1/16).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
-  - Space → start/stop selected sequence. Esc → deselect.
+  - Space → start/stop selected sequence; Shift+Space → cue it (§3.3). Esc → deselect.
   - Undo/redo (Ctrl+Z / Ctrl+Shift+Z) for all edits in the session.
 - Slot lanes (§4.5):
   - Lane header: mode switch `Clip` / `Slot`. Switching converts the steps (undoable):
@@ -600,7 +632,9 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
   `edit` operations (format v4 adds: set start mode, set/clear lane transition, set/clear step transition,
   set/clear step condition, add/remove/reorder/relink a choice, set pick, add/move/rename/delete a section;
-  all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), and for the
+  all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), `cue` with `seq` and
+  `at` (`start_mode`, `end_of_pass` with the running sequence's id, `bars_8`, `bars_16`) and `cancel_cue` (§3.3),
+  `set_lane_mute` / `set_lane_solo` with `seq`, `lane`, `on` (§7.8), and for the
   browser UI's File menu `reload_composition`, `save_now`). The live deck's `seq_sync` plan comes with
   the decks, `seq_sync_busy` with the runtime state. Edits are sent as operations, the engine applies them to the stored model, saves,
   and echoes the new state.
