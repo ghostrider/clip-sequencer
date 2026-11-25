@@ -140,9 +140,11 @@ async fn check_download_and_verify_against_a_fake_github() {
         std::fs::read(folder.join("seq-app-cli.exe")).unwrap(),
         b"cli 0.9"
     );
-    let seen = seen.lock().unwrap();
-    assert_eq!(seen.first(), Some(&(0, zip.len() as u64)));
-    assert_eq!(seen.last(), Some(&(zip.len() as u64, zip.len() as u64)));
+    {
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.first(), Some(&(0, zip.len() as u64)));
+        assert_eq!(seen.last(), Some(&(zip.len() as u64, zip.len() as u64)));
+    }
 
     // A damaged download is refused.
     let mut broken = zip.clone();
