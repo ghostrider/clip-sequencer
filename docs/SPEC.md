@@ -878,26 +878,58 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
   `x-lut-rev`, `x-lut-size`), `GET /api/luts/cube?name=` (export), `POST /api/luts/import?name=` (body: the
   `.cube` text; `{ ok, name }` or 400 `{ ok: false, error }`).
 
-## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23)
+## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23, details 2026-11-25)
 
-The user can check by hand whether a newer release exists and install it from the app. Details (dialog texts,
-helper, file list) are worked out at the start of M14; what is decided:
+The user can check by hand whether a newer release exists and install it from the app. The first version that can
+update itself is 0.5.0 (0.4.x has no such feature).
 
-- **Only by hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar);
+**Check**
+- **Only by hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar), or
   `seq-app-cli --check-update`. No automatic or background check, none at start-up, no setting for it.
-- **Check:** `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login), semver compare
-  with the running version, drafts and pre-releases ignored. In its own task, never on the timing path. Result:
-  "up to date", the new version with its release notes, or the error.
-- **Install (full replacement):** download the release zip to a temp folder and verify it against `SHA256SUMS.txt`
-  (and the signature once releases are signed). Not while a sequence runs (the button says why). The app quits; a
-  helper (shipped in the zip, or the new exe in a helper mode) waits for it to exit, moves the old files of the
-  `clip-sequencer` folder aside, moves the new ones in and starts the new version. Only that folder is touched,
-  never the data folder.
-- **Rollback:** the old files are deleted only after the new version has started and reported OK; otherwise the
-  helper puts them back and starts the old version. The new version saves no sequence file before it reports OK,
-  so a rolled-back 0.4 still reads it (§6).
-- **Failure:** folder not writable, download or verification failed → say why and offer the release page.
-- **FFGL plugin:** not replaced by the update (Resolume may hold it open); the existing "FFGL plugin update
-  available" hint takes over after the restart (§12.1).
+- `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login, `User-Agent:
+  clip-sequencer/<version>`, 10 s timeout), in a worker task, never on the timing path. That endpoint never returns
+  drafts or pre-releases. Its `tag_name` (`v0.5.1`) is compared by semver with the running version.
+- The release must carry `clip-sequencer-<version>-windows-x64.zip` and `SHA256SUMS.txt` (the release workflow
+  makes both); otherwise the result is an error ("the release has no Windows zip").
+- **Result** in a dialog: *Checking…*; *Clip Sequencer 0.5.0 is up to date*; *Version 0.5.1 is available (you
+  have 0.5.0)* with the release notes (the release body, as plain text) and **Install and restart**, **Release page**,
+  **Close**; or the error with **Release page**. `--check-update` prints the same and exits 0 (up to date), 2
+  (update available) or 1 (error).
+- **Test source** (hidden, for testing only, also in release builds): `--update-source <url>` replaces
+  `https://api.github.com` for this run; downloads then come from the asset URLs that source returns. Documented in
+  `docs/RELEASING.md`, not in the manual.
+
+**Install**
+- **Install and restart** is disabled while a sequence runs, waits or is cued ("Stop all sequences first"), and
+  when the program folder is not writable (checked by creating and deleting a file in it): the dialog says why and
+  offers the release page.
+- Steps shown in the dialog: *Downloading 3.1 / 13.2 MB*, *Verifying*, *Restarting*. The zip and `SHA256SUMS.txt`
+  are downloaded to `%TEMP%\clip-sequencer-update-<version>\`; the zip's SHA-256 must match its line in
+  `SHA256SUMS.txt`, it is extracted there, and every extracted file that has a line (the two exes, the plugin DLL)
+  must match too. Once releases are signed (SignPath), the new exes' Authenticode signatures are checked as well:
+  the hashes come from the same place as the zip and prove an intact download, not its origin.
+- **Program folder:** the folder of the running exe (the `clip-sequencer` folder of the portable zip). Only it is
+  changed; never the data folder, never Resolume's plugin folder.
+
+**Helper** (decided 2026-11-25: the **new** `seq-app-cli.exe` in a hidden helper mode, no separate updater)
+- The app starts `%TEMP%\clip-sequencer-update-<version>\clip-sequencer\seq-app-cli.exe --apply-update` with the
+  program folder, its own process id, the exe to start again (`seq-app.exe` or `seq-app-cli.exe`) and that exe's
+  arguments, then quits like File → Quit. Running from the temp folder, the helper locks nothing in the program
+  folder.
+- The helper waits for the old process to end (at most 30 s; else it stops and changes nothing), moves every entry
+  of the program folder into `.update-backup\<old version>\` inside it, copies the new files in and starts the new
+  exe with the old arguments plus `--after-update <ok file>`.
+- The new version writes the ok file when its start-up is done ("Ready") and before it saves any sequence file (so a
+  rolled-back older version still reads them, §6). It shows *Updated to 0.5.1* and deletes leftover
+  `clip-sequencer-update-*` temp folders.
+- **Rollback:** no ok file within 60 s, or a step failing (a file in use, disk full) → the helper stops the new
+  process if it runs, removes the new files, moves the backup back and starts the old exe with
+  `--update-failed <reason>`; the old version shows *Update to 0.5.1 failed: <reason>. Still 0.5.0.*
+- With the ok file the helper deletes `.update-backup`. Its own log: `.update-backup\update.log` while it runs,
+  copied to `<data-dir>/logs/update-<date>.log` by the new (or the restored old) version.
+
+**Other**
+- **FFGL plugin:** the copy in Resolume's plugin folder is not replaced by the update (Resolume may hold it open);
+  the existing "FFGL plugin update available" hint takes over after the restart (§12.1).
 - **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app contacts GitHub only when
-  the user chooses Check for updates.
+  the user chooses Check for updates (and downloads only when they choose Install).
