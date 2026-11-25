@@ -303,14 +303,14 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
 - [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
 
-## M22 — Pass conditions and choices (SPEC §6; G4, G5)
-- [ ] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
+## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)
+- [x] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
       infinite rules; pick (`cycle` counter per run, `random` from the engine's seed). Unit tests incl. a condition
       false (nothing sent) and a picked rest / unresolved option.
-- [ ] FFGL view and sequence mosaic: show option 1 (or the option playing).
-- [ ] UI: condition chip and `1/3` badge on blocks, inspector Play on and Choices (add from the browser by drag onto
+- [x] FFGL view and sequence mosaic: show option 1 (or the option playing). Both show option 1.
+- [x] UI: condition chip and `1/3` badge on blocks, inspector Play on and Choices (add from the browser by drag onto
       the inspector, reorder, relink), warning for `last` with infinite repeat.
-- [ ] Docs: manual (Editing), changelog.
+- [x] Docs: manual (Editing), changelog.
 
 ## M23 — Section markers (SPEC §6, §9.3; G7)
 - [ ] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
