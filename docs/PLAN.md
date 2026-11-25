@@ -312,10 +312,10 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       the inspector, reorder, relink), warning for `last` with infinite repeat.
 - [x] Docs: manual (Editing), changelog.
 
-## M23 — Section markers (SPEC §6, §9.3; G7)
-- [ ] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
+## M23 — Section markers (SPEC §6, §9.3; G7)  ✓ done 2026-11-25 (UI not yet checked in a browser)
+- [x] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
       the end; guide lines 8/16/32/off as a view setting in `settings.json`.
-- [ ] Docs: manual, shortcuts, changelog.
+- [x] Docs: manual, shortcuts, changelog.
 
 ## M24 — Starting a running sequence (SPEC §7.1; C)
 - [ ] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
@@ -334,6 +334,15 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       notes §2), clips with their own transition, unknown blend modes, clips shorter than their step that don't
       loop, `last` with infinite repeat), where it shows (button, dialog, jump to the step).
 - [ ] Build (pure checks in `seq-core` where possible), UI, docs.
+
+## M27 — LUT preview side by side (requested by Uli 2026-11-25, SPEC §14.4)
+- [ ] LUT tab preview: instead of the movable split, two panels next to each other: left the sample image as it is,
+      right the same image with the LUT applied. Both scale the image to fit their panel (aspect kept, no cropping).
+- [ ] Keep the current sample images (and the "your clips" source); SPEC §14.4 and the manual (LUTs) updated.
+- [ ] Test image "Lenna" asked for: **not included** without Uli's decision. It is not free of copyright (a 1972
+      Playboy photo; Playboy holds the rights and only tolerated its use in research), and many journals no longer
+      accept it. Alternatives with clear licences: the Kodak Lossless True Color Image Suite (released by Kodak for
+      unrestricted use), or more generated test images (skin tones, gradients, colour checker).
 
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
