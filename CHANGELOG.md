@@ -15,6 +15,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Cue:** Shift+▶ or Shift+Space cues a sequence to play next; at its cue point (its start mode, the end of a
   playing sequence's pass, or the next 8 or 16 bars) it starts and everything else stops.
 - **Mute and solo** per lane of a running sequence: a muted lane goes dark, keeps counting and comes back in time.
+- **Play on:** a step can play only on some passes (first, all but the first, last, all but the last, or pass A of
+  every B); on the others it sends nothing.
+- **Choices:** up to 3 more clips (or columns, or rests) per step, picked at random or in turn each time it plays.
 
 ### Changed
 
