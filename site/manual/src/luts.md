@@ -24,9 +24,9 @@ applies the LUTs with its own **LUT** effect, and every change you make shows on
 1. Open the **LUTs** tab (or press **Ctrl+2**).
 2. Click **+ New**. A neutral LUT called *New LUT* appears: it changes nothing yet. Double-click its name to
    rename it, for example to *Stage Warm*.
-3. Move the controls on the right. The preview shows the original left of the line and the LUT right of it; drag
-   in the picture to move the line. Under **Image** you can pick a test image or one of your clips (the live deck's
-   thumbnails).
+3. Move the controls on the right. The preview shows the picture twice: the original on the left, with the LUT
+   on the right. Under **Image** you can pick a test image (drawn charts, or one of the 24 Kodak test photos) or one
+   of your clips (the live deck's thumbnails).
 4. In Resolume, add the **LUT** effect to the composition (or a layer or clip). It appears in the sequencer under
    **LUT effects in Resolume**.
 5. Click **Use Stage Warm** next to it. The effect now uses your LUT; keep adjusting and watch the output.

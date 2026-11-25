@@ -20,9 +20,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Choices:** up to 3 more clips (or columns, or rests) per step, picked at random or in turn each time it plays.
 - **Section markers** in the editor ("Intro", "Drop"): add with M or from the ruler, drag, rename, delete. View →
   Guide lines draws a line every 8, 16 or 32 bars.
+- **LUT test photos:** the 24 images of the Kodak test suite in the LUT tab's preview.
 
 ### Changed
 
+- The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
+  picture with a split to drag.
 - Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
   original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
 

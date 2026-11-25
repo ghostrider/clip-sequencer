@@ -856,9 +856,12 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
 
 - Left: the library (name, "used by N LUT effects", "imported"), **+ New** (neutral), **Import…** (several
   `.cube` files; names from the file names, made unique).
-- Middle: name (double-click renames), Rename, Duplicate, Export .cube, Delete…; the preview: an image with the LUT
-  right of a draggable split, the original left of it. Images: drawn test images (ramps, colour chart, skin tones,
-  neon) and the live deck's clip thumbnails. WebGL2 with the table the app baked, so it matches Resolume. Below:
+- Middle: name (double-click renames), Rename, Duplicate, Export .cube, Delete…; the preview: two panels side by side
+  (decided 2026-11-25, replaces the draggable split), the original on the left and the same image with the LUT on
+  the right, each scaled to fit its panel with its aspect kept. Images: drawn test images (ramps, colour chart,
+  skin tones, neon), the 24 photos of the Kodak Lossless True Color Image Suite (`web/public/kodak`, released by
+  Kodak for unrestricted use; source and note in its README and the licence list) and the live deck's clip
+  thumbnails. WebGL2 with the table the app baked, so it matches Resolume. Below:
   Resolume's LUT effects (where, which file or LUT) with **Use <LUT>**.
 - Right: Basic (exposure, contrast, saturation, temperature, tint), Lift/Gamma/Gain (all, R, G, B), Curves (Master,
   R, G, B). Double-click on a slider resets it. Changes go to the app every 40 ms while dragging; a control being
