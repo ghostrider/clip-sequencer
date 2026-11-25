@@ -317,10 +317,10 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       the end; guide lines 8/16/32/off as a view setting in `settings.json`.
 - [x] Docs: manual, shortcuts, changelog.
 
-## M24 — Starting a running sequence (SPEC §7.1; C)
-- [ ] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
+## M24 — Starting a running sequence (SPEC §7.1; C)  ✓ done 2026-11-25
+- [x] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
       `§` connecting while pending links the pending start. Tests for every order.
-- [ ] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
+- [x] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
 
 ## M25 — Record from Resolume (G6)
 - [ ] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a

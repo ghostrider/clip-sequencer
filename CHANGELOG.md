@@ -24,6 +24,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Starting a running sequence** works from either side: ▶ in the app restarts it and keeps its link to the `§`
+  clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
+  at a time").
 - The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
   picture with a split to drag.
 - Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the

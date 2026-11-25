@@ -50,8 +50,6 @@ With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
 - **Sync SEQ** used *Blank* instead of the plugin: Resolume didn't load "1000A Sequence" at start-up. Install it
   ([Installing the FFGL plugin](ffgl-plugin.md)), restart Resolume, clear the Blank placeholders and sync again.
 - The `§` clip starts the sequence of that name **in the live deck** only.
-- You started it from the app while its `§` clip was still playing: see "one place at a time" in
-  [Playing live](playing-live.md). Clear the SEQ layer, then start it again.
 
 ## "Port in use" or "already running"
 

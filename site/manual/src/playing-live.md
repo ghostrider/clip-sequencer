@@ -25,10 +25,11 @@
   follows Resolume's tempo). Neither restarts a sequence that is playing. Until one arrives, bars count from the
   first clock tick and the clock chip says `bar phase not synced`.
 - When it stops (or after its last pass), its layers are cleared, or keep their last clips if it is set to *hold*.
-- Starting a sequence that is already running starts it again from the beginning.
-- **Start a sequence from one place at a time.** If you start it in the app while its `§` clip in Resolume is still
-  playing, the two get out of step: clearing the SEQ layer then doesn't stop it, and clicking the `§` clip does
-  nothing until the layer is cleared. Stop it the same way you started it.
+- Starting a sequence that is already running starts it again from the beginning (at its start mode). If it was
+  started from its `§` clip, it stays linked to it: clearing the SEQ layer still stops it.
+- Clicking a sequence's `§` clip while it runs (started from the app) doesn't restart it: from then on it is linked
+  to that clip, so clearing the SEQ layer stops it, and when it finishes the SEQ layer is cleared for the next click.
+  The same goes for a start that is still waiting for its beat or bar.
 - **Stop all** stops everything and clears every layer the sequencer used, also lanes you took over by hand.
 
 ## Cueing the next sequence
