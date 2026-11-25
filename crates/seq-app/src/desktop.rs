@@ -113,6 +113,9 @@ pub fn run(config: Config) -> ExitCode {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(WINDOW_STATE)
+                // Only the main window's size and place are remembered: a restored splash came back
+                // portrait-sized, large and off-centre instead of its own centred 560 × 340.
+                .with_denylist(&[SPLASH])
                 .build(),
         )
         .manage(shell)
