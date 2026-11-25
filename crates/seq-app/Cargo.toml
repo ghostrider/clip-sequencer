@@ -24,7 +24,12 @@ axum = { version = "0.8", features = ["ws"] }
 font8x8 = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rust-embed = { version = "8", features = ["mime-guess"] }
-reqwest = { version = "0.13", default-features = false, features = ["json"] }
+# `native-tls`: Windows' own TLS (SChannel) for the update check over HTTPS (SPEC §15); nothing else leaves the PC.
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+# In-app update (M14, SPEC §15): verify and unpack the release zip.
+sha2 = "0.11"
+semver = "1"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 clap.workspace = true
 env_filter = "2"
 log.workspace = true
