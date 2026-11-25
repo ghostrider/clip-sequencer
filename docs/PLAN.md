@@ -225,8 +225,8 @@ Goal: the user can check by hand whether a newer release exists, and install it 
 details in SPEC first (new section), then build it.
 
 Decided (2026-11-04):
-- **Only by hand:** a menu entry **Help → Check for updates…** (desktop app, and the browser UI's menu bar). No
-  automatic or background checks, no check at start-up, no setting for it.
+- ~~**Only by hand**~~ Changed 2026-11-25: a check **once at start-up** (Download and install / Skip this version /
+  Later; off in Preferences or with `--no-update-check`), and **Help → Check for updates…** by hand (SPEC §15).
 - **If a newer release is found:** show its version and release notes, and offer to install it.
 - **Binary replacement (decided 2026-11-23): full replacement** by a helper after the app quits, with rollback
   (outline in `docs/release-0.5-plan.md` §D). Part of release 0.5.0.

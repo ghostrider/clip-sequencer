@@ -880,12 +880,20 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
 
 ## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23, details 2026-11-25)
 
-The user can check by hand whether a newer release exists and install it from the app. The first version that can
-update itself is 0.5.0 (0.4.x has no such feature).
+The app checks once at start-up whether a newer release exists (changed 2026-11-25: before, only by hand), and the
+user can check by hand any time; an update is installed from the app. The first version that can update itself is
+0.5.0 (0.4.x has no such feature).
 
 **Check**
-- **Only by hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar), or
-  `seq-app-cli --check-update`. No automatic or background check, none at start-up, no setting for it.
+- **At start-up, once** (decided 2026-11-25): after the start-up is done ("Ready"), in the background. If a newer
+  version is found that the user hasn't skipped, the UI shows *Version 0.5.1 is available (you have 0.5.0)* with the
+  release notes and **Download and install**, **Skip this version**, **Later**. *Skip* is saved (`update_skipped` in
+  `settings.json`) and that version is not offered at start-up again (a newer one is); *Later* asks again at the
+  next start. A failed start-up check (no network, GitHub unreachable) shows nothing; it is only logged. Off with
+  Preferences → **Check for updates at start-up** (`update_check: false` in `settings.json`, on by default) or
+  `--no-update-check` for the run. The headless app does the same; its browser UI shows the question when it connects.
+- **By hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar), or
+  `seq-app-cli --check-update`; also offers a skipped version.
 - `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login, `User-Agent:
   clip-sequencer/<version>`, 10 s timeout), in a worker task, never on the timing path. That endpoint never returns
   drafts or pre-releases. Its `tag_name` (`v0.5.1`) is compared by semver with the running version.
@@ -931,5 +939,6 @@ update itself is 0.5.0 (0.4.x has no such feature).
 **Other**
 - **FFGL plugin:** the copy in Resolume's plugin folder is not replaced by the update (Resolume may hold it open);
   the existing "FFGL plugin update available" hint takes over after the restart (§12.1).
-- **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app contacts GitHub only when
-  the user chooses Check for updates (and downloads only when they choose Install).
+- **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app asks GitHub for the latest
+  release once at each start (unless turned off) and when the user chooses Check for updates, sends nothing else,
+  and downloads only when the user chooses to install.
