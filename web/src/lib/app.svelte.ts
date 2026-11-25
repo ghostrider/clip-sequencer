@@ -4,7 +4,7 @@
 import { applyTheme, resolveTheme } from './themes';
 import type {
   Appearance, ClipRef, ClipView, Command, CueAt, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
-  RunView, RuntimeState, SequenceView, Start, Step, StructureState, Uuid, VersionInfo,
+  Repeat, RunView, RuntimeState, SequenceView, Start, Step, StructureState, Uuid, VersionInfo, When,
 } from './types';
 
 /** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 LUTs, Ctrl+3 Console. */
@@ -87,6 +87,8 @@ class AppState {
   search = $state('');
   /** Waiting for a clip click in the browser to relink the selected step. */
   relinking = $state(false);
+  /** What a clip click relinks (format v4 choices): the step itself, a new choice, or choice option `n` (1…). */
+  relinkTarget = $state<'step' | 'add' | number>('step');
   /** Pending deck-switch confirmation (SPEC §7.2 step 1). */
   confirmSwitch = $state<{ seq: Uuid; name: string; deck: string; running: string[] } | null>(null);
 
@@ -352,6 +354,30 @@ export function startsIn(waitTicks: number): string {
   if (beats <= 4) return `starts in ${beats} ${beats === 1 ? 'beat' : 'beats'}`;
   const bars = Math.ceil(waitTicks / 96);
   return `starts in ${bars} bars`;
+}
+
+/** Step badge for a pass condition (SPEC §9.3): `1st`, `!1st`, `last`, `!last`, `2:4`. */
+export function whenLabel(w: When): string {
+  switch (w.is) {
+    case 'first':
+      return '1st';
+    case 'not_first':
+      return '!1st';
+    case 'last':
+      return 'last';
+    case 'not_last':
+      return '!last';
+    case 'cycle':
+      return `${w.pass}:${w.of}`;
+  }
+}
+
+/** Why a condition is odd with this repeat setting (no last pass with ∞), or `null`. */
+export function whenWarning(w: When | undefined, repeat: Repeat): string | null {
+  if (!w || repeat.mode !== 'infinite') return null;
+  if (w.is === 'last') return 'Never plays: with repeat ∞ there is no last pass';
+  if (w.is === 'not_last') return 'Always plays: with repeat ∞ there is no last pass';
+  return null;
 }
 
 /** `CUED · in 2 bars`, `CUED · at end of pass`, or `starts in 3 beats` for a plain waiting start. */

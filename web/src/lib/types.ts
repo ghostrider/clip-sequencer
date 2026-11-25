@@ -247,6 +247,8 @@ export interface RunLaneView {
   mute: boolean;
   solo: boolean;
   silent: boolean;
+  /** Option the current step played (0 = its own); `null` when its pass condition kept it silent. */
+  option: number | null;
   step: number | null;
   not_confirmed: number[];
 }

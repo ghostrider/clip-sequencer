@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane } from '../lib/app.svelte';
+  import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane, whenLabel, whenWarning } from '../lib/app.svelte';
   import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
@@ -263,6 +263,21 @@
                 onpointerup={() => stepUp(li, si)}
                 onpointercancel={() => (drag = null)}
               >
+                {#if step.when || step.choices?.length}
+                  {@const warnWhen = whenWarning(step.when, seq.repeat)}
+                  {@const n = 1 + (step.choices?.length ?? 0)}
+                  {@const choiceUnresolved = (res?.choices?.[si] ?? []).some((c) => c.state === 'unresolved')}
+                  <div class="badges">
+                    {#if step.when}
+                      <span class="badge" class:bad={warnWhen} title={warnWhen ?? 'Plays only on some passes'}>{warnWhen ? '⚠ ' : ''}{whenLabel(step.when)}</span>
+                    {/if}
+                    {#if n > 1}
+                      <span class="badge" class:bad={choiceUnresolved}
+                        title={`${n} options, ${step.pick === 'cycle' ? 'in turn' : 'picked at random'}${choiceUnresolved ? ' · a choice is unresolved' : ''}`}
+                      >{playing && rl?.option != null ? rl.option + 1 : 1}/{n} {step.pick === 'cycle' ? '↻' : '⤨'}</span>
+                    {/if}
+                  </div>
+                {/if}
                 <div class="name">{stepLabel(step, r)}</div>
                 <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
                 <div class="resize" role="separator" aria-label="Resize step"
