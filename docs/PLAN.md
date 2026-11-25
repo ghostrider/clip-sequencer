@@ -276,19 +276,19 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       until their milestone); `--validate` reports v4 errors.
 - [x] Samples: update `docs/samples/demo.seq.json` to v4 (keep a v3 copy for the migration test).
 
-## M20 — Quantized start, cue, mute/solo (SPEC §3.2; G1, G2)  ⟵ next
-- [ ] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
-- [ ] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
+## M20 — Quantized start, cue, mute/solo (SPEC §3.2, §3.3, §7.8; G1, G2)  ✓ done 2026-11-25
+- [x] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
+- [x] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
       freeze with the clock; `§` starts wait too; deck switch first. Unit tests on boundaries.
-- [ ] UI: start mode in the editor header, `starts in …` on card and header.
-- [ ] SPEC section for **cue** (G1): how to cue (card action, key), cue points (start mode, end of the current pass
+- [x] UI: start mode in the editor header, `starts in …` on card and header.
+- [x] SPEC section for **cue** (G1): how to cue (card action, key), cue points (start mode, end of the current pass
       of a running sequence, next 8/16 bars), one cue or a queue, cancelling; then build it.
-- [ ] SPEC section for **mute/solo** (G2): lane header buttons, a muted lane counts but doesn't trigger and comes
+- [x] SPEC section for **mute/solo** (G2): lane header buttons, a muted lane counts but doesn't trigger and comes
       back at its next step, solo = mute the others; not saved; what a mute does to the layer (clear or hold);
       then build it.
-- [ ] Docs: manual (Playing live), shortcuts, changelog.
+- [x] Docs: manual (Playing live), shortcuts, changelog.
 
-## M21 — Transitions per step (SPEC §7.7; A)
+## M21 — Transitions per step (SPEC §7.7; A)  ⟵ next
 - [ ] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
       `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
