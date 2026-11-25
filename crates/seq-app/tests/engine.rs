@@ -466,6 +466,84 @@ async fn cue_replaces_what_plays_and_mute_silences_a_lane() {
     h.app.shutdown().await;
 }
 
+/// Format v4 (SPEC §6), played: step 1 of lane L2 alternates TWISTED / LIQUID (`cycle`), step 2
+/// only plays on the last of two passes.
+#[tokio::test]
+async fn pass_conditions_and_choices_play() {
+    use seq_core::edit::EditOp;
+    use seq_core::model::{Choice, Pick, When};
+    use seq_core::ClipRef;
+    let h = harness().await;
+    let named = |name: &str| ClipRef {
+        name: Some(name.into()),
+        ..Default::default()
+    };
+    for op in [
+        EditOp::SetRepeat {
+            seq: SEQ_A,
+            repeat: seq_core::Repeat::Count { count: 2 },
+        },
+        EditOp::AddChoice {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            choice: Some(Choice::Clip(named(LIQUID))),
+        },
+        EditOp::SetPick {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            pick: Some(Pick::Cycle),
+        },
+        EditOp::SetStepWhen {
+            seq: SEQ_A,
+            lane: 0,
+            index: 1,
+            when: Some(When::Last),
+        },
+    ] {
+        h.cmd(EngineCommand::Edit { op });
+    }
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[1].when.is_some())
+        })
+        .await;
+    // The choice is resolved one by one like the step itself.
+    let v = s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap();
+    assert_eq!(
+        v.resolution.as_ref().unwrap().lanes[0].choices[0][0].state,
+        "ok"
+    );
+
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    let r = h.runtime(|r| r.running[0].lanes[0].option == Some(0)).await;
+    assert_eq!(r.running[0].lanes[1].option, Some(0));
+    // Pass 1, step 2 (`last`): nothing; L2 keeps TWISTED.
+    h.ticks(96);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2);
+    h.runtime(|r| r.running[0].lanes[0].step == Some(1) && r.running[0].lanes[0].option.is_none())
+        .await;
+    // Pass 2: step 1 plays its second option (LIQUID), then step 2 plays.
+    h.ticks(96);
+    let log = h.osc(4).await;
+    assert!(log[2..].contains(&connect(2, 3)), "{log:?}");
+    h.ticks(96);
+    assert_eq!(h.osc(5).await[4], connect(2, 3));
+    h.app.shutdown().await;
+}
+
 #[tokio::test]
 async fn seq_clip_starts_its_sequence_and_finishing_clears_the_seq_layer() {
     let h = harness().await;

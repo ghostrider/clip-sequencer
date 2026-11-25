@@ -1382,6 +1382,11 @@ impl Engine {
             self.structure_dirty = true;
         }
         let mut spec = RunSpec::new(&sequence, &resolution);
+        // A fresh seed per start for `random` picks (SPEC §6); seq-core itself reads no clock.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        spec.seed = nanos ^ seq.as_u128() as u64;
         for (lane, run_lane) in sequence.lanes.iter().zip(spec.lanes.iter_mut()) {
             if lane.layer == self.cfg.seq_layer {
                 run_lane.layer_id = None; // lanes may not play on the SEQ layer
@@ -2092,6 +2097,7 @@ impl Engine {
                             mute: l.mute,
                             solo: l.solo,
                             silent: l.silent,
+                            option: l.option,
                             step: if l.state == LaneState::Inactive {
                                 None
                             } else {

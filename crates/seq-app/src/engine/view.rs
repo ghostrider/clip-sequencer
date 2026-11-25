@@ -356,6 +356,9 @@ pub struct RunLaneView {
     pub mute: bool,
     pub solo: bool,
     pub silent: bool,
+    /// The option the current step played (0 = its own clip or column); `None` when its pass
+    /// condition kept it from playing (format v4).
+    pub option: Option<usize>,
     /// `idle`, `playing`, `yielded`, `resume_pending`, `taken_over`.
     pub state: &'static str,
     pub step: Option<usize>,

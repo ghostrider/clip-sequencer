@@ -25,10 +25,17 @@
 //!
 //! **Mute and solo** (SPEC §7.8) are per lane of a run: a silenced lane keeps counting but sends
 //! nothing; its layer is cleared once when it falls silent.
+//!
+//! **Pass conditions and choices** (format v4, SPEC §6): at each step boundary the step's `when` is
+//! checked against the pass counter (a step that doesn't play sends nothing), then one of its
+//! options is picked by the step's play counter: in turn (`cycle`) or from the run's seed
+//! (`random`, a pure function of seed, lane, step and counter, so it can be known ahead).
 
 use uuid::Uuid;
 
-use crate::model::{AfterLastPass, LaneEnd, Repeat, Sequence, Start, TICKS_PER_SIXTEENTH};
+use crate::model::{
+    AfterLastPass, LaneEnd, Pick, Repeat, Sequence, Start, When, TICKS_PER_SIXTEENTH,
+};
 use crate::resolve::{LayerResolution, SequenceResolution, StepResolution};
 
 /// Ticks per beat (quarter note) and per bar in 4/4.
@@ -59,7 +66,75 @@ pub enum StepTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunStep {
     pub ticks: u64,
+    /// Option 1.
     pub target: StepTarget,
+    /// Plays only on these passes (format v4); `None` = every pass.
+    pub when: Option<When>,
+    /// Options 2… (format v4), resolved like `target`.
+    pub choices: Vec<StepTarget>,
+    /// How an option is picked when there are choices.
+    pub pick: Pick,
+}
+
+impl RunStep {
+    /// A plain step: one option, every pass.
+    pub fn new(ticks: u64, target: StepTarget) -> Self {
+        Self {
+            ticks,
+            target,
+            when: None,
+            choices: Vec::new(),
+            pick: Pick::Random,
+        }
+    }
+
+    /// Option `i` (0 = `target`).
+    pub fn option(&self, i: usize) -> StepTarget {
+        if i == 0 {
+            self.target
+        } else {
+            self.choices[i - 1]
+        }
+    }
+}
+
+/// Whether a step with condition `when` plays on 1-based `pass` of `passes` (`None` = infinite)
+/// (SPEC §6 `when`).
+pub fn plays_on(when: Option<When>, pass: u32, passes: Option<u32>) -> bool {
+    match when {
+        None => true,
+        Some(When::First) => pass == 1,
+        Some(When::NotFirst) => pass != 1,
+        // With infinite repeat there is no last pass.
+        Some(When::Last) => passes == Some(pass),
+        Some(When::NotLast) => passes != Some(pass),
+        Some(When::Cycle { pass: a, of: b }) => {
+            b > 0 && (pass.saturating_sub(1)) % b == a.saturating_sub(1)
+        }
+    }
+}
+
+/// splitmix64: a well-mixed hash of the inputs, for `random` picks.
+fn mix(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+/// The option a step plays the `count`-th time (0-based) in a run with `seed`.
+pub fn pick_option(step: &RunStep, seed: u64, lane: usize, index: usize, count: u32) -> usize {
+    let n = 1 + step.choices.len();
+    if n == 1 {
+        return 0;
+    }
+    match step.pick {
+        Pick::Cycle => count as usize % n,
+        Pick::Random => {
+            let key = seed ^ mix((lane as u64) << 40 ^ (index as u64) << 20 ^ u64::from(count));
+            (mix(key) % n as u64) as usize
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +164,9 @@ pub struct RunSpec {
     pub repeat: Repeat,
     pub after_last_pass: AfterLastPass,
     pub lanes: Vec<RunLane>,
+    /// Seed for `random` picks; the engine sets a fresh one per start (SPEC §6: no IO here, tests
+    /// pass a fixed one).
+    pub seed: u64,
 }
 
 impl RunSpec {
@@ -108,14 +186,17 @@ impl RunSpec {
                     .steps
                     .iter()
                     .zip(&res.steps)
-                    .map(|(step, sr)| RunStep {
+                    .enumerate()
+                    .map(|(si, (step, sr))| RunStep {
                         ticks: u64::from(step.length) * u64::from(TICKS_PER_SIXTEENTH),
-                        target: match sr {
-                            StepResolution::Rest => StepTarget::Rest,
-                            StepResolution::Resolved { clip, .. } => StepTarget::Clip(clip.clip_id),
-                            StepResolution::Unresolved { .. } => StepTarget::Unresolved,
-                            StepResolution::Slot { column, .. } => StepTarget::Slot(*column),
-                        },
+                        target: target_of(sr),
+                        when: step.when,
+                        choices: res
+                            .choices
+                            .get(si)
+                            .map(|c| c.iter().map(target_of).collect())
+                            .unwrap_or_default(),
+                        pick: step.pick.unwrap_or_default(),
                     })
                     .collect(),
             })
@@ -126,6 +207,7 @@ impl RunSpec {
             repeat: seq.repeat,
             after_last_pass: seq.after_last_pass,
             lanes,
+            seed: 0,
         }
     }
 
@@ -141,6 +223,15 @@ impl RunSpec {
             Repeat::Count { count } => Some(count.max(1)),
             Repeat::Infinite => None,
         }
+    }
+}
+
+fn target_of(sr: &StepResolution) -> StepTarget {
+    match sr {
+        StepResolution::Rest => StepTarget::Rest,
+        StepResolution::Resolved { clip, .. } => StepTarget::Clip(clip.clip_id),
+        StepResolution::Unresolved { .. } => StepTarget::Unresolved,
+        StepResolution::Slot { column, .. } => StepTarget::Slot(*column),
     }
 }
 
@@ -318,6 +409,9 @@ pub struct LaneStatus {
     pub layer_id: Option<u64>,
     /// Current step, `None` before/after the lane's steps (hold/clear lanes past their end).
     pub step: Option<usize>,
+    /// The option (0 = the step's own) the current step played; `None` when its condition kept
+    /// it from playing (format v4).
+    pub option: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -340,6 +434,10 @@ struct LaneRt {
     solo: bool,
     /// Effective mute: `mute`, or a solo elsewhere in the run and none here.
     silent: bool,
+    /// How often each step played in this run (its condition was true), for picks.
+    plays: Vec<u32>,
+    /// Option the current step played (see [`LaneStatus::option`]).
+    option: Option<usize>,
     /// Start position of each step within the lane.
     starts: Vec<u64>,
     len: u64,
@@ -549,6 +647,7 @@ impl Scheduler {
                         mute: rt.mute,
                         solo: rt.solo,
                         silent: rt.silent,
+                        option: rt.option,
                         layer_id: lane.layer_id,
                         step: match rt.state {
                             LaneState::Inactive => None,
@@ -789,12 +888,14 @@ impl Scheduler {
                     mute: false,
                     solo: false,
                     silent: false,
+                    plays: vec![0; l.steps.len()],
+                    option: None,
                     starts,
                     len: at,
                 }
             })
             .collect();
-        let run = Run {
+        let mut run = Run {
             spec,
             origin,
             pass: 1,
@@ -806,7 +907,7 @@ impl Scheduler {
         out.push(Action::PassStarted { seq, pass: 1 });
         for lane in 0..run.lanes.len() {
             if run.lanes[lane].state == LaneState::Playing {
-                out.extend(step_actions(&run, lane, 0));
+                out.extend(step_actions(&mut run, lane, 0));
             }
         }
         self.runs.push(run);
@@ -900,6 +1001,7 @@ impl Scheduler {
         }
         for run in &self.runs {
             let mut at = run.pos + ahead;
+            let mut pass = run.pass;
             if at >= run.pass_ticks {
                 let passes_left = run
                     .spec
@@ -909,6 +1011,7 @@ impl Scheduler {
                 if wraps > passes_left {
                     continue;
                 }
+                pass += wraps as u32;
                 at %= run.pass_ticks;
             }
             for (lane, rt) in run.lanes.iter().enumerate() {
@@ -926,8 +1029,13 @@ impl Scheduler {
                 let Some(step) = rt.step_starting_at(spec.end, at) else {
                     continue;
                 };
+                let rs = &spec.steps[step];
+                if !plays_on(rs.when, pass, run.spec.passes()) {
+                    continue;
+                }
+                let option = pick_option(rs, run.spec.seed, lane, step, rt.plays[step]);
                 if let (StepTarget::Slot(column), Some(layer_id)) =
-                    (spec.steps[step].target, spec.layer_id)
+                    (rs.option(option), spec.layer_id)
                 {
                     out.push(UpcomingSlot {
                         seq: run.spec.seq_id,
@@ -1078,16 +1186,30 @@ fn boundary(run: &mut Run, lane: usize, step: Option<usize>) -> Vec<Action> {
     out
 }
 
-fn step_actions(run: &Run, lane: usize, step: usize) -> Vec<Action> {
+/// A step begins: its condition and pick are decided (and counted) on every lane that owns its
+/// layer, so a muted or yielded lane keeps its rotation in time; only a playing, unmuted lane sends.
+fn step_actions(run: &mut Run, lane: usize, step: usize) -> Vec<Action> {
     let seq = run.spec.seq_id;
     let mut out = vec![Action::StepStarted { seq, lane, step }];
-    if run.lanes[lane].state != LaneState::Playing || run.lanes[lane].silent {
+    let passes = run.spec.passes();
+    let rs = &run.spec.lanes[lane].steps[step];
+    let rt = &mut run.lanes[lane];
+    if !plays_on(rs.when, run.pass, passes) {
+        // Not on this pass: nothing is sent, the previous clip plays through (SPEC §6).
+        rt.option = None;
         return out;
     }
+    let option = pick_option(rs, run.spec.seed, lane, step, rt.plays[step]);
+    rt.plays[step] += 1;
+    rt.option = Some(option);
+    if rt.state != LaneState::Playing || rt.silent {
+        return out;
+    }
+    let target = rs.option(option);
     let layer_id = run.spec.lanes[lane]
         .layer_id
         .expect("playing lane has a layer");
-    match run.spec.lanes[lane].steps[step].target {
+    match target {
         StepTarget::Clip(clip_id) => out.push(Action::Trigger {
             seq,
             lane,

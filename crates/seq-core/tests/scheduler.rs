@@ -19,10 +19,7 @@ fn lane(layer: u64, end: LaneEnd, steps: &[(u64, StepTarget)]) -> RunLane {
         end,
         steps: steps
             .iter()
-            .map(|&(eighths, target)| RunStep {
-                ticks: eighths * E,
-                target,
-            })
+            .map(|&(eighths, target)| RunStep::new(eighths * E, target))
             .collect(),
     }
 }
@@ -34,6 +31,7 @@ fn spec(id: u128, repeat: Repeat, after: AfterLastPass, lanes: Vec<RunLane>) -> 
         repeat,
         after_last_pass: after,
         lanes,
+        seed: 7,
     }
 }
 
@@ -150,10 +148,7 @@ fn sixteenth_steps_fire_every_six_ticks() {
     );
     sp.lanes[0].steps = [(1, Clip(1)), (1, Clip(2)), (3, Clip(3))]
         .iter()
-        .map(|&(sixteenths, target)| RunStep {
-            ticks: sixteenths * S,
-            target,
-        })
+        .map(|&(sixteenths, target)| RunStep::new(sixteenths * S, target))
         .collect();
     let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, BAR);
@@ -756,26 +751,17 @@ fn run_spec_from_sequence_and_resolution() {
     assert_eq!(
         rs.lanes[0].steps,
         vec![
-            RunStep {
-                ticks: 96,
-                target: Clip(10)
-            },
-            RunStep {
-                ticks: 24,
-                target: Rest
-            },
-            RunStep {
-                ticks: 12,
-                target: Unresolved
-            },
+            RunStep::new(96, Clip(10)),
+            RunStep::new(24, Rest),
+            RunStep::new(12, Unresolved),
         ]
     );
     assert_eq!(rs.lanes[1].layer_id, None);
     assert_eq!(rs.pass_ticks(), 132);
     assert_eq!(rs.passes(), Some(2));
 
-    // Format v4 fields are carried but not acted on yet (M20–M22): the snapshot the scheduler gets
-    // is the same with all of them set, so it plays exactly as before.
+    // Format v4: condition, choices (resolved like option 1) and pick reach the snapshot (M22);
+    // sections and transitions don't change it (transitions: M21).
     use seq_core::model::{Choice, Pick, Section, Transition, When};
     let mut v4 = sequence.clone();
     v4.start = seq_core::Start::Bar { bars: 4 };
@@ -800,7 +786,211 @@ fn run_spec_from_sequence_and_resolution() {
             blend: None,
         });
     }
-    assert_eq!(RunSpec::new(&v4, &resolve_sequence(&v4, &idx)), rs);
+    let v4rs = RunSpec::new(&v4, &resolve_sequence(&v4, &idx));
+    let mut expected = rs.clone();
+    for (i, step) in expected.lanes[0].steps.iter_mut().enumerate() {
+        step.when = Some(When::Cycle { pass: 2, of: 2 });
+        step.choices = vec![Rest, Unresolved];
+        step.pick = if i % 2 == 0 {
+            Pick::Cycle
+        } else {
+            Pick::Random
+        };
+    }
+    assert_eq!(v4rs, expected);
+}
+
+// ---- pass conditions and choices (format v4, SPEC §6) ----
+
+#[test]
+fn conditions_per_pass() {
+    use seq_core::model::When;
+    use seq_core::scheduler::plays_on;
+    let on = |w, passes: Option<u32>| -> Vec<bool> {
+        (1..=4).map(|p| plays_on(Some(w), p, passes)).collect()
+    };
+    assert_eq!(on(When::First, Some(4)), [true, false, false, false]);
+    assert_eq!(on(When::NotFirst, Some(4)), [false, true, true, true]);
+    assert_eq!(on(When::Last, Some(4)), [false, false, false, true]);
+    assert_eq!(on(When::NotLast, Some(4)), [true, true, true, false]);
+    // Infinite: no last pass.
+    assert_eq!(on(When::Last, None), [false; 4]);
+    assert_eq!(on(When::NotLast, None), [true; 4]);
+    // `once` has one pass, which is first and last.
+    assert!(plays_on(Some(When::Last), 1, Some(1)) && plays_on(Some(When::First), 1, Some(1)));
+    assert_eq!(
+        on(When::Cycle { pass: 2, of: 2 }, None),
+        [false, true, false, true]
+    );
+    assert_eq!(
+        on(When::Cycle { pass: 1, of: 3 }, None),
+        [true, false, false, true]
+    );
+    assert!(plays_on(None, 3, Some(4)));
+}
+
+fn with(step: RunStep, f: impl FnOnce(&mut RunStep)) -> RunStep {
+    let mut step = step;
+    f(&mut step);
+    step
+}
+
+#[test]
+fn a_step_that_doesnt_play_sends_nothing_and_the_clip_plays_through() {
+    use seq_core::model::When;
+    // Two-step lane; step 2 (clip 20) only on the last of 3 passes.
+    let mut sp = spec(
+        1,
+        Repeat::Count { count: 3 },
+        AfterLastPass::Hold,
+        vec![lane(
+            500,
+            LaneEnd::LoopToEnd,
+            &[(8, Clip(10)), (8, Clip(20))],
+        )],
+    );
+    sp.lanes[0].steps[1].when = Some(When::Last);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 3 * 2 * BAR);
+    assert_eq!(
+        triggers(&log),
+        [(0, 10), (2 * BAR, 10), (4 * BAR, 10), (5 * BAR, 20)]
+    );
+    assert!(clears(&log).is_empty(), "no clear: clip 10 plays through");
+    // The step still begins (for the UI), with no option played.
+    assert!(log
+        .iter()
+        .any(|(t, a)| *t == BAR && matches!(a, Action::StepStarted { step: 1, .. })));
+}
+
+#[test]
+fn loops_of_a_short_lane_share_the_pass() {
+    use seq_core::model::When;
+    // Lane of one bar in a two-bar pass, `first`: plays twice in pass 1 (its loops), not in pass 2.
+    let mut sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Hold,
+        vec![
+            lane(500, LaneEnd::LoopToEnd, &[(8, Clip(10))]),
+            lane(501, LaneEnd::Hold, &[(16, Clip(99))]),
+        ],
+    );
+    sp.lanes[0].steps[0].when = Some(When::First);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 4 * BAR - 1);
+    let tens: Vec<_> = triggers(&log)
+        .into_iter()
+        .filter(|&(_, c)| c == 10)
+        .collect();
+    assert_eq!(tens, [(0, 10), (BAR, 10)]);
+}
+
+#[test]
+fn cycle_pick_goes_through_the_options_and_starts_again_each_run() {
+    use seq_core::model::Pick;
+    let step = with(RunStep::new(8 * E, Clip(10)), |s| {
+        s.choices = vec![Clip(11), Rest, Unresolved];
+        s.pick = Pick::Cycle;
+    });
+    let sp = || RunSpec {
+        lanes: vec![RunLane {
+            layer_id: Some(500),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![step.clone()],
+        }],
+        ..spec(1, Repeat::Infinite, AfterLastPass::Hold, vec![])
+    };
+    let mut s = Scheduler::new();
+    let start = s.start(sp(), Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 5 * BAR);
+    // 10, 11, rest (clear), unresolved (nothing), 10, 11 — every loop counts.
+    assert_eq!(
+        triggers(&log),
+        [(0, 10), (BAR, 11), (4 * BAR, 10), (5 * BAR, 11)]
+    );
+    assert_eq!(clears(&log), [(2 * BAR, 500)]);
+    let options: Vec<_> = s.status()[0].lanes.iter().map(|l| l.option).collect();
+    assert_eq!(options, [Some(1)]);
+    // A new start begins at option 1.
+    let start = s.start(sp(), Origin::Ui, Start::Immediate).unwrap();
+    assert_eq!(triggers(&run(&mut s, start, 0)), [(0, 10)]);
+}
+
+#[test]
+fn random_pick_is_reproducible_from_the_seed_and_uses_every_option() {
+    use seq_core::model::Pick;
+    use seq_core::scheduler::pick_option;
+    let step = with(RunStep::new(8 * E, Clip(10)), |s| {
+        s.choices = vec![Clip(11), Clip(12), Clip(13)];
+        s.pick = Pick::Random;
+    });
+    let picks =
+        |seed| -> Vec<usize> { (0..64).map(|n| pick_option(&step, seed, 0, 0, n)).collect() };
+    assert_eq!(picks(1), picks(1), "same seed, same picks");
+    assert_ne!(picks(1), picks(2), "another seed, other picks");
+    for i in 0..4 {
+        assert!(picks(1).contains(&i), "option {i} is picked sometimes");
+    }
+    // Played: the triggers follow pick_option with the run's seed.
+    let mut sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(500),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![step.clone()],
+        }],
+    );
+    sp.seed = 42;
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 7 * BAR);
+    let got: Vec<u64> = triggers(&log).into_iter().map(|(_, c)| c).collect();
+    let want: Vec<u64> = (0..8)
+        .map(|n| 10 + pick_option(&step, 42, 0, 0, n) as u64)
+        .collect();
+    assert_eq!(got, want);
+}
+
+#[test]
+fn slot_reads_follow_the_condition_and_the_pick() {
+    use seq_core::model::{Pick, When};
+    // Slot lane, one bar: column 1 or 2 in turn; a second step on column 5 only on pass 2+.
+    let mut sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![lane(500, LaneEnd::LoopToEnd, &[(8, Slot(1)), (8, Slot(5))])],
+    );
+    sp.lanes[0].steps[0].choices = vec![Slot(2)];
+    sp.lanes[0].steps[0].pick = Pick::Cycle;
+    sp.lanes[0].steps[1].when = Some(When::NotFirst);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let cols = |s: &Scheduler, ahead| -> Vec<u32> {
+        s.slot_steps_ahead(ahead).iter().map(|u| u.column).collect()
+    };
+    // Step 2 of pass 1 does not play: nothing to read.
+    assert!(cols(&s, BAR).is_empty());
+    // Step 1 of pass 2 is its second play: column 2.
+    assert_eq!(cols(&s, 2 * BAR), [2]);
+    run(&mut s, start, 2 * BAR);
+    // Pass 2: step 2 plays (column 5), then step 1 plays the third time: column 1 again.
+    assert_eq!(cols(&s, BAR), [5]);
+    assert_eq!(cols(&s, 2 * BAR), [1]);
+    let log = run(&mut s, Vec::new(), 2 * BAR);
+    let played: Vec<_> = log
+        .iter()
+        .filter_map(|(t, a)| match a {
+            Action::TriggerSlot { column, .. } => Some((*t, *column)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(played, [(BAR, 5), (2 * BAR, 1)]);
 }
 
 /// (tick, column) of every slot trigger.
