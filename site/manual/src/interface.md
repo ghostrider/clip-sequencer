@@ -80,6 +80,14 @@ Below: **Start** (now / beat / bar / 2 · 4 · 8 · 16 bars: when a start begins
 The **ruler** numbers the bars, with eighth (and, zoomed in, sixteenth) ticks. Zoom with **Ctrl+mouse wheel** over
 the grid.
 
+**Sections** are named markers ("Intro", "Drop") shown as flags in the ruler with a line down through the lanes.
+Add one by right-clicking the ruler, or press **M** for one at the playhead (while it runs) or at the selected step.
+Drag a flag to move it (1/8 grid, **Shift** for 1/16), double-click it to rename, select it and press **Del** (or
+right-click it) to delete. A section beyond the end of the sequence is greyed out; shortening lanes never moves or
+deletes sections. They are only marks for you: they don't change what plays.
+
+**View → Guide lines** draws a dashed line every 8, 16 or 32 bars (or none); the choice is remembered.
+
 **Steps** are blocks as wide as their length, with the clip's thumbnail:
 
 | Look | Meaning |

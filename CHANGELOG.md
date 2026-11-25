@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Play on:** a step can play only on some passes (first, all but the first, last, all but the last, or pass A of
   every B); on the others it sends nothing.
 - **Choices:** up to 3 more clips (or columns, or rests) per step, picked at random or in turn each time it plays.
+- **Section markers** in the editor ("Intro", "Drop"): add with M or from the ruler, drag, rename, delete. View →
+  Guide lines draws a line every 8, 16 or 32 bars.
 
 ### Changed
 
