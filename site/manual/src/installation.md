@@ -61,6 +61,10 @@ From version 0.5.0 on the app looks for a new version once at each start. When t
 and install**, **Skip this version** (not offered at start-up again) or **Later** (asked again at the next start).
 **Help → Check for updates…** checks any time. Turn the check at start-up off in **Preferences → Updates**.
 
+![The update question after the check at start-up: the new version, its release notes and the choices](images/update-dialog.png)
+
+![Preferences, Updates tab: the check at start-up and Check now](images/prefs-updates.png)
+
 **Download and install** needs no sequence running or waiting. The app downloads the release from GitHub, checks it,
 quits and starts the new version in the same folder. If the new version doesn't start, the old one comes back and
 says why. This works when the `clip-sequencer` folder is one you unpacked from the release zip and can write to (not

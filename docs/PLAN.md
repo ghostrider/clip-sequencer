@@ -344,7 +344,8 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
 - [x] Test images: the Kodak Lossless True Color Image Suite (decided with Uli 2026-11-25; 24 JPEGs in
       `web/public/kodak`, README and licence list entry). Not "Lenna": it is not free of copyright (a 1972 Playboy
       photo) and many journals no longer accept it.
-- [ ] New screenshot `site/manual/src/images/luts-tab.png` (`site/screenshots.mjs`, needs Playwright).
+- [x] New screenshot `site/manual/src/images/luts-tab.png` (`site/screenshots.mjs`, needs Playwright); also the update
+      dialog, Preferences → Updates, and sections and badges in the editor and overview (2026-11-26).
 
 ## M28 — Remote Resolume (requested by Uli 2026-11-26)
 Resolume runs on a computer next to the projector (short HDMI cable), the sequencer on another one further away,

@@ -32,7 +32,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
   at a time").
 - The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
-  picture with a split to drag.
+  picture with a split to drag. It uses the whole width of the tab and is as high as the image needs.
+
+### Fixed
+
+- Step badges (Play on, choices) sit next to the length and no longer cover the clip name.
+- A disabled main button (such as **Download and install** when the app can't update itself) looks disabled.
+- The splash screen keeps its own size and stays centred instead of reopening at the main window's last size.
+- Picking a clip for a choice or a relink no longer shifts the clip browser down.
 - Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
   original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
 
