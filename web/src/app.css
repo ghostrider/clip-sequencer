@@ -5,7 +5,8 @@ button, input, select { font: inherit; }
 .mono { font-family: var(--mono); }
 .caps { font-family: var(--font-label); font-size: 11px; font-weight: 600; letter-spacing: var(--label-ls); text-transform: uppercase; color: var(--muted); }
 
-.app { min-height: 100vh; display: flex; flex-direction: column; }
+/* Exactly the window: the panels scroll inside, the page never does (the status bar stays at the bottom). */
+.app { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
 /* top bar */
 .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -138,7 +139,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .stepper { display: flex; align-items: center; gap: 6px; }
 .stepper output { font: 14px var(--mono); min-width: 120px; text-align: center; }
 
-.statusbar { display: flex; flex-wrap: wrap; gap: 18px; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); font: 11px var(--mono); color: var(--muted); }
+.statusbar { flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 18px; white-space: nowrap; overflow: hidden; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); font: 11px var(--mono); color: var(--muted); }
 
 /* modal: deck switch confirmation */
 .modal-backdrop { position: fixed; inset: 0; z-index: 30; background: var(--scrim); display: none; align-items: center; justify-content: center; }
@@ -158,8 +159,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .topbar .tab { min-height: 28px; padding: 0 10px; }
 .topbar .btn { min-height: 30px; }
 .banner { padding: 8px 16px; background: var(--err-bg); color: var(--err-text); border-bottom: 1px solid var(--err-line); font-size: 12px; }
-.body { min-height: 0; }
+.body { min-height: 0; overflow: hidden; }
 .editor { overflow: auto; }
+/* The app is exactly the window high (.app): the side columns scroll on their own. */
+.seqlist, .side { overflow-y: auto; min-height: 0; }
+.app > .mb-bar, .app > .topbar { flex: none; }
 .tab.orphaned { border-style: dashed; color: var(--err-text); }
 .tag.bad { color: var(--err-text); border: 1px solid var(--err-line); background: var(--err-bg); }
 .mosaic { object-fit: cover; background: var(--control); display: block; }

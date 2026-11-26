@@ -53,7 +53,7 @@
     </button>
   {/if}
   {#each notices as n, i (i + n)}
-    <span style:color={isProblem(n) ? 'var(--err-text)' : 'var(--muted)'}>{n}</span>
+    <span class="notice" title={n} style:color={isProblem(n) ? 'var(--err-text)' : 'var(--muted)'}>{n}</span>
   {/each}
   <span class="status-spacer"></span>
   <div class="chips sm">
@@ -71,6 +71,9 @@
 
 <style>
   .status-spacer { flex: 1 1 auto; }
+  /* One line always: notices give way (cut with …, whole text as tooltip), the chips never do. */
+  .notice { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips.sm { flex: none; }
   .chips.sm { gap: 4px; font-size: 10px; align-items: center; }
   .chips.sm .chip { padding: 1px 6px; gap: 4px; }
   .chips.sm .chip::before { width: 6px; height: 6px; }
