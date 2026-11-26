@@ -17,9 +17,10 @@ pub const LOG_FILE: &str = "update.log";
 /// The file the new version writes when its start-up is done.
 pub const OK_FILE: &str = "ok";
 
-/// How long the helper waits for the old app to quit, and for the new one's ok file (SPEC §15).
+/// How long the helper waits for the old app to quit, and for the new one's ok file (SPEC §15). A new version that
+/// quits before writing it is rolled back at once; the full wait is only for one that hangs.
 pub const WAIT_EXIT: Duration = Duration::from_secs(30);
-pub const WAIT_OK: Duration = Duration::from_secs(60);
+pub const WAIT_OK: Duration = Duration::from_secs(30);
 
 /// What the helper does to processes; real ones in [`SystemProcs`].
 pub trait Procs {
@@ -29,6 +30,8 @@ pub trait Procs {
     fn spawn(&mut self, exe: &Path, args: &[String]) -> std::io::Result<u32>;
     /// Ends a process started by [`Procs::spawn`] (best effort).
     fn kill(&mut self, handle: u32);
+    /// Whether a process started by [`Procs::spawn`] has already ended, and with which exit code.
+    fn exited(&mut self, handle: u32) -> Option<Option<i32>>;
     fn sleep(&mut self, d: Duration);
 }
 
@@ -147,6 +150,17 @@ pub fn apply(plan: &Plan, procs: &mut dyn Procs, wait_ok: Duration) -> Outcome {
         log.line(format!("started {} {}", plan.restart, plan.to));
         let deadline = Instant::now() + wait_ok;
         while !ok.is_file() {
+            // Quit before reporting ok (a crash at start-up): no point waiting for the deadline.
+            if let Some(code) = started.and_then(|h| procs.exited(h)) {
+                if ok.is_file() {
+                    break;
+                }
+                return Err(format!(
+                    "{} quit right after starting ({})",
+                    plan.to,
+                    code.map_or("no exit code".to_owned(), |c| format!("exit code {c}"))
+                ));
+            }
             if Instant::now() >= deadline {
                 return Err(format!(
                     "{} did not start within {} s",
@@ -259,6 +273,14 @@ impl Procs for SystemProcs {
         }
     }
 
+    fn exited(&mut self, handle: u32) -> Option<Option<i32>> {
+        let c = self.children.get_mut(handle as usize)?;
+        match c.try_wait() {
+            Ok(Some(status)) => Some(status.code()),
+            _ => None,
+        }
+    }
+
     fn sleep(&mut self, d: Duration) {
         std::thread::sleep(d);
     }
@@ -302,6 +324,8 @@ mod tests {
     struct Fake {
         old_quits: bool,
         new_reports_ok: bool,
+        /// The new version quits at once without reporting ok (exit code 1).
+        new_quits: bool,
         spawn_fails_for: Option<String>,
         spawned: Vec<(PathBuf, Vec<String>)>,
         killed: Vec<u32>,
@@ -312,6 +336,7 @@ mod tests {
             Fake {
                 old_quits: true,
                 new_reports_ok: true,
+                new_quits: false,
                 spawn_fails_for: None,
                 spawned: Vec::new(),
                 killed: Vec::new(),
@@ -341,6 +366,9 @@ mod tests {
         }
         fn kill(&mut self, h: u32) {
             self.killed.push(h);
+        }
+        fn exited(&mut self, _h: u32) -> Option<Option<i32>> {
+            self.new_quits.then_some(Some(1))
         }
         fn sleep(&mut self, _d: Duration) {}
     }
@@ -395,6 +423,27 @@ mod tests {
         assert_eq!(exe, &plan.target.join("seq-app.exe"));
         assert_eq!(args[0], "--no-splash");
         assert_eq!(args[1], "--after-update");
+    }
+
+    /// A new version that quits at start-up is rolled back at once, not after the whole wait.
+    #[test]
+    fn a_new_version_that_quits_at_once_is_rolled_back_at_once() {
+        let (_tmp, plan) = setup();
+        let mut fake = Fake::new();
+        fake.new_reports_ok = false;
+        fake.new_quits = true;
+        let t = Instant::now();
+        let out = apply(&plan, &mut fake, Duration::from_secs(3600));
+        assert!(
+            t.elapsed() < Duration::from_secs(5),
+            "no waiting for the deadline"
+        );
+        assert!(
+            matches!(&out, Outcome::RolledBack(w) if w.contains("quit right after starting (exit code 1)")),
+            "{out:?}"
+        );
+        assert_eq!(read(&plan.target.join("seq-app.exe")), "gui 0.5.0");
+        assert!(fake.spawned[1].1.iter().any(|a| a == "--update-failed"));
     }
 
     #[test]

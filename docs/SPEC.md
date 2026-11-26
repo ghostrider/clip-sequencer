@@ -936,7 +936,8 @@ user can check by hand any time; an update is installed from the app. The first 
 - The new version writes the ok file when its start-up is done ("Ready") and before it saves any sequence file (so a
   rolled-back older version still reads them, §6). It shows *Updated to 0.5.1* and deletes leftover
   `clip-sequencer-update-*` temp folders.
-- **Rollback:** no ok file within 60 s, or a step failing (a file in use, disk full) → the helper stops the new
+- **Rollback:** the new version quits before writing the ok file (at once), no ok file within 30 s (a hang;
+  60 s until 2026-11-26), or a step failing (a file in use, disk full) → the helper stops the new
   process if it runs, removes the new files, moves the backup back and starts the old exe with
   `--update-failed <reason>`; the old version shows *Update to 0.5.1 failed: <reason>. Still 0.5.0.*
 - With the ok file the helper deletes `.update-backup`. Its own log: `.update-backup\update.log` while it runs,

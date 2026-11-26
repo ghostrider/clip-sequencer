@@ -220,7 +220,7 @@ Tasks:
 - [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
       changelog, landing page.
 
-## M14 — In-app update  (planned 2026-11-04; built 2026-11-25, Windows test with Uli open; SPEC §15)
+## M14 — In-app update  (planned 2026-11-04; built 2026-11-25; Windows test passed 2026-11-26; SPEC §15)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.
 
@@ -255,7 +255,10 @@ Tasks (to refine when it starts):
 - [x] Download, verification and binary replacement (helper = the new seq-app-cli, decided 2026-11-25), with
       rollback; `scripts/fake-update-source.mjs` and `--update-source` for testing (docs/RELEASING.md).
 - [x] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
-- [ ] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin.
+- [x] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin
+      (with Uli 2026-11-26, 0.4.0 → 0.4.1, all passed), and the rollback (a broken 0.4.2: the old version came
+      back). Found: the helper waited the full 60 s for a version that had already quit; now it rolls back at once
+      when the new version quits, and waits 30 s for one that hangs.
 
 ---
 
