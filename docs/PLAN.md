@@ -357,6 +357,17 @@ connected over Ethernet. Today everything assumes one machine (`127.0.0.1`), alt
       "Resolume running" detection and FFGL install/update (local only), latency compensation per host.
 - [ ] Build, docs (manual: two-machine setup), live check with Uli.
 
+## M29 — UI access from other computers (requested by Uli 2026-11-26)
+Today the UI server answers only on `127.0.0.1` (SPEC §12.2). Let another computer on the network open the UI.
+- [ ] SPEC section: a setting "Allow access from other computers", **off by default**, in the Preferences dialog
+      (and a command-line flag); when on, the server also listens on the network (all interfaces or a chosen
+      one); what it means for security (anyone on the network can control the show: access key or PIN?, the
+      Origin check of §12.2 with other hosts, a warning in the dialog, Windows firewall prompt); does a change
+      apply at once or after a restart; the address to open shown in Preferences.
+- [ ] Build: setting in the preferences file, bind address in `seq-app`, Preferences UI, tests (off: no answer
+      on the LAN address; on: answers, foreign Origin still refused).
+- [ ] Docs: manual (Preferences, privacy/security), README, SECURITY.md, changelog. Shares the network part with M28.
+
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
 ## Release 0.5.0 — before tagging
