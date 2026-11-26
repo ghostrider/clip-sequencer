@@ -248,6 +248,23 @@ impl Harness {
         }
     }
 
+    /// Clears the mock's OSC log once nothing new has arrived for 100 ms (at most 3 s): OSC is UDP, so
+    /// messages sent before the clear can still be on their way and would land after it (seen on CI).
+    /// Only for moments without a running clock.
+    async fn clear_osc_log_when_quiet(&self) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut len = self.mock.osc_log().len();
+        while Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let now = self.mock.osc_log().len();
+            if now == len {
+                break;
+            }
+            len = now;
+        }
+        self.mock.clear_osc_log();
+    }
+
     fn cmd(&self, c: EngineCommand) {
         self.app.commands.send(c).unwrap();
     }
@@ -476,7 +493,7 @@ async fn cue_replaces_what_plays_and_mute_silences_a_lane() {
     assert!(r.pending.is_empty());
 
     // Mute lane 0 (L2): cleared at once, then silent; unmuted it plays at its next step (tick 96).
-    h.mock.clear_osc_log();
+    h.clear_osc_log_when_quiet().await;
     h.ticks(10);
     h.cmd(EngineCommand::SetLaneMute {
         seq: SEQ_A,
@@ -733,7 +750,7 @@ async fn manual_trigger_on_an_owned_layer_yields_the_lane() {
         "{:?}",
         r.notices
     );
-    h.mock.clear_osc_log();
+    h.clear_osc_log_when_quiet().await;
     h.ticks(48);
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(h.mock.osc_log().is_empty(), "yielded lane must not trigger");
