@@ -346,6 +346,17 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       photo) and many journals no longer accept it.
 - [ ] New screenshot `site/manual/src/images/luts-tab.png` (`site/screenshots.mjs`, needs Playwright).
 
+## M28 — Remote Resolume (requested by Uli 2026-11-26)
+Resolume runs on a computer next to the projector (short HDMI cable), the sequencer on another one further away,
+connected over Ethernet. Today everything assumes one machine (`127.0.0.1`), although `--resolume-host` exists.
+- [ ] Probe with Uli on two machines: REST, WebSocket and OSC to Resolume over the LAN (Resolume's web server and
+      OSC input bound to the network, firewall), latency and jitter of OSC triggers, thumbnails; notes new §.
+- [ ] SPEC section: what works remotely and what needs the Resolume machine — files Resolume must read from its own
+      disk (LUT `.cube` files, M18; media dropped onto slots, M13), the FFGL plugin, which polls the sequencer on
+      localhost (§12: needs the sequencer's address and the UI server bound beyond `127.0.0.1`, see its security note),
+      "Resolume running" detection and FFGL install/update (local only), latency compensation per host.
+- [ ] Build, docs (manual: two-machine setup), live check with Uli.
+
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
 ## Release 0.5.0 — before tagging
