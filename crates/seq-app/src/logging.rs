@@ -7,7 +7,8 @@
 //!
 //! Logging never blocks the caller (the engine logs on its timing path): the ring is a short
 //! mutex push, the broadcast never waits, and the writer queue is `try_send`. Records that do not
-//! fit are dropped and counted ([`stats`]). Filtering follows `RUST_LOG` (default `info`).
+//! fit are dropped and counted ([`stats`]). Filtering follows `RUST_LOG` (default `info`); Preferences →
+//! "Log debug messages" ([`set_debug`]) adds the app's own DEBUG records on top of it, at runtime.
 //!
 //! Live subscribers get DEBUG/TRACE records only from the app's own crates ([`is_live`]): the
 //! WebSocket and HTTP crates log every frame at TRACE, so forwarding theirs to the Console would
@@ -17,7 +18,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
@@ -73,6 +74,8 @@ pub struct LogConfig {
 
 struct State {
     filter: env_filter::Filter,
+    /// Preferences → Log debug messages: DEBUG records of the app's own crates pass whatever `filter` says.
+    debug: AtomicBool,
     ring: Mutex<VecDeque<LogRecord>>,
     live: broadcast::Sender<LogRecord>,
     writer: SyncSender<WriterMsg>,
@@ -88,12 +91,12 @@ struct Logger;
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        STATE.get().is_some_and(|s| s.filter.enabled(metadata))
+        STATE.get().is_some_and(|s| s.passes(metadata))
     }
 
     fn log(&self, record: &log::Record<'_>) {
         let Some(state) = STATE.get() else { return };
-        if !state.filter.matches(record) {
+        if !state.passes(record.metadata()) {
             return;
         }
         let rec = LogRecord {
@@ -124,6 +127,30 @@ impl log::Log for Logger {
     fn flush(&self) {}
 }
 
+impl State {
+    fn passes(&self, metadata: &log::Metadata<'_>) -> bool {
+        self.filter.enabled(metadata)
+            || (metadata.level() == log::Level::Debug
+                && self.debug.load(Ordering::Relaxed)
+                && is_own(metadata.target()))
+    }
+}
+
+/// Preferences → Log debug messages: also log the app's own DEBUG records (OSC sends, trigger confirmations…),
+/// to the Console tab and the log file. `RUST_LOG` still decides everything else.
+pub fn set_debug(on: bool) {
+    let Some(state) = STATE.get() else { return };
+    if state.debug.swap(on, Ordering::Relaxed) != on {
+        log::info!("debug messages {}", if on { "on" } else { "off" });
+    }
+    let base = state.filter.filter();
+    log::set_max_level(if on {
+        base.max(log::LevelFilter::Debug)
+    } else {
+        base
+    });
+}
+
 /// Installs the logger. Call once, before anything logs; later calls are ignored.
 pub fn init(cfg: LogConfig) {
     let mut builder = env_filter::Builder::new();
@@ -139,6 +166,7 @@ pub fn init(cfg: LogConfig) {
     }
     let state = State {
         filter,
+        debug: AtomicBool::new(false),
         ring: Mutex::new(VecDeque::with_capacity(RING)),
         live: broadcast::channel(BROADCAST).0,
         writer,
@@ -161,10 +189,14 @@ const OWN_CRATES: [&str; 4] = ["seq_app", "seq_core", "resolume_client", "clock_
 
 /// Whether a record goes to live subscribers (see the module docs).
 pub fn is_live(level: log::Level, target: &str) -> bool {
-    level <= log::Level::Info
-        || OWN_CRATES
-            .iter()
-            .any(|c| target == *c || target.strip_prefix(c).is_some_and(|r| r.starts_with("::")))
+    level <= log::Level::Info || is_own(target)
+}
+
+/// A target in one of the app's own crates.
+fn is_own(target: &str) -> bool {
+    OWN_CRATES
+        .iter()
+        .any(|c| target == *c || target.strip_prefix(c).is_some_and(|r| r.starts_with("::")))
 }
 
 /// The ring buffer, oldest first.

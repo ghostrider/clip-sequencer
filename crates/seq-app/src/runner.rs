@@ -114,6 +114,7 @@ pub async fn run(
     })?;
     // The clock source and MIDI port: --clock / --midi-port for this run, else Preferences.
     let settings = crate::settings::Settings::load(&data_dir);
+    crate::logging::set_debug(settings.debug_log);
     let clock_source = config.clock.unwrap_or(settings.clock_source);
     let midi_port = config.midi_port.clone().or(settings.midi_port);
     let storage = Storage::new(data_dir);

@@ -34,8 +34,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
   picture with a split to drag. It uses the whole width of the tab and is as high as the image needs.
 
+- **Log debug messages** (Preferences → Log): every OSC message sent to Resolume and each trigger's confirmation
+  go to the Console tab and the log file, with their times. Off by default; applies at once. They are no longer
+  shown in the status bar.
+
 ### Fixed
 
+- The **OSC** chip turns red when Resolume ignores the triggers (for example with its OSC input off): before, it
+  stayed green because sending over OSC succeeds whether or not anyone listens.
 - Step badges (Play on, choices) sit next to the length and no longer cover the clip name.
 - A disabled main button (such as **Download and install** when the app can't update itself) looks disabled.
 - The splash screen keeps its own size and stays centred instead of reopening at the main window's last size.

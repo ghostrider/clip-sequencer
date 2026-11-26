@@ -317,6 +317,43 @@ async fn two_lane_sequence_plays_on_exact_ticks_and_is_confirmed() {
     h.app.shutdown().await;
 }
 
+/// SPEC §9.5: OSC is UDP, so a send that works says nothing. With Resolume's OSC input off, triggers time out
+/// while the WebSocket is fine: after a few in a row the OSC indicator turns red with a notice, and the next
+/// confirmed trigger turns it green again.
+#[tokio::test]
+async fn osc_indicator_turns_red_when_resolume_ignores_triggers() {
+    let h = harness().await;
+    // Ticks as a steady stream (a pause would freeze the sequences): a step every sixteenth, ~120 ms.
+    async fn ticks_until(h: &Harness, pred: impl Fn(&RuntimeState) -> bool) -> RuntimeState {
+        for _ in 0..150 {
+            h.ticks(1);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let r = h.app.outputs.runtime.borrow().clone();
+            if pred(&r) {
+                return r;
+            }
+        }
+        panic!("runtime state never matched");
+    }
+
+    h.mock.set_osc_input(false);
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.running.len() == 1).await;
+    let r = ticks_until(&h, |r| r.osc_unanswered).await;
+    assert!(r.osc, "sending itself works");
+    assert!(r.ws, "the WebSocket is fine");
+    assert!(
+        r.notices.iter().any(|n| n.contains("doesn't react to OSC")),
+        "{:?}",
+        r.notices
+    );
+
+    h.mock.set_osc_input(true);
+    let r = ticks_until(&h, |r| !r.osc_unanswered).await;
+    assert!(r.notices.iter().any(|n| n.contains("reacts to OSC again")));
+    h.app.shutdown().await;
+}
+
 /// SPEC §3.2: a sequence with start mode `bar` waits for the next bar of the bar phase; ▶ again
 /// starts it at once, Stop cancels, MIDI Start sets the phase (and never starts anything).
 #[tokio::test]
@@ -2171,7 +2208,7 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     let first = appearance(&mut a, |_| true).await;
     assert_eq!(
         first,
-        json!({"theme": null, "custom_themes": [], "guide_lines": null})
+        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false})
     );
 
     let theme = json!({
@@ -2229,6 +2266,14 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     );
     send(&mut a, json!({"cmd": "set_guide_lines", "every": null})).await;
     appearance(&mut b, |d| d["guide_lines"].is_null()).await;
+
+    // Preferences → Log debug messages: saved and sent to every UI.
+    send(&mut a, json!({"cmd": "set_debug_log", "on": true})).await;
+    appearance(&mut b, |d| d["debug_log"] == true).await;
+    assert!(seq_app::settings::Settings::load(dir.path()).debug_log);
+    send(&mut a, json!({"cmd": "set_debug_log", "on": false})).await;
+    appearance(&mut b, |d| d["debug_log"] == false).await;
+    assert!(!seq_app::settings::Settings::load(dir.path()).debug_log);
     app.shutdown().await;
 }
 

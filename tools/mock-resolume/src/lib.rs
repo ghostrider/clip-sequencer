@@ -85,6 +85,8 @@ pub struct Shared {
     ws_silent: bool,
     /// How long received OSC waits before it takes effect (a Resolume busy loading a clip).
     osc_delay: Arc<Mutex<Duration>>,
+    /// OSC input switched off in "Resolume": packets arrive and are ignored.
+    osc_off: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Shared {
@@ -150,6 +152,13 @@ impl Mock {
     /// From now on, OSC takes effect this much later (`ZERO` = at once).
     pub fn set_osc_delay(&self, delay: Duration) {
         *self.shared.osc_delay.lock().unwrap() = delay;
+    }
+
+    /// Switches "Resolume's" OSC input off or on: while off, received OSC is ignored (nothing logged, no effect).
+    pub fn set_osc_input(&self, on: bool) {
+        self.shared
+            .osc_off
+            .store(!on, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Simulates a click on a clip in Resolume's UI.
@@ -231,6 +240,7 @@ pub async fn start(cfg: MockConfig) -> anyhow::Result<Mock> {
         push_pending: Arc::new(Mutex::new(false)),
         ws_silent: cfg.ws_silent,
         osc_delay: Arc::new(Mutex::new(Duration::ZERO)),
+        osc_off: Arc::default(),
     };
 
     let udp = UdpSocket::bind(cfg.osc_addr).await?;
@@ -416,6 +426,9 @@ async fn osc_loop(sock: UdpSocket, sh: Shared) {
         let Ok((n, _)) = sock.recv_from(&mut buf).await else {
             continue;
         };
+        if sh.osc_off.load(std::sync::atomic::Ordering::Relaxed) {
+            continue;
+        }
         let at = Instant::now();
         let Ok((_, packet)) = rosc::decoder::decode_udp(&buf[..n]) else {
             continue;

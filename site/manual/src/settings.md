@@ -65,5 +65,6 @@ password; any program on the computer can use it, like Resolume's own webserver.
 ## Logging
 
 Logs go to the Console tab and to daily files in `logs\` in the data folder (kept for 7 days). For more detail,
-set the environment variable `RUST_LOG=debug` before starting; then every OSC message is logged with its exact
-time.
+switch on **Preferences → Log → Log debug messages**: every OSC message sent to Resolume and each trigger's
+confirmation are logged, with their times. It applies at once; turn it off for a show. (`RUST_LOG=debug` before
+starting also works, and adds the debug messages of the libraries the app uses.)

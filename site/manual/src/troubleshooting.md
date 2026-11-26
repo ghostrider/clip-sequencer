@@ -25,6 +25,9 @@ With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
 ## REST, WS or OSC is red
 
 - Resolume isn't running, or its webserver or OSC input is off: see [Setting up Resolume](resolume-setup.md).
+- **Only OSC is red, and clips don't start:** the sequencer sends its triggers, but Resolume doesn't react. In
+  Resolume, **Preferences → OSC**: switch on *OSC Input*, port `7000`. (OSC can't tell whether anyone listens, so
+  the chip turns red only after a few triggers went unanswered.)
 - The ports differ: Resolume's webserver port must match `--rest-port` (8080), its OSC input `--osc-port` (7000).
 - The sequencer retries by itself; the chips turn green once Resolume answers.
 

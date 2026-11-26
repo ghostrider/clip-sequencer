@@ -266,7 +266,11 @@ pub struct RuntimeState {
     /// Every parameter subscription is acknowledged: clip state changes will be seen.
     pub ws_synced: bool,
     pub rest: bool,
+    /// The last OSC send worked on this computer (UDP: says nothing about Resolume hearing it).
     pub osc: bool,
+    /// Several triggers in a row were sent but never confirmed while the WebSocket was up: Resolume's
+    /// OSC input is probably off or on another port.
+    pub osc_unanswered: bool,
     pub running: Vec<RunView>,
     /// Starts waiting for their beat or bar (SPEC §3.2), in the order they were made.
     pub pending: Vec<PendingView>,

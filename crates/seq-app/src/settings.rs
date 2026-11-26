@@ -113,6 +113,9 @@ pub struct Settings {
     /// Check for updates at start-up (SPEC §15); `None` = on (the default), `Some(false)` = off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_check: Option<bool>,
+    /// Preferences → Log debug messages: the app's own DEBUG records go to the Console tab and the log file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub debug_log: bool,
     /// A version the user chose to skip at the start-up question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_skipped: Option<String>,
@@ -180,6 +183,7 @@ mod tests {
             custom_themes: vec![theme("custom-1a2b")],
             guide_lines: Some(16),
             update_check: Some(false),
+            debug_log: true,
             update_skipped: Some("0.5.1".into()),
         };
         s.save(dir.path()).unwrap();

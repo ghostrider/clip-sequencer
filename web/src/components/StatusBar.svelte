@@ -30,7 +30,7 @@
   let current = $derived(app.run(app.selectedSeq) ?? rt?.running[0] ?? null);
   let notices = $derived((rt?.notices ?? []).slice(-3));
   function isProblem(n: string) {
-    return /yielded|failed|rejected|not confirmed|no clock|lost|problem|cannot|matches no|disconnected/i.test(n);
+    return /yielded|failed|rejected|not confirmed|no clock|lost|problem|cannot|matches no|disconnected|doesn't react/i.test(n);
   }
 </script>
 
@@ -42,12 +42,6 @@
   {/if}
   {#if rt?.switching}
     <span style="color:var(--accent-text)">switching to {rt.switching.deck}…</span>
-  {/if}
-  {#if rt?.last_osc}
-    <span>last OSC → {rt.last_osc.addr} · {(rt.last_osc.send_us / 1000).toFixed(1)} ms</span>
-  {/if}
-  {#if rt?.last_confirm}
-    <span style="color:var(--info-text)">WS {rt.last_confirm}</span>
   {/if}
   {#if rt?.save_error}
     <span style="color:var(--err-text)">save failed: {rt.save_error}</span>
@@ -67,7 +61,11 @@
       onclick={() => { app.prefsTab = 'clock'; app.prefsOpen = true; }}>{clockText}</button>
     <span class="chip" class:bad={!rt?.rest} title="Resolume REST API">REST</span>
     <span class="chip" class:bad={!rt?.ws} title="Resolume WebSocket">WS</span>
-    <span class="chip" class:bad={!rt?.osc} title="OSC to Resolume">OSC</span>
+    <!-- Red when sending fails here, or when Resolume ignores the triggers (UDP: sending alone can't tell). -->
+    <span class="chip" class:bad={!rt?.osc || rt?.osc_unanswered}
+      title={!rt?.osc ? 'OSC to Resolume: sending fails'
+        : rt?.osc_unanswered ? "OSC to Resolume: sent, but Resolume doesn't react. Is OSC Input on in Resolume (Preferences → OSC), on the port the sequencer sends to?"
+        : 'OSC to Resolume'}>OSC</span>
   </div>
 </footer>
 

@@ -66,12 +66,12 @@ class AppState {
   /** Preferences dialog (clock source and MIDI input, theme). */
   prefsOpen = $state(false);
   /** Preferences tab shown when it opens (the clock chip opens the Clock tab). */
-  prefsTab = $state<'clock' | 'appearance' | 'updates'>('clock');
+  prefsTab = $state<'clock' | 'appearance' | 'updates' | 'log'>('clock');
   /** In-app update state (SPEC §15) and whether its dialog is open. */
   update = $state<UpdateView | null>(null);
   updateOpen = $state(false);
   /** Theme settings from the app (SPEC §9.7). */
-  appearance = $state<Appearance>({ theme: null, custom_themes: [], guide_lines: null });
+  appearance = $state<Appearance>({ theme: null, custom_themes: [], guide_lines: null, debug_log: false });
   /** True while Preferences shows a theme that is not saved yet: updates from the app do not repaint. */
   themePreview = false;
   /** Info dialogs of the Help menu (M11 Phase F); one at a time. */

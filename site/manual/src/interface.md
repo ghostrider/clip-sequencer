@@ -135,12 +135,15 @@ For a step of a slot lane it shows the column and the clip in it now instead ([S
 
 ## Status bar
 
-The bottom line shows what is playing and where (`bar.beat`), the last trigger sent to Resolume and its
-confirmation, and notices: a lane that yielded, a failed trigger, a problem with a file.
+The bottom line shows what is playing and where (`bar.beat`) and notices: a lane that yielded, a failed trigger,
+a problem with a file. Each trigger sent to Resolume and its confirmation can be logged in the Console tab
+(**Preferences → Log → Log debug messages**).
 
 On its right are the **connection chips**: **CLOCK** (MIDI clock, with BPM; **RESOLUME** when it follows
 Resolume's tempo), **REST**, **WS** and **OSC** (Resolume). Green is fine, red needs attention
-([Troubleshooting](troubleshooting.md)). Click the clock chip to choose the clock ([Setting up the clock](clock.md)).
+([Troubleshooting](troubleshooting.md)). **OSC** also turns red when Resolume ignores the triggers (they are sent
+but never start a clip), typically because Resolume's OSC input is off. Click the clock chip to choose the clock
+([Setting up the clock](clock.md)).
 
 ## Console tab
 

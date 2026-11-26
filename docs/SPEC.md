@@ -616,10 +616,14 @@ Single screen, everything controlled from here (no separate live view).
   thumbnails and resolution status, add, remove, reorder, relink each; pick random / cycle).
 
 ### 9.5 Status bar
-Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,
-last WebSocket confirmation, yield and error notices. On the right, small connection chips: CLOCK (BPM, locked /
-no clock; click opens Preferences → Clock), REST, WS, OSC — green when OK, red when not (moved here from the top
-bar, 2026-11-22).
+Current sequence and position (`bar.beat`, tick), yield and error notices. On the right, small connection chips:
+CLOCK (BPM, locked / no clock; click opens Preferences → Clock), REST, WS, OSC — green when OK, red when not (moved
+here from the top bar, 2026-11-22). OSC is UDP, so a send that works says nothing about Resolume hearing it: OSC is
+also red when 3 triggers in a row time out (§7.5) while the WebSocket is up and subscribed (OSC input off, wrong
+port), with a notice; the next confirmed trigger turns it green (2026-11-26).
+The last OSC message and the last confirmation are no longer shown here (2026-11-26): they are DEBUG log lines,
+in the Console tab and the log file when Preferences → Log → **Log debug messages** is on (`debug_log` in
+`settings.json`, off by default; applies at once; adds the app's own DEBUG records to what `RUST_LOG` allows).
 
 Menu bar (File, View, Help) above the top bar, in the browser UI and in the desktop app (no native menu since
 2026-11-22, so it follows the theme); desktop actions go to the shell as `shell` commands (§9.6).
@@ -672,10 +676,10 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
   `{ source, port, connected, running, bpm, transport, synced }`: with the Resolume source `connected` means
   the WebSocket is up with a tempo controller, `bpm` is Resolume's tempo, `transport` its `Play`/`Pause`/`Stop`
   and `synced` true after a resync (`transport` `null` and `synced` false with MIDI).
-- Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes }` on connect and after every
+- Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes, guide_lines, debug_log }` on connect and after every
   change (to every connected UI). UI → engine `{"cmd": "set_theme", "id": "<id>" | null}` (`null` = default),
   `{"cmd": "save_theme", "theme": {...}, "select": bool}` (adds, or replaces the one with the same id),
-  `{"cmd": "delete_theme", "id": "<id>"}`. Commands of one UI are applied in the order sent; refused ones
+  `{"cmd": "delete_theme", "id": "<id>"}`, `{"cmd": "set_debug_log", "on": bool}` (§9.5). Commands of one UI are applied in the order sent; refused ones
   (bad id, name or colour, more than 50 saved themes) leave the settings unchanged and show a notice.
 - `GET /api/version`: `{ app, name, version, build, commit, ui_port, desktop }` (`desktop`: running in the
   shell's window). Also used by a second instance to detect a running one (M12 Phase B).

@@ -281,6 +281,8 @@ pub struct Engine {
     ws_connected: bool,
     rest_ok: bool,
     osc_ok: bool,
+    /// Triggers timed out in a row while Resolume could have confirmed them; reset by any confirmation.
+    unanswered_triggers: u32,
     last_osc: Option<OscView>,
     last_confirm: Option<String>,
     confirmations: u64,
@@ -303,6 +305,9 @@ const RESUBSCRIBE_AFTER: Duration = Duration::from_secs(1);
 /// How long a timed-out trigger's late `connected` still counts as ours (seen live: ~700 ms while
 /// Resolume was busy).
 const LATE_LIMIT: Duration = Duration::from_secs(5);
+/// Triggers in a row that time out, with the WebSocket up and subscribed, before the OSC indicator turns red:
+/// OSC is UDP, so a send that works says nothing about Resolume hearing it (OSC input off, wrong port).
+const OSC_UNANSWERED_AFTER: u32 = 3;
 
 impl Engine {
     pub fn new(
@@ -363,6 +368,7 @@ impl Engine {
             ws_connected: false,
             rest_ok: false,
             osc_ok: true,
+            unanswered_triggers: 0,
             last_osc: None,
             last_confirm: None,
             confirmations: 0,
@@ -563,6 +569,8 @@ impl Engine {
                     self.notice("Resolume WebSocket disconnected");
                 }
                 self.ws_connected = false;
+                // Without the WebSocket nothing can be confirmed: the OSC verdict starts over.
+                self.unanswered_triggers = 0;
                 // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
                 self.phase_synced = false;
                 if self.follows_resolume() {
@@ -954,7 +962,17 @@ impl Engine {
                 confirmed.push((p.seq, p.lane, p.step, latency));
             }
         }
+        if !confirmed.is_empty() && self.unanswered_triggers > 0 {
+            if self.osc_unanswered() {
+                self.notice("Resolume reacts to OSC again");
+            }
+            self.unanswered_triggers = 0;
+        }
         for (seq, lane, step, latency) in &confirmed {
+            log::debug!(
+                "trigger of clip {clip_id} (lane {lane}, step {step}) confirmed after {:.1} ms",
+                latency.as_secs_f64() * 1000.0
+            );
             if let Some(v) = self.not_confirmed.get_mut(&(*seq, *lane)) {
                 v.retain(|s| s != step);
             }
@@ -1626,13 +1644,21 @@ impl Engine {
     }
 
     fn osc_sent(&mut self, addr: String, took: Duration) {
-        log::debug!("OSC {addr}");
+        log::debug!(
+            "OSC → {addr} (sent in {:.1} ms)",
+            took.as_secs_f64() * 1000.0
+        );
         self.osc_ok = true;
         self.last_osc = Some(OscView {
             addr,
             send_us: took.as_micros() as u64,
         });
         self.runtime_dirty = true;
+    }
+
+    /// Several triggers in a row went unanswered although Resolume was listening on the WebSocket.
+    fn osc_unanswered(&self) -> bool {
+        self.unanswered_triggers >= OSC_UNANSWERED_AFTER
     }
 
     fn osc_error(&mut self, e: std::io::Error) {
@@ -1842,6 +1868,16 @@ impl Engine {
                 .or_default()
                 .push(step);
             self.runtime_dirty = true;
+            // Only when Resolume could have confirmed it: WebSocket up and every subscription answered.
+            if self.ws_connected && self.unacked.is_empty() {
+                self.unanswered_triggers += 1;
+                if self.unanswered_triggers == OSC_UNANSWERED_AFTER {
+                    self.notice(
+                        "Resolume doesn't react to OSC triggers: is OSC Input on in Resolume \
+                         (Preferences → OSC), on the port the sequencer sends to?",
+                    );
+                }
+            }
         }
         let bpm = self
             .clock_running
@@ -2169,6 +2205,7 @@ impl Engine {
             ws_synced: self.ws_connected && self.index.is_some() && self.unacked.is_empty(),
             rest: self.rest_ok,
             osc: self.osc_ok,
+            osc_unanswered: self.osc_unanswered(),
             running,
             pending,
             switching: self.switch.as_ref().map(|s| SwitchView {

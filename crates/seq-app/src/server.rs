@@ -61,14 +61,16 @@ pub struct ServerCtx {
     pub update: Arc<crate::update_ctl::UpdateCtl>,
 }
 
-/// The look part of the settings, as sent to the UI (`appearance` message): theme and the
-/// editor's guide lines.
+/// The UI part of the settings, as sent to every UI (`appearance` message): theme, the editor's guide lines
+/// and whether debug messages are logged.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Appearance {
     pub theme: Option<String>,
     pub custom_themes: Vec<CustomTheme>,
     /// Guide lines every this many bars (SPEC §9.3); `None` = off.
     pub guide_lines: Option<u32>,
+    /// Preferences → Log debug messages.
+    pub debug_log: bool,
 }
 
 impl From<&Settings> for Appearance {
@@ -77,6 +79,7 @@ impl From<&Settings> for Appearance {
             theme: s.theme.clone(),
             custom_themes: s.custom_themes.clone(),
             guide_lines: s.guide_lines,
+            debug_log: s.debug_log,
         }
     }
 }
@@ -443,6 +446,10 @@ enum ClientMsg {
     SetGuideLines {
         every: Option<u32>,
     },
+    /// Preferences → Log debug messages (applies at once).
+    SetDebugLog {
+        on: bool,
+    },
     /// LUT tab (SPEC §14): a new LUT, a copy of `from` or one that changes nothing.
     LutCreate {
         name: String,
@@ -554,7 +561,8 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                         cmd @ (ClientMsg::SetTheme { .. }
                         | ClientMsg::SaveTheme { .. }
                         | ClientMsg::DeleteTheme { .. }
-                        | ClientMsg::SetGuideLines { .. }),
+                        | ClientMsg::SetGuideLines { .. }
+                        | ClientMsg::SetDebugLog { .. }),
                     ) => {
                         theme_command(&ctx, cmd).await;
                         continue;
@@ -746,6 +754,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
         | ClientMsg::SaveTheme { .. }
         | ClientMsg::DeleteTheme { .. }
         | ClientMsg::SetGuideLines { .. }
+        | ClientMsg::SetDebugLog { .. }
         | ClientMsg::LutCreate { .. }
         | ClientMsg::LutRename { .. }
         | ClientMsg::LutDelete { .. }
@@ -921,6 +930,14 @@ async fn theme_command(ctx: &ServerCtx, cmd: ClientMsg) {
                     );
                 }
                 s.guide_lines = every;
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SetDebugLog { on } => {
+            crate::logging::set_debug(on);
+            update_appearance(ctx, move |s| {
+                s.debug_log = on;
                 Ok(())
             })
             .await;
@@ -1209,6 +1226,10 @@ mod tests {
         assert!(matches!(
             p(r#"{"cmd":"set_guide_lines","every":null}"#.into()),
             ClientMsg::SetGuideLines { every: None }
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_debug_log","on":true}"#.into()),
+            ClientMsg::SetDebugLog { on: true }
         ));
         assert!(matches!(
             p(format!(
