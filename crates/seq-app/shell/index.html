@@ -25,9 +25,13 @@
   body.fade { opacity: 0; }
   .frame { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; padding: 28px 32px 18px;
     border: 1px solid var(--line-strong); }
-  .mark { font: 600 15px var(--mono); letter-spacing: .08em; color: var(--accent); }
-  h1 { margin: 10px 0 2px; font-size: 26px; font-weight: 600; letter-spacing: .01em; }
-  .version { font: 12px var(--mono); color: var(--muted); }
+  /* The logo (logo/cs_logo.png, white on transparent: shown as a mask in the text colour). Its lettering is the
+     name, so the h1 (the product name from Rust) stays for screen readers and the window title only. */
+  .brand { display: flex; align-items: flex-end; gap: 22px; }
+  .logo { flex: none; height: 118px; aspect-ratio: 491 / 467; background: var(--text);
+    -webkit-mask: url(logo.png) center / contain no-repeat; mask: url(logo.png) center / contain no-repeat; }
+  h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; }
+  .version { font: 12px var(--mono); color: var(--muted); padding-bottom: 2px; }
   .grow { flex: 1; }
   .status { min-height: 20px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .warnings { min-height: 36px; margin-top: 4px; font-size: 12px; color: var(--accent-text); }
@@ -51,9 +55,11 @@
 </head>
 <body>
 <div class="frame">
-  <div class="mark">§ SEQ</div>
-  <h1 id="name">Clip Sequencer</h1>
-  <div class="version" id="version"></div>
+  <div class="brand">
+    <div class="logo" role="img" aria-label="Clip Sequencer"></div>
+    <h1 id="name">Clip Sequencer</h1>
+    <div class="version" id="version"></div>
+  </div>
   <div class="grow"></div>
   <div class="progress">
     <div class="status" id="status" role="status" aria-live="polite">Starting…</div>

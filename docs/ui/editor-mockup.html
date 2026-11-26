@@ -84,8 +84,9 @@ button, input, select { font: inherit; }
 
 /* top bar */
 .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.logo { font: 900 17px/1 var(--font-logo); letter-spacing: .02em; color: var(--text); white-space: nowrap; }
-.logo .mark { color: var(--accent); margin-right: .15em; }
+/* The logo mark (web/public/logo-mark.png, 491 x 350), as a mask in the text colour. */
+.logo { flex: none; height: 24px; aspect-ratio: 491 / 350; background: var(--text);
+  -webkit-mask: url(../../web/public/logo-mark.png) center / contain no-repeat; mask: url(../../web/public/logo-mark.png) center / contain no-repeat; }
 .spacer { flex: 1 1 auto; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .tab { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--line-strong); background: var(--control); color: var(--text-2); cursor: pointer; }
@@ -195,7 +196,7 @@ button, input, select { font: inherit; }
 <div class="app">
 
   <header class="topbar">
-    <div class="logo" aria-label="§ SEQ"><span class="mark">§</span>SEQ</div>
+    <div class="logo" role="img" aria-label="Clip Sequencer"></div>
     <div><span style="color:var(--muted)">Composition</span> <span class="mono">MyShow.avc</span></div>
     <!-- Deck tabs: which deck the editor shows. LIVE = active deck in Resolume. -->
     <div class="tabs" role="tablist" aria-label="Decks" id="decktabs"></div>

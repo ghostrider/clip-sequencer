@@ -539,7 +539,7 @@ themes change token values only, never the layout (§9.7).
 Single screen, everything controlled from here (no separate live view).
 
 ### 9.1 Top bar
-- `§ SEQ` logo, composition name.
+- The Clip Sequencer logo mark (`logo/cs_logo.png`, decided 2026-11-26), composition name.
 - **View tabs:** Sequencer (Ctrl+1), LUTs (Ctrl+2, §14), Console (Ctrl+3).
 - **Deck tabs** (see 7.2): selected tab = what is shown; `LIVE` badge = active deck in Resolume.
 - **Stop all** (always visible).
@@ -705,8 +705,9 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
 - The browser remembers the last theme shown (localStorage) and applies it before connecting, so there is no
   flash of the default theme. The splash screen and the desktop window's first paint use the default theme.
 - Fonts are bundled (no network at the venue): all SIL OFL 1.1, Latin and Latin Extended subsets, with their
-  copyright and licence in the third-party notices (Help → Licenses). The `§ SEQ` logo uses Unbounded in
-  every theme, the `§` in the accent colour.
+  copyright and licence in the third-party notices (Help → Licenses). The logo is an image (white on
+  transparent) shown as a mask in the theme's text colour: the mark alone in the top bar, the whole logo with its
+  lettering on the splash screen.
 
 ## 10. Architecture
 

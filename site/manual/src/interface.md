@@ -11,7 +11,7 @@ go back to the default width. The app remembers the widths.
 
 ![Top bar](images/top-bar.png)
 
-- **§ SEQ** and the tabs **Sequencer | LUTs | Console** (Ctrl+1 / Ctrl+2 / Ctrl+3). The LUTs tab edits colour LUTs
+- The **logo** and the tabs **Sequencer | LUTs | Console** (Ctrl+1 / Ctrl+2 / Ctrl+3). The LUTs tab edits colour LUTs
   for Resolume ([Colour LUTs](luts.md)). The Console tab shows the log; a red number on it counts new errors.
 - **Composition**: the name of the composition open in Resolume. Sequences are saved per composition.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
