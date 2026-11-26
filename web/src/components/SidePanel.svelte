@@ -189,16 +189,20 @@
 <aside class="side">
   <div style="display:flex;flex-direction:column;gap:8px">
     <div class="caps">Clip browser · {deck?.name ?? '—'}</div>
-    <div class="meta">
-      {#if deck?.clips_source === 'live'}Live thumbnails · inactive decks show cached ones
-      {:else if deck?.clips_source === 'cached'}Cached from the last time this deck was live
-      {:else}This deck has not been live yet: make it live once in Resolume to load its clips{/if}
-    </div>
-    {#if app.relinking}
-      <div class="tag pending">
-        {app.relinkTarget === 'add' ? 'Click a clip to add it as a choice' : typeof app.relinkTarget === 'number' ? `Click a clip for choice ${app.relinkTarget + 1}` : slotLane ? 'Click a clip to use its column for the selected step' : 'Click a clip to relink the selected step'} · Esc cancels
+    <!-- While picking, the hint takes the place of the source line (and floats over the search box if it is
+         taller), so the clips don't move under the pointer. -->
+    <div class="source-line">
+      <div class="meta" class:hidden-keep={app.relinking}>
+        {#if deck?.clips_source === 'live'}Live thumbnails · inactive decks show cached ones
+        {:else if deck?.clips_source === 'cached'}Cached from the last time this deck was live
+        {:else}This deck has not been live yet: make it live once in Resolume to load its clips{/if}
       </div>
-    {/if}
+      {#if app.relinking}
+        <div class="tag pending pick-hint">
+          {app.relinkTarget === 'add' ? 'Click a clip to add it as a choice' : typeof app.relinkTarget === 'number' ? `Click a clip for choice ${app.relinkTarget + 1}` : slotLane ? 'Click a clip to use its column for the selected step' : 'Click a clip to relink the selected step'} · Esc cancels
+        </div>
+      {/if}
+    </div>
     <label class="meta" style="display:flex;flex-direction:column;gap:4px">Search clips
       <input type="text" placeholder="name, layer or file" bind:value={app.search} />
     </label>

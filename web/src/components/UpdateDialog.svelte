@@ -11,8 +11,14 @@
   let ask = $derived(!!u?.ask);
   // Sequences running or waiting block an install (the app refuses it too).
   let busy = $derived((app.runtime?.running.length ?? 0) > 0 || (app.runtime?.pending?.length ?? 0) > 0);
-  let blockedWhy = $derived(u?.blocked ?? (busy ? 'Stop all sequences first.' : null));
+  let blockedWhy = $derived(sentence(u?.blocked) ?? (busy ? 'Stop all sequences first.' : null));
   let working = $derived(phase?.state === 'downloading' || phase?.state === 'restarting');
+
+  // The app's reasons are written to follow "The update did not work: "; shown on their own they start a sentence.
+  function sentence(s: string | null | undefined) {
+    if (!s) return null;
+    return s[0].toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
+  }
 
   function mb(n: number) {
     return (n / 1_048_576).toFixed(1);
@@ -82,6 +88,7 @@
 </Dialog>
 
 <style>
+  p, pre { margin: 0; }
   .update-notes { max-height: 240px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 var(--mono); background: var(--control); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
   .update-bar { height: 6px; background: var(--control); border-radius: 3px; overflow: hidden; }
   .update-bar > div { height: 100%; background: var(--accent); transition: width 160ms ease-out; }

@@ -254,7 +254,7 @@ void main() {
   color = c;
 }`;
 
-/** Gap between the two panels, in canvas pixels. */
+/** Gap between the two panels, in CSS pixels (scaled to the canvas in `draw`). */
 const GAP_PX = 12;
 
 /**
@@ -345,7 +345,8 @@ export class LutPreview {
     gl.uniform1i(gl.getUniformLocation(this.prog, 'lut'), 1);
     gl.uniform1f(gl.getUniformLocation(this.prog, 'size'), this.size || 2);
     gl.uniform2f(gl.getUniformLocation(this.prog, 'canvasPx'), c.width, c.height);
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'gapPx'), GAP_PX);
+    // The gap is in CSS pixels; the canvas has device pixels.
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'gapPx'), GAP_PX * (c.clientWidth ? c.width / c.clientWidth : 1));
     gl.uniform1f(gl.getUniformLocation(this.prog, 'imgAspect'), this.aspect);
     gl.uniform1i(gl.getUniformLocation(this.prog, 'hasLut'), this.size > 0 ? 1 : 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

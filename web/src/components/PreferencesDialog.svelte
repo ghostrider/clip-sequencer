@@ -160,7 +160,7 @@
           <span>Check for updates at start-up</span>
         </label>
         <p class="meta">Once per start the app asks GitHub for the latest release (nothing else is sent). It asks before
-          downloading anything. Applies at once.</p>
+          downloading anything. This setting applies at once, without Save.</p>
         <div><button class="btn" onclick={() => app.checkForUpdates()}>Check now</button>
           <span class="meta">This is version {app.update?.current ?? app.version?.version ?? '?'}.</span></div>
       </div>

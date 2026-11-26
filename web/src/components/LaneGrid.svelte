@@ -330,23 +330,26 @@
                 onpointerup={() => stepUp(li, si)}
                 onpointercancel={() => (drag = null)}
               >
-                {#if step.when || step.choices?.length}
-                  {@const warnWhen = whenWarning(step.when, seq.repeat)}
-                  {@const n = 1 + (step.choices?.length ?? 0)}
-                  {@const choiceUnresolved = (res?.choices?.[si] ?? []).some((c) => c.state === 'unresolved')}
-                  <div class="badges">
-                    {#if step.when}
-                      <span class="badge" class:bad={warnWhen} title={warnWhen ?? 'Plays only on some passes'}>{warnWhen ? '⚠ ' : ''}{whenLabel(step.when)}</span>
-                    {/if}
-                    {#if n > 1}
-                      <span class="badge" class:bad={choiceUnresolved}
-                        title={`${n} options, ${step.pick === 'cycle' ? 'in turn' : 'picked at random'}${choiceUnresolved ? ' · a choice is unresolved' : ''}`}
-                      >{playing && rl?.option != null ? rl.option + 1 : 1}/{n} {step.pick === 'cycle' ? '↻' : '⤨'}</span>
-                    {/if}
-                  </div>
-                {/if}
                 <div class="name">{stepLabel(step, r)}</div>
-                <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
+                <!-- Badges share the length row (the length gives way first), so they never cover the clip name. -->
+                <div class="step-foot">
+                  <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
+                  {#if step.when || step.choices?.length}
+                    {@const warnWhen = whenWarning(step.when, seq.repeat)}
+                    {@const n = 1 + (step.choices?.length ?? 0)}
+                    {@const choiceUnresolved = (res?.choices?.[si] ?? []).some((c) => c.state === 'unresolved')}
+                    <div class="badges">
+                      {#if step.when}
+                        <span class="badge" class:bad={warnWhen} title={warnWhen ?? 'Plays only on some passes'}>{warnWhen ? '⚠ ' : ''}{whenLabel(step.when)}</span>
+                      {/if}
+                      {#if n > 1}
+                        <span class="badge" class:bad={choiceUnresolved}
+                          title={`${n} options, ${step.pick === 'cycle' ? 'in turn' : 'picked at random'}${choiceUnresolved ? ' · a choice is unresolved' : ''}`}
+                        >{playing && rl?.option != null ? rl.option + 1 : 1}/{n} {step.pick === 'cycle' ? '↻' : '⤨'}</span>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
                 <div class="resize" role="separator" aria-label="Resize step"
                   onpointerdown={(e) => resizeDown(e, li, si, step)} onpointermove={resizeMove} onpointerup={resizeUp}></div>
               </div>

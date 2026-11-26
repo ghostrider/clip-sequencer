@@ -29,6 +29,9 @@ button, input, select { font: inherit; }
 
 .btn { min-height: 36px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--line-strong); background: var(--control); color: var(--text); cursor: pointer; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+/* A disabled primary button must not look ready: plain control colours instead of a faded accent. */
+.btn.primary:disabled { background: var(--control); border-color: var(--line-strong); color: var(--faint); font-weight: 400; opacity: 1; }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .btn.danger { background: var(--err-bg); border-color: var(--err-line); color: var(--err-text); font-weight: 600; }
 .btn.ghost { background: transparent; border-color: var(--accent-line); color: var(--accent); min-height: 28px; font-size: 12px; }
 .icon-btn { width: 36px; height: 36px; flex: 0 0 36px; border-radius: var(--radius); border: 1px solid var(--line-strong); background: var(--control); color: var(--text); cursor: pointer; }
@@ -89,7 +92,8 @@ button, input, select { font: inherit; }
 .lane { height: var(--lane-h); border-bottom: 1px solid var(--line-soft); padding: 8px 0; display: flex; gap: 2px; }
 .step { min-width: 0; border: 1px solid var(--step-line); border-radius: var(--radius-sm); padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; position: relative; cursor: grab; }
 .step .name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.step .len { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.step .len { font: 10px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.step .step-foot { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .step.rest { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--faint); }
 .step.unresolved { background: var(--err-bg); border-color: var(--err); }
 .step.unresolved .len { color: var(--err-text); }
@@ -100,7 +104,7 @@ button, input, select { font: inherit; }
 .choice-row { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
 .choice-row.bad { color: var(--err-text); }
 .num-input { width: 44px; background: var(--control); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 1px 4px; }
-.step .badges { position: absolute; top: 3px; right: 8px; display: flex; gap: 3px; pointer-events: auto; }
+.step .badges { display: flex; gap: 3px; flex: none; margin-left: auto; pointer-events: auto; }
 .step .badge { font: 600 9px var(--mono); padding: 0 4px; border-radius: var(--radius-sm); background: var(--accent-bg); color: var(--accent-text); border: 1px solid var(--accent-line); white-space: nowrap; }
 .step .badge.bad { background: var(--err-bg); color: var(--err-text); border-color: var(--err-line); }
 .section-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--info-text); opacity: .6; pointer-events: none; }
@@ -116,6 +120,9 @@ button, input, select { font: inherit; }
 
 /* right: browser + inspector */
 .side { flex: 1 1 300px; max-width: 340px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.side .source-line { position: relative; }
+.side .source-line .hidden-keep { visibility: hidden; }
+.side .pick-hint { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
 .side input[type=text] { width: 100%; background: var(--control); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; }
 .layer-row { display: flex; flex-direction: column; gap: 4px; }
 .clips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
