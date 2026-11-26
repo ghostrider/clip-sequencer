@@ -135,7 +135,6 @@ for (const [name, pkg, url] of [
   ['Archivo', '@fontsource/archivo', 'https://github.com/Omnibus-Type/Archivo'],
   ['Archivo Narrow', '@fontsource/archivo-narrow', 'https://github.com/Omnibus-Type/ArchivoNarrow'],
   ['DM Mono', '@fontsource/dm-mono', 'https://github.com/googlefonts/dm-mono'],
-  ['Unbounded', '@fontsource/unbounded', 'https://github.com/googlefonts/unbounded'],
 ]) {
   packages.push({
     name,

@@ -28,6 +28,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **New logo**: in the top bar, on the splash screen, as the app and window icon, in the About dialog and on the
+  website, replacing the "§ SEQ" mark. The Unbounded font (used only by the old mark) is no longer bundled.
 - **Starting a running sequence** works from either side: ▶ in the app restarts it and keeps its link to the `§`
   clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
   at a time").

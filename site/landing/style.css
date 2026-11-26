@@ -9,7 +9,10 @@ a:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outli
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
 header.site { border-bottom: 1px solid var(--line); background: var(--panel); }
 header.site .wrap { display: flex; align-items: center; gap: 20px; min-height: 60px; flex-wrap: wrap; }
-.logo { font: 600 17px var(--mono); letter-spacing: .08em; color: var(--accent); text-decoration: none; }
+.logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; color: var(--text); text-decoration: none; }
+/* The app's logo mark (web/public/logo-mark.png, 491 x 350), as a mask in the text colour. */
+.logo-mark { height: 26px; aspect-ratio: 491 / 350; background: currentColor;
+  -webkit-mask: url(shared/logo-mark.png) center / contain no-repeat; mask: url(shared/logo-mark.png) center / contain no-repeat; }
 nav.top { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; font-size: 15px; }
 nav.top a { color: var(--text-2); text-decoration: none; }
 nav.top a:hover { color: var(--text); }
