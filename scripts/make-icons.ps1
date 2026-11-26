@@ -1,6 +1,6 @@
 # Renders the app icons from the logo mark (web/public/logo-mark.png): white mark on a dark rounded square.
 # Writes web/public/icon.png (128), web/public/favicon.png (32), crates/seq-app/icons/icon.png (1024) and icon.ico.
-# Usage:  powershell -ExecutionPolicy Bypass -File scriptsmake-icons.ps1 -Root .
+# Usage:  powershell -ExecutionPolicy Bypass -File scripts\make-icons.ps1 -Root .
 param([string]$Root)
 Add-Type -AssemblyName System.Drawing
 $mark = [System.Drawing.Bitmap]::new((Join-Path $Root 'web\public\logo-mark.png'))
