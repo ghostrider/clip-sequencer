@@ -230,6 +230,24 @@
     }
     return out;
   }
+  /**
+   * Whether a tie can ever continue anything (SPEC §6 `tie`): `false` when the step before (the lane's last for
+   * the first step) surely plays another clip; unknown with choices.
+   */
+  function tieWorks(li: number, si: number): boolean {
+    const lane = seq.lanes[li];
+    const steps = lane.steps;
+    const prev = si > 0 ? si - 1 : steps.length - 1;
+    if (prev === si || steps[si].choices?.length || steps[prev].choices?.length) return true;
+    const res = view.resolution?.lanes[li]?.steps;
+    const a = res?.[prev];
+    const b = res?.[si];
+    if (isSlotLane(lane)) return steps[prev].column != null && steps[prev].column === steps[si].column;
+    if (!steps[prev].clip || !steps[si].clip) return false;
+    if (a?.clip_id != null && b?.clip_id != null) return a.clip_id === b.clip_id;
+    return true;
+  }
+
   /** Recording (SPEC §7.9): this step was recorded in the current pass / by its newest click. */
   function takeMark(layer: string, start: number): 'new' | 'take' | null {
     if (!rec) return null;
@@ -338,6 +356,12 @@
             <div class="slot" role="listitem" style:width={`${len(li, si, step) * zoom}px`}
               class:drop-before={(dropAt?.lane === li && dropAt.index === si) || (drag?.active && drag.lane === li && drag.to === si && drag.from !== si && (drag.alt || drag.to < drag.from))}
               class:drop-after={drag?.active && !drag.alt && drag.lane === li && drag.to === si && drag.to > drag.from}>
+              {#if step.tie}
+                {@const works = tieWorks(li, si)}
+                <!-- The tie spans the gap to the step before (SPEC §6 tie). -->
+                <span class="tie-arc" class:idle={!works} aria-hidden="true"
+                  title={works ? 'Tied: plays on the clip of the step before if it still plays (T toggles)' : 'Tied, but the step before plays another clip: this tie has no effect'}>⌒</span>
+              {/if}
               <div
                 class="step"
                 class:rest

@@ -242,7 +242,8 @@ button.pill { cursor: pointer; font: inherit; }
 .lane-tools .ms button { padding: 0 6px; }
 /* A tied step (SPEC §6 tie): an arc over its left edge, joining it to the block before. */
 .step.tied { border-left-style: dashed; }
-.step.tied::before { content: "⌒"; position: absolute; left: 2px; top: -2px; font-size: 14px; line-height: 1; color: var(--accent-text); pointer-events: none; z-index: 1; }
+.slot .tie-arc { position: absolute; left: -9px; top: 1px; z-index: 3; font-size: 16px; line-height: 1; color: var(--accent-text); cursor: help; }
+.slot .tie-arc.idle { color: var(--faint); opacity: .7; }
 .tie-toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 /* Lane head (SPEC §9.3): layer, state and a summary; click for the lane inspector. */
 .lanehead { cursor: pointer; border-left: 2px solid transparent; }

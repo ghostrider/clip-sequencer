@@ -661,7 +661,8 @@ Single screen, everything controlled from here (no separate live view).
     Guide lines every 8/16/32 bars (or off) are a view setting.
   - **Step badges** (format v4): a condition as a small chip in the block's top right (`2:4`, `1st`, `!1st`,
     `last`, `!last`); choices as `1/3` with the pick (`⤨` random, `↻` cycle). The block shows option 1.
-    A **tied** step has a small arc `⌒` at its left edge and in its length line (`⌒ 1 bar`).
+    A **tied** step has an arc `⌒` over the gap to the step before (dimmed when that step surely plays another
+    clip, so the tie has no effect) and `⌒` in its length line; **T** ties or unties the selected step.
   - **Transition display** (§7.7; colour token `--fade` in `tokens.css`, `themes.ts` and the mockup; sketch
     `docs/images/transition-fade-sketch.png`):
     - a **fade wedge** at the left edge, rising from bottom left to top right, on the grid scale: its width is
