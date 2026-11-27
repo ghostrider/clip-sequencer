@@ -369,6 +369,9 @@ enum ClientMsg {
     /// SPEC §7.9: arm a sequence for recording (`null` disarms).
     SetArmed {
         seq: Option<Uuid>,
+        /// Pattern length in bars for a sequence without steps.
+        #[serde(default)]
+        bars: Option<u32>,
     },
     /// SPEC §7.8.
     SetLaneMute {
@@ -684,7 +687,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Start { seq } => EngineCommand::Start { seq },
         ClientMsg::Cue { seq, at } => EngineCommand::Cue { seq, at },
         ClientMsg::CancelCue => EngineCommand::CancelCue,
-        ClientMsg::SetArmed { seq } => EngineCommand::SetArmed { seq },
+        ClientMsg::SetArmed { seq, bars } => EngineCommand::SetArmed { seq, bars },
         ClientMsg::SetLaneMute { seq, lane, on } => EngineCommand::SetLaneMute { seq, lane, on },
         ClientMsg::SetLaneSolo { seq, lane, on } => EngineCommand::SetLaneSolo { seq, lane, on },
         ClientMsg::Stop { seq } => EngineCommand::Stop { seq },

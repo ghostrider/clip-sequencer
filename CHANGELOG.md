@@ -26,8 +26,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   sequence lets go of it (also after a crash, at the next start). The editor draws the fade on each step and
   warns about fades over Resolume's 10 s, unknown blend modes and clips with their own transition.
 - **Record from Resolume:** ⏺ arms a sequence; started, it loops and records the clips you click (and layers you
-  clear) in Resolume, snapped to sixteenths. Each pass is written at its end as one undo step and plays back in the
-  next pass, with the transition Resolume used for each click. Clicks on layers without a lane add one.
+  clear) in Resolume, snapped to sixteenths and punched in up to the next step (the rest stays). They show at once,
+  each pass is one undo step, and the next pass plays them, with the transition Resolume used for each click.
+  Clicks on layers without a lane add one; a sequence without steps records over a pattern length chosen when
+  arming. Works with Piano trigger style (press and release).
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up

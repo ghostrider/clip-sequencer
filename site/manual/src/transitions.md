@@ -11,8 +11,8 @@ layer gets back the transition it had before. You never have to clean up after i
 
 ## Setting a transition
 
-- **Lane default:** click the chip next to **Clip | Slot** in the lane head (`Resolume's own` when the lane has
-  none). Choose a length and, if you like, a blend mode. Steps without their own transition use it.
+- **Lane default:** click the chip next to **Clip | Slot** in the lane head (`↗ none` when the lane has no
+  transitions, `↗ original` when only some steps have one). Choose a length and, if you like, a blend mode. Steps without their own transition use it.
 - **One step:** select it and use **Transition** in the step inspector: *its own*, then a length and a blend mode.
   Back to the lane's with the first list.
 - Lengths are in beats and bars (¼ beat … 4 bars), or **cut** (no fade).

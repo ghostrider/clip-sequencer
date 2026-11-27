@@ -106,9 +106,11 @@ pub enum EngineCommand {
     SyncSeqLayer {
         remove_orphans: bool,
     },
-    /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9).
+    /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9). `bars`: the pattern
+    /// length of a sequence without steps.
     SetArmed {
         seq: Option<Uuid>,
+        bars: Option<u32>,
     },
     /// Point one of Resolume's LUT effects at a `.cube` file (LUT tab, SPEC §14): a `set` on its `LUT 3D`
     /// parameter. Shown at once in the LUT effect list; Resolume's update or next push confirms it.
@@ -1143,7 +1145,7 @@ impl Engine {
                 let acts = self.scheduler.cancel_cue();
                 self.execute(acts);
             }
-            EngineCommand::SetArmed { seq } => self.set_armed(seq),
+            EngineCommand::SetArmed { seq, bars } => self.set_armed(seq, bars),
             EngineCommand::SetLaneMute { seq, lane, on } => {
                 let acts = self.scheduler.set_mute(seq, lane, on);
                 self.execute(acts);
@@ -1243,12 +1245,14 @@ impl Engine {
                 let _ = self.ws_cmd.send(WsCommand::Reconnect);
             }
             EngineCommand::Undo => {
+                self.record_undo();
                 if let (Some(prev), Some(cur)) = (self.undo.pop(), self.model.clone()) {
                     self.redo.push(cur);
                     self.set_model(prev);
                 }
             }
             EngineCommand::Redo => {
+                self.record_undo();
                 if let (Some(next), Some(cur)) = (self.redo.pop(), self.model.clone()) {
                     self.undo.push(cur);
                     self.set_model(next);
@@ -1450,9 +1454,10 @@ impl Engine {
             self.structure_dirty = true;
         }
         let mut spec = RunSpec::new(&sequence, &resolution);
-        // An armed sequence loops while it records (SPEC §7.9).
-        if self.rec.loops(seq) {
+        // An armed sequence loops while it records, an empty one over its pattern length (SPEC §7.9).
+        if let Some(min_ticks) = self.rec.loops(seq) {
             spec.repeat = seq_core::Repeat::Infinite;
+            spec.min_ticks = min_ticks;
         }
         // A fresh seed per start for `random` picks (SPEC §6); seq-core itself reads no clock.
         let nanos = std::time::SystemTime::now()

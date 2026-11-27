@@ -32,6 +32,7 @@ fn spec(id: u128, repeat: Repeat, after: AfterLastPass, lanes: Vec<RunLane>) -> 
         after_last_pass: after,
         lanes,
         seed: 7,
+        min_ticks: 0,
     }
 }
 

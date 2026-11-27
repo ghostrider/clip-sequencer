@@ -286,7 +286,7 @@
                 : lane.steps.some((s) => s.transition) ? "Steps without their own transition get the layer's original. Click to set a lane default"
                 : "The app doesn't touch this layer's transition. Click to set a lane default"}
               onclick={(e) => { e.stopPropagation(); fadeMenu = fadeMenu?.lane === li ? null : { lane: li, x: e.clientX, y: e.clientY }; }}>
-              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? 'original' : "Resolume's own"}
+              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? '↗ original' : '↗ none'}
             </button>
             <select class="pill-select" value={lane.end}
               onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>

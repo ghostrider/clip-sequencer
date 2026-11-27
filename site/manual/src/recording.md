@@ -8,26 +8,28 @@ pass, the next layer in the second while the first one plays back, and so on.
 
 ## Recording
 
-1. Select a sequence of the **live** deck and click **⏺** in the editor header. It shows `● armed`.
+1. Select a sequence of the **live** deck and click **⏺** in the editor header. It shows `● armed`. A sequence
+   without steps asks for the **pattern length** first (1 to 16 bars).
 2. Start it (▶ or Space). It starts as usual, by its start mode: a bar start gives you a count-in. While it records
    it shows `● REC · pass 1` and loops pass after pass, whatever its repeat setting.
 3. Click clips in Resolume, or press a layer's **Clear** button for a rest, in time with the music.
-4. At the end of each pass, what you played in it is written into the sequence, and the next pass plays it.
-5. **Stop** (or **⏺** again) ends the recording. What you played in the last, unfinished pass is kept up to that
-   point.
+4. What you play appears in the sequence at once, and the next pass plays it.
+5. **Stop** (or **⏺** again) ends the recording.
 
 Each pass is **one undo step**: **Ctrl+Z** removes the last pass you recorded.
+
+For clicks to land where you play them, the sequence's grid must be lined up with the music: with Resolume's
+tempo as the clock, press **Resync** in Resolume on a bar's first beat, and give the sequence a **bar** start
+mode rather than *now*. The app shows a notice when a recording starts without that.
 
 ## What gets recorded
 
 - Every click lands on the **nearest sixteenth**. A click just before the end of a pass belongs to the start of
   the next one.
-- A lane you click on is **overwritten from your first click** on its layer to the end of the pass. Before that
-  click it keeps its steps; lanes you don't touch keep theirs. Each recorded step lasts until your next click on
-  that layer.
-- To fix part of a lane, record it again from that point.
-- While you play a layer, its lane stops playing its own steps (it shows `rec`) and plays your take from the next
-  pass on. The other lanes play as usual.
+- A click is **punched in**: it replaces its lane from where you clicked up to the next step that was already
+  there (or your next click on that layer). Everything else stays: a clip clicked between two others keeps the
+  later ones.
+- The lanes keep playing while you record, also the one you play on.
 - A click on a layer that has **no lane** in the sequence adds a lane for it. The layer needs a unique name
   ([Setting up Resolume](resolume-setup.md)); the SEQ layer is never recorded.
 - **Slot lanes** record the **column** you clicked, clip lanes the clip.

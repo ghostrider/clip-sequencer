@@ -378,7 +378,7 @@ export type Command =
   | { cmd: 'update_answer'; skip: boolean }
   | { cmd: 'install_update' }
   | { cmd: 'set_update_check'; on: boolean }
-  | { cmd: 'set_armed'; seq: Uuid | null }
+  | { cmd: 'set_armed'; seq: Uuid | null; bars?: number }
   | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }

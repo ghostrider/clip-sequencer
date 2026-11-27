@@ -2,9 +2,9 @@
 //! sixteenth; [`apply_take`] writes it into a sequence. Pure: the engine turns WebSocket events
 //! into [`Click`]s and saves the result as one edit.
 //!
-//! In a take, a lane clicked on is overwritten from its first click to the end of the take; each
-//! recorded step lasts until the next click on that layer or the end. A lane shorter than the end
-//! is first written out as it plays (loop, hold or clear), so its steps before the first click stay
+//! Clicks are **punched in**: each replaces its lane from its position up to the next step that was
+//! already there (or the next click on that layer, or the end); the rest of the lane stays. A lane
+//! shorter than the pass is first written out as it plays (loop, hold or clear), so its steps stay
 //! where they were heard.
 
 use crate::model::{
@@ -155,67 +155,89 @@ fn write_out(lane: &mut Lane, end: u32) {
     }
 }
 
-/// Replaces `[first click, end)` of a lane that covers `end` with the clicks.
+/// Punches the clicks into a lane that covers `end` (SPEC §7.9): each click replaces the lane from
+/// its position up to the next step that was already there, its next click on this layer, or
+/// `end`, whichever comes first. Everything else stays.
 fn overwrite(lane: &mut Lane, clicks: &[&Click], end: u32) {
-    let first = clicks[0].at;
-    let mut before = Vec::new();
-    let mut after = Vec::new();
+    // Step starts of the lane as it was, before this take.
+    let mut starts = Vec::with_capacity(lane.steps.len());
     let mut at = 0;
-    for s in std::mem::take(&mut lane.steps) {
-        let (start, stop) = (at, at + s.length);
-        at = stop;
-        if start < first {
-            let mut cut = s.clone();
-            cut.length = stop.min(first) - start;
-            before.push(cut);
-        }
-        if stop > end {
-            let mut cut = s;
-            cut.length = stop - start.max(end);
-            after.push(cut);
-        }
+    for s in &lane.steps {
+        starts.push(at);
+        at += s.length;
     }
     let slot = lane.mode == LaneMode::Slot;
-    let mut recorded: Vec<(Step, bool)> = clicks
-        .iter()
-        .enumerate()
-        .map(|(i, c)| {
-            let stop = clicks.get(i + 1).map_or(end, |n| n.at);
-            let mut step = rest(stop - c.at);
-            if let Hit::Clip { clip, column } = &c.hit {
-                if slot {
-                    step.column = Some(*column);
-                } else {
-                    step.clip = Some(clip.clone());
-                }
+    let mut cuts = Vec::new();
+    for (i, c) in clicks.iter().enumerate() {
+        let next_click = clicks.get(i + 1).map_or(end, |n| n.at);
+        let next_step = starts.iter().copied().find(|&s| s > c.at).unwrap_or(end);
+        let stop = next_click.min(next_step).min(end);
+        if stop <= c.at {
+            continue;
+        }
+        let mut step = rest(stop - c.at);
+        if let Hit::Clip { clip, column } = &c.hit {
+            if slot {
+                step.column = Some(*column);
+            } else {
+                step.clip = Some(clip.clone());
             }
-            let cut = matches!(&c.transition, Some(t) if t.length == 0);
-            if matches!(c.hit, Hit::Clip { .. }) && !cut {
-                step.transition = c.transition.clone();
-            }
-            (step, cut && matches!(c.hit, Hit::Clip { .. }))
-        })
-        .collect();
+        }
+        let cut =
+            matches!(&c.transition, Some(t) if t.length == 0) && matches!(c.hit, Hit::Clip { .. });
+        if matches!(c.hit, Hit::Clip { .. }) && !cut {
+            step.transition = c.transition.clone();
+        }
+        replace(&mut lane.steps, c.at, step);
+        if cut {
+            cuts.push(c.at);
+        }
+    }
     // A cut is written only where it differs from "nothing": when the lane has fades (§7.7 rule 4).
-    let fades = lane.transition.is_some()
-        || before
-            .iter()
-            .chain(&after)
-            .chain(recorded.iter().map(|(s, _)| s))
-            .any(|s| s.transition.is_some());
-    if fades {
-        for (s, cut) in &mut recorded {
-            if *cut {
+    let fades = lane.transition.is_some() || lane.steps.iter().any(|s| s.transition.is_some());
+    if fades && !cuts.is_empty() {
+        let mut at = 0;
+        for s in &mut lane.steps {
+            if cuts.contains(&at) && (s.clip.is_some() || s.column.is_some()) {
                 s.transition = Some(Transition {
                     length: 0,
                     blend: None,
                 });
             }
+            at += s.length;
         }
     }
-    lane.steps = before;
-    lane.steps.extend(recorded.into_iter().map(|(s, _)| s));
-    lane.steps.extend(after);
+}
+
+/// Puts `step` at `at` in `steps`, replacing what lies under it: steps cut on either side keep their
+/// extras, shortened.
+fn replace(steps: &mut Vec<Step>, at: u32, step: Step) {
+    let stop = at + step.length;
+    let mut out = Vec::with_capacity(steps.len() + 2);
+    let mut pos = 0;
+    let mut placed = false;
+    for s in std::mem::take(steps) {
+        let (start, end) = (pos, pos + s.length);
+        pos = end;
+        if start < at {
+            let mut left = s.clone();
+            left.length = end.min(at) - start;
+            out.push(left);
+        }
+        if !placed && end > at {
+            out.push(step.clone());
+            placed = true;
+        }
+        if end > stop {
+            let mut right = s;
+            right.length = end - start.max(stop);
+            out.push(right);
+        }
+    }
+    if !placed {
+        out.push(step);
+    }
+    *steps = out;
 }
 
 fn rest(length: u32) -> Step {
@@ -326,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn overwrite_from_the_first_click_to_the_end() {
+    fn clicks_are_punched_in_up_to_the_next_step() {
         let s = seq(vec![
             lane(
                 "BG",
@@ -346,14 +368,14 @@ mod tests {
         let r = apply_take(&s, &take, |_| true);
         assert_eq!(
             shape(&r.sequence.lanes[0]),
-            sh(&[("a", 8), ("c", 12), ("-", 4), ("d", 8)])
+            sh(&[("a", 8), ("c", 8), ("b", 4), ("-", 4), ("d", 8)])
         );
         assert_eq!(r.sequence.lanes[1], s.lanes[1], "untouched");
         assert_eq!((r.layers, r.steps), (vec!["BG".to_owned()], 3));
     }
 
     #[test]
-    fn a_stop_keeps_what_comes_after_it_and_same_sixteenth_keeps_the_later() {
+    fn clicks_after_the_end_are_dropped_and_same_sixteenth_keeps_the_later() {
         let s = seq(vec![lane(
             "BG",
             LaneEnd::LoopToEnd,
@@ -370,7 +392,7 @@ mod tests {
         let r = apply_take(&s, &take, |_| true);
         assert_eq!(
             shape(&r.sequence.lanes[0]),
-            sh(&[("a", 4), ("d", 16), ("b", 12)])
+            sh(&[("a", 4), ("d", 12), ("b", 16)])
         );
     }
 
@@ -407,12 +429,37 @@ mod tests {
                 ("b", 4),
                 ("a", 6),
                 ("b", 2),
-                ("n", 4)
+                ("n", 2),
+                ("a", 2)
             ])
         );
         assert_eq!(shape(&l[1]), sh(&[("h", 28), ("n", 4)]));
         assert_eq!(shape(&l[2]), sh(&[("c", 8), ("-", 20), ("n", 4)]));
         assert_eq!(l[0].end, LaneEnd::LoopToEnd, "the end mode stays");
+    }
+
+    #[test]
+    fn a_clip_between_two_recorded_ones_keeps_the_later_ones() {
+        // The case from the live check (2026-11-27): x and y recorded; z clicked between them.
+        let s = seq(vec![lane(
+            "BG",
+            LaneEnd::Hold,
+            vec![
+                step(None, 4),
+                step(Some("x"), 8),
+                step(None, 8),
+                step(Some("y"), 12),
+            ],
+        )]);
+        let take = Take {
+            clicks: vec![click("BG", 16, Some("z"), 1, None)],
+            end: 32,
+        };
+        let r = apply_take(&s, &take, |_| true);
+        assert_eq!(
+            shape(&r.sequence.lanes[0]),
+            sh(&[("-", 4), ("x", 8), ("-", 4), ("z", 4), ("y", 12)])
+        );
     }
 
     #[test]

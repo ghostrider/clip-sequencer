@@ -9,6 +9,9 @@
   let waiting = $derived(app.pendingStart(view?.sequence.id));
   // Recording from Resolume (SPEC §7.9): this sequence armed or recording.
   let rec = $derived(app.runtime?.record?.seq === view?.sequence.id ? app.runtime?.record ?? null : null);
+  // A sequence without steps records over a pattern length chosen when arming.
+  let armMenu = $state<{ x: number; y: number } | null>(null);
+  const PATTERN_BARS = [1, 2, 4, 8, 16];
   let editingName = $state(false);
   let nameText = $state('');
   let countText = $state('4');
@@ -46,6 +49,8 @@
     el.select();
   }
 </script>
+
+<svelte:window onclick={() => (armMenu = null)} />
 
 <main class="editor">
   {#if view && deck}
@@ -103,8 +108,21 @@
       {#if waiting}<button class="btn" onclick={() => app.cancelWaiting(waiting)}>Cancel</button>{/if}
       <button class="btn rec-btn" aria-pressed={!!rec} disabled={!deck.live && !rec}
         title={!deck.live ? 'Only a sequence of the live deck can record' : rec ? 'Disarm: stop recording (what was recorded stays)' : 'Arm: record clicks in Resolume from the next start, pass by pass (it loops until Stop)'}
-        onclick={() => app.send({ cmd: 'set_armed', seq: rec ? null : s.id })}>⏺</button>
+        onclick={(e) => {
+          e.stopPropagation();
+          if (!rec && view.pass_sixteenths === 0) armMenu = armMenu ? null : { x: e.clientX, y: e.clientY };
+          else app.send({ cmd: 'set_armed', seq: rec ? null : s.id });
+        }}>⏺</button>
     </div>
+    {#if armMenu}
+      <div class="menu" role="menu" aria-label="Pattern length" style:left={`${armMenu.x - 160}px`} style:top={`${armMenu.y + 12}px`}>
+        <div class="menu-sep" style="border-top:0;margin-top:0">Pattern length to record</div>
+        {#each PATTERN_BARS as b (b)}
+          <button role="menuitem" onclick={() => { app.send({ cmd: 'set_armed', seq: s.id, bars: b }); armMenu = null; }}>
+            {b} {b === 1 ? 'bar' : 'bars'}</button>
+        {/each}
+      </div>
+    {/if}
 
     <LaneGrid {view} {deck} />
 

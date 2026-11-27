@@ -534,10 +534,12 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
 - **Arm:** the ⏺ button in the editor header arms the selected sequence of the **live** deck (one at a time). Armed,
   it records from its next start; the start waits for its start mode as usual (a bar start is the count-in).
   Arming a running sequence records from that moment, and it loops from its next pass. Disarm or Stop ends the
-  recording (Stop also disarms; a disarmed run goes on looping until stopped).
+  recording (Stop also disarms; a disarmed run goes on looping until stopped). A sequence **without steps** asks
+  for a **pattern length** (1–16 bars) when armed and loops over that length (changed 2026-11-27 after the live
+  check; no placeholder step, which would clear a layer).
 - **Takes:** each pass is one **take**. While recording, the sequence loops pass after pass, whatever its repeat
-  setting. At the end of a pass its take is written into the sequence as **one undoable edit** (Ctrl+Z removes
-  that pass's take), and the next pass already plays the result. A pass without a click writes nothing.
+  setting. Each click is written into the sequence **at once** (it shows in the editor right away); the clicks of
+  one pass are **one undoable edit** (Ctrl+Z removes that pass's take so far), and the next pass plays them.
 - **What counts as a click:** a clip that becomes connected on a layer (WebSocket `connected`, §7.5) that the app
   did not trigger itself (the window of §7.3), and a layer that is cleared without the app clearing it (records a
   rest). A clear is the `Disconnected` of the layer's last connected clip that no `Connected` on that layer
@@ -553,15 +555,18 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
 - **Snap:** each click goes to the nearest sixteenth of the pass, from its arrival time and the tempo. A click in
   the last half sixteenth of a pass belongs to the start of the next one. Two clicks on one layer that snap to the
   same sixteenth: the later one counts.
-- **Overwrite:** in a take, a lane you click on is overwritten from your first click on its layer to the end of
-  the pass; before that click it keeps its steps. Each recorded step lasts until the next click on that layer in
-  the take, or the end of the pass. Lanes without a click keep their steps. The overwritten part loses its steps'
-  conditions, choices and transitions; a step cut by the first click keeps them, shortened.
+- **Punch in** (changed 2026-11-27 after the live check, was "overwrite to the end of the pass"): a click replaces
+  its lane from its position up to the **next step that was already there**, or your next click on that layer, or
+  the end of the pass. Everything else stays, so a clip clicked between two others keeps the later ones. Steps
+  cut by a click keep their conditions, choices and transitions, shortened; a step replaced whole loses them.
 - A lane shorter than the pass is first written out to the pass length as it plays (*Loop to end*: its steps
   repeated; *Hold*: the last step longer; *Clear*: a rest), then overwritten. Its end mode stays.
-- **While recording:** the other lanes play as usual. A lane stops playing its own steps from your first click on
-  its layer in the pass (it yields to you, without a notice), and plays the new take from the next pass on.
-  Manual override (§7.3) doesn't apply to the recorded sequence while it records.
+- **While recording:** every lane plays on as usual, also the one you click on (its next step comes in where the
+  punch-in ends); the new take plays from the next pass on. Manual override (§7.3) doesn't apply to the recorded
+  sequence while it records.
+- **The grid:** clicks are snapped to the sequence's grid. When it isn't lined up with the music (no Resync with
+  Resolume's tempo, no MIDI Start, or a start mode `now`), clicks land a sixteenth early or late; a notice says
+  so when the recording starts.
 - **New layers:** a click on a layer without a lane in the sequence adds a lane for it (Clip mode, *Loop to end*,
   a rest up to the first click). Layers whose name is not unique can't get a lane: notice, not recorded.
 - **Transitions** (§7.7, requested 2026-11-27): each recorded step gets the transition Resolume used for that
@@ -569,14 +574,11 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   is *Layer Determined*, else the clip's own. The duration becomes sixteenths at the current tempo (nearest
   sixteenth, at most 256), the blend mode its name. A cut (0 s) is recorded as `{ "length": 0 }` only if another
   step of the lane has a transition; otherwise the step gets none, so a lane played without fades stays a lane
-  without transitions (§7.7 rule 4). A recorded rest (layer clear) gets no transition. From the first click on a
-  layer the app no longer sets that layer's transition in this pass (the lane yields to you) and gives it back
-  its original, so later clicks use the layer's own setting or what you set in Resolume while recording; the
-  first click uses whatever the layer had at that instant.
+  without transitions (§7.7 rule 4). A recorded rest (layer clear) gets no transition. A lane with transitions
+  keeps setting them as it plays, so a click on its layer uses the value of the step playing then.
 - **Slot lanes** (§4.5) record the **column** that was clicked; Clip lanes record the clip (by id, name and file,
   as a drop from the clip browser does).
-- **Stop** while recording writes the take so far: the lanes clicked in that pass are overwritten from the first
-  click to the Stop position; what comes after stays.
+- **Stop** while recording keeps the take so far (it is already written).
 - The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits; the log says
   `recorded pass 3 of Drop: BG, FG (2 steps)`.
 
@@ -627,7 +629,7 @@ Single screen, everything controlled from here (no separate live view).
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
+    `↗ none` when the lane has no transitions, Resolume's own applies; `↗ original` when only steps have one), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
     is the "Resume lane" action), **M** and **S** buttons while the sequence runs in place of the move buttons
     (§7.8; the lane head keeps its height), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.

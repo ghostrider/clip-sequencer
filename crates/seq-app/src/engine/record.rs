@@ -1,12 +1,13 @@
 //! Recording from Resolume (SPEC §7.9, M25): the armed sequence loops while it records; clicks and
-//! clears on Resolume's layers become a take per pass ([`seq_core::record`]). Each click updates the
-//! spec the run plays from its next pass; at the pass boundary the take is written into the model as
-//! one undoable edit.
+//! clears on Resolume's layers become a take per pass ([`seq_core::record`]), punched into the
+//! sequence as they come (shown at once). The first click of a pass makes one undo step for the
+//! whole pass. The run plays the result from its next pass on; the lanes keep playing meanwhile.
 
 use seq_core::index::ClipInfo;
 use seq_core::model::Transition;
 use seq_core::record::{apply_take, sixteenths, snap, Click, Hit, Take};
 use seq_core::resolve::clip_ref_for;
+use seq_core::scheduler::TICKS_PER_BAR;
 use seq_core::{Repeat, TICKS_PER_SIXTEENTH};
 
 use super::*;
@@ -16,11 +17,23 @@ use super::*;
 const CLEAR_SETTLE: Duration = Duration::from_millis(20);
 /// The app's own clear: its `Disconnected` may come one fade later; this much on top of the fade.
 const OWN_CLEAR_SLACK: Duration = Duration::from_millis(300);
+/// Pattern lengths an empty sequence may record (bars).
+pub(super) const MAX_PATTERN_BARS: u32 = 64;
+
+/// A `Disconnected` that may be a clear, with where in the run it happened.
+struct MaybeClear {
+    layer_id: u64,
+    seen: Instant,
+    pass: u32,
+    ticks: f64,
+}
 
 #[derive(Default)]
 pub(super) struct Recorder {
     /// The armed sequence (one at a time).
     armed: Option<Uuid>,
+    /// Pass length for a sequence without steps (SPEC §7.9), in ticks.
+    min_ticks: u64,
     /// Its run is going and records.
     recording: bool,
     /// Pass being recorded (1-based, of the run).
@@ -28,11 +41,12 @@ pub(super) struct Recorder {
     /// The clicks of this pass, and those snapped into the next one.
     clicks: Vec<Click>,
     carry: Vec<Click>,
+    /// The sequence as it was before this pass's first click (the take is applied to it).
+    base: Option<Sequence>,
     /// Last known position (ticks into the pass, pass length) while recording.
     pos: Option<(u64, u64)>,
     last_tick: Option<Instant>,
-    /// `Disconnected`s that may be clears: (layer id, time, fade seconds).
-    maybe_clears: Vec<(u64, Instant, f64)>,
+    maybe_clears: Vec<MaybeClear>,
     /// The app's own clears: layer id → (time, fade seconds).
     own_clears: HashMap<u64, (Instant, f64)>,
     /// Layers that already warned about an ambiguous name in this recording.
@@ -49,23 +63,17 @@ impl Recorder {
         })
     }
 
-    /// The run of `seq` loops (SPEC §7.9).
-    pub(super) fn loops(&self, seq: Uuid) -> bool {
-        self.armed == Some(seq)
+    /// The run of `seq` loops (SPEC §7.9), at least this long; `None` when not armed.
+    pub(super) fn loops(&self, seq: Uuid) -> Option<u64> {
+        (self.armed == Some(seq)).then_some(self.min_ticks)
     }
 }
 
 impl Engine {
-    /// Arm `seq` (or disarm with `None`).
-    pub(super) fn set_armed(&mut self, seq: Option<Uuid>) {
-        if self.rec.armed == seq {
-            return;
-        }
-        if let Some(old) = self.rec.armed {
-            if self.rec.recording {
-                self.finish_take(old);
-            }
-            self.rec = Recorder::default();
+    /// Arm `seq` (or disarm with `None`). `bars`: the pattern length for a sequence without steps.
+    pub(super) fn set_armed(&mut self, seq: Option<Uuid>, bars: Option<u32>) {
+        if self.rec.armed.is_some() && self.rec.armed != seq {
+            self.end_recording();
             log::info!("recording disarmed");
         }
         let Some(seq) = seq else {
@@ -73,18 +81,26 @@ impl Engine {
             return;
         };
         let live = self.index.as_ref().and_then(|i| i.live_deck.clone());
-        let in_live = self
+        let found = self
             .model
             .as_ref()
             .and_then(|m| m.find_sequence(seq))
-            .is_some_and(|(deck, _)| Some(deck) == live.as_deref());
-        if !in_live {
+            .filter(|(deck, _)| Some(*deck) == live.as_deref())
+            .map(|(_, s)| s.lanes.iter().any(|l| !l.steps.is_empty()));
+        let Some(has_steps) = found else {
             self.notice("only a sequence of the live deck can record");
+            self.runtime_dirty = true;
+            return;
+        };
+        let bars = bars.map(|b| b.clamp(1, MAX_PATTERN_BARS));
+        if !has_steps && bars.is_none() {
+            self.notice("recording: choose a pattern length for a sequence without steps");
             self.runtime_dirty = true;
             return;
         }
         self.rec.armed = Some(seq);
-        if self.scheduler.is_running(seq) {
+        self.rec.min_ticks = bars.map_or(0, |b| u64::from(b) * TICKS_PER_BAR);
+        if self.scheduler.is_running(seq) && !self.rec.recording {
             // Records from now; from its next pass it loops.
             self.rec.recording = true;
             self.rec.pass = self
@@ -94,13 +110,20 @@ impl Engine {
                 .find(|r| r.seq == seq)
                 .map_or(1, |r| r.pass);
             self.rec.pos = self.scheduler.position(seq);
-            self.queue_take(seq);
+            self.queue_next_pass(seq);
+            self.phase_notice(seq);
         }
         log::info!("recording armed");
         self.runtime_dirty = true;
     }
 
-    /// Before each tick: remember where the recording run is (for the clicks of the next moment).
+    fn end_recording(&mut self) {
+        self.log_take();
+        self.rec = Recorder::default();
+        self.runtime_dirty = true;
+    }
+
+    /// After each tick: remember where the recording run is (for the clicks until the next one).
     pub(super) fn record_tick(&mut self, at: Instant) {
         let Some(seq) = self.rec.armed.filter(|_| self.rec.recording) else {
             return;
@@ -116,44 +139,93 @@ impl Engine {
             self.rec.pass = 1;
             self.rec.clicks.clear();
             self.rec.carry.clear();
+            self.rec.base = None;
             self.rec.pos = self.scheduler.position(seq);
             log::info!("recording started");
+            self.phase_notice(seq);
             self.runtime_dirty = true;
         }
     }
 
-    /// A pass of the recording run began: the take of the one before is written.
+    /// Clicks are snapped to the run's grid: if it isn't lined up with the music, they land a
+    /// sixteenth off (notes §17: Resolume reports no beat phase).
+    fn phase_notice(&mut self, seq: Uuid) {
+        let immediate = self
+            .model
+            .as_ref()
+            .and_then(|m| m.find_sequence(seq))
+            .is_some_and(|(_, s)| s.start == Start::Immediate);
+        if !self.bar_synced {
+            self.notice(if self.follows_resolume() {
+                "recording: the grid isn't lined up with Resolume's beat; press Resync in Resolume on a bar's first beat, \
+                 or clicks may land a sixteenth early or late"
+            } else {
+                "recording: the grid isn't lined up with the beat (no MIDI Start yet); clicks may land a sixteenth early or late"
+            });
+        } else if immediate {
+            self.notice(
+                "recording: this sequence starts \"now\", off the beat; a bar start lines its grid up with the music",
+            );
+        }
+    }
+
+    /// A pass of the recording run began: this pass's take is done (it is already in the model).
     pub(super) fn record_pass(&mut self, seq: Uuid, pass: u32) {
         if self.rec.armed != Some(seq) || !self.rec.recording || pass <= self.rec.pass {
             return;
         }
-        let end = self.rec.pos.map_or(0, |(_, len)| len);
-        self.commit_take(seq, end);
+        self.log_take();
         self.rec.pass = pass;
+        self.rec.base = None;
         self.rec.clicks = std::mem::take(&mut self.rec.carry);
+        self.rec.maybe_clears.retain(|m| m.pass >= pass);
         self.rec.pos = self.scheduler.position(seq);
         if !self.rec.clicks.is_empty() {
-            self.queue_take(seq);
+            self.punch_in(seq);
         }
     }
 
-    /// The recording run ended (Stop, Stop all, a deck change): the take so far is written.
+    /// The recording run ended (Stop, Stop all, a deck change): recording ends (and disarms).
     pub(super) fn record_ended(&mut self, seq: Uuid) {
         if self.rec.armed == Some(seq) {
-            if self.rec.recording {
-                self.finish_take(seq);
-            }
-            self.rec = Recorder::default();
+            self.end_recording();
             log::info!("recording ended");
-            self.runtime_dirty = true;
         }
     }
 
-    /// Writes what was recorded in this pass up to now.
-    fn finish_take(&mut self, seq: Uuid) {
-        let end = self.rec.pos.map_or(0, |(pos, _)| pos);
-        self.commit_take(seq, end);
+    /// Undo or redo while recording: the take so far is gone; new clicks start a new one.
+    pub(super) fn record_undo(&mut self) {
+        self.rec.base = None;
         self.rec.clicks.clear();
+    }
+
+    fn log_take(&self) {
+        if self.rec.clicks.is_empty() {
+            return;
+        }
+        let mut layers: Vec<&str> = Vec::new();
+        for c in &self.rec.clicks {
+            if !layers.contains(&c.layer.as_str()) {
+                layers.push(&c.layer);
+            }
+        }
+        let name = self
+            .rec
+            .armed
+            .and_then(|s| {
+                self.model
+                    .as_ref()?
+                    .find_sequence(s)
+                    .map(|(_, q)| q.name.clone())
+            })
+            .unwrap_or_default();
+        let n = self.rec.clicks.len();
+        log::info!(
+            "recorded pass {} of {name:?}: {} ({n} step{})",
+            self.rec.pass,
+            layers.join(", "),
+            if n == 1 { "" } else { "s" }
+        );
     }
 
     /// A clip connected that the app didn't trigger (SPEC §7.9). Returns true when it was recorded
@@ -165,26 +237,31 @@ impl Engine {
         layer_name: &str,
         at: Instant,
     ) -> bool {
-        self.rec.maybe_clears.retain(|(l, _, _)| *l != layer_id);
         let Some(seq) = self.rec.armed.filter(|_| self.rec.recording) else {
             return false;
         };
-        let owner = self.scheduler.owner_of(layer_id);
-        if owner.is_some_and(|(s, _)| s != seq) {
+        if self
+            .scheduler
+            .owner_of(layer_id)
+            .is_some_and(|(s, _)| s != seq)
+        {
             return false; // another sequence's layer: its manual override, not ours
         }
+        let Some(ticks) = self.ticks_at(at, 0.0) else {
+            return true;
+        };
         let fade = self.click_transition(clip, layer_id);
         let hit = Hit::Clip {
             clip: clip_ref_for(clip),
             column: clip.column as u32,
         };
-        self.add_click(seq, layer_id, layer_name, at, 0.0, hit, fade);
+        self.add_click(seq, layer_name, ticks, hit, fade);
         true
     }
 
     /// A clip connected on the layer: a `Disconnected` just before was a switch, not a clear.
     pub(super) fn record_connected(&mut self, layer_id: u64) {
-        self.rec.maybe_clears.retain(|(l, _, _)| *l != layer_id);
+        self.rec.maybe_clears.retain(|m| m.layer_id != layer_id);
     }
 
     pub(super) fn layer_of_clip(&self, clip_id: u64) -> Option<u64> {
@@ -193,7 +270,8 @@ impl Engine {
         index.layer_by_index(clip.layer).map(|l| l.id)
     }
 
-    /// A clip disconnected: perhaps a clear of its layer (checked after [`CLEAR_SETTLE`]).
+    /// A clip disconnected: perhaps a clear (or a Piano release) of its layer, checked after
+    /// [`CLEAR_SETTLE`]. Its place in the run is taken now, one fade earlier (notes §20).
     pub(super) fn record_disconnect(&mut self, layer_id: u64, at: Instant) {
         if !self.rec.recording {
             return;
@@ -209,7 +287,14 @@ impl Engine {
                 return;
             }
         }
-        self.rec.maybe_clears.push((layer_id, at, fade));
+        if let Some(ticks) = self.ticks_at(at, fade) {
+            self.rec.maybe_clears.push(MaybeClear {
+                layer_id,
+                seen: at,
+                pass: self.rec.pass,
+                ticks,
+            });
+        }
     }
 
     /// The app clears a layer itself.
@@ -227,27 +312,26 @@ impl Engine {
         }
         let (due, wait): (Vec<_>, Vec<_>) = std::mem::take(&mut self.rec.maybe_clears)
             .into_iter()
-            .partition(|(_, t, _)| now.saturating_duration_since(*t) >= CLEAR_SETTLE);
+            .partition(|m| now.saturating_duration_since(m.seen) >= CLEAR_SETTLE);
         self.rec.maybe_clears = wait;
         let Some(seq) = self.rec.armed.filter(|_| self.rec.recording) else {
             return;
         };
-        for (layer_id, at, fade) in due {
-            if self.layer_has_connected(layer_id) {
+        for m in due {
+            if m.pass != self.rec.pass || self.layer_has_connected(m.layer_id) {
                 continue;
             }
             if self
                 .scheduler
-                .owner_of(layer_id)
+                .owner_of(m.layer_id)
                 .is_some_and(|(s, _)| s != seq)
             {
                 continue;
             }
-            let Some(name) = self.layer_name(layer_id) else {
+            let Some(name) = self.layer_name(m.layer_id) else {
                 continue;
             };
-            // The press was one fade before the `Disconnected` (notes §20).
-            self.add_click(seq, layer_id, &name, at, fade, Hit::Rest, None);
+            self.add_click(seq, &name, m.ticks, Hit::Rest, None);
         }
     }
 
@@ -303,31 +387,33 @@ impl Engine {
             .unwrap_or(120.0)
     }
 
-    /// Places a click (or clear) that happened at `at − back_seconds` into this pass or the next.
-    #[allow(clippy::too_many_arguments)]
-    fn add_click(
-        &mut self,
-        seq: Uuid,
-        layer_id: u64,
-        layer_name: &str,
-        at: Instant,
-        back_seconds: f64,
-        hit: Hit,
-        transition: Option<Transition>,
-    ) {
-        let Some((pos, pass_ticks)) = self.rec.pos else {
-            return; // before the first tick of the recording
-        };
-        if layer_name == self.cfg.seq_layer {
-            return;
-        }
+    /// Ticks into the pass at `at − back_seconds`: the last tick's position plus the time since it
+    /// (at most one tick: the clock may have stopped).
+    fn ticks_at(&self, at: Instant, back_seconds: f64) -> Option<f64> {
+        let (pos, _) = self.rec.pos?;
         let tick = 60.0 / self.record_bpm() / 24.0;
-        // Between two ticks: at most one tick past the last one (the clock may have stopped).
         let since = match self.rec.last_tick {
             Some(t) if at > t => (at.duration_since(t).as_secs_f64() / tick).min(1.0),
             _ => 0.0,
         };
-        let ticks = pos as f64 + since - back_seconds / tick;
+        Some(pos as f64 + since - back_seconds / tick)
+    }
+
+    /// Places a click (or clear) at `ticks` into this pass or the start of the next.
+    fn add_click(
+        &mut self,
+        seq: Uuid,
+        layer_name: &str,
+        ticks: f64,
+        hit: Hit,
+        transition: Option<Transition>,
+    ) {
+        if layer_name == self.cfg.seq_layer {
+            return;
+        }
+        let Some((_, pass_ticks)) = self.rec.pos else {
+            return;
+        };
         let unique = self
             .index
             .as_ref()
@@ -353,93 +439,42 @@ impl Engine {
             transition: transition.clone(),
         };
         match snap(ticks, pass_ticks) {
-            Some(s) => self.rec.clicks.push(click(s)),
-            None => {
-                self.rec.carry.push(click(0));
-                return;
+            Some(s) => {
+                self.rec.clicks.push(click(s));
+                self.punch_in(seq);
             }
+            None => self.rec.carry.push(click(0)),
         }
-        // From its first click the lane yields to you and its layer gets its own transition back.
-        if self
-            .scheduler
-            .owner_of(layer_id)
-            .is_some_and(|(s, _)| s == seq)
-        {
-            let acts = self.scheduler.yield_layer(layer_id);
-            self.execute(acts);
-            if self.fades_held(layer_id) {
-                self.release_transition(layer_id);
-            }
-        }
-        self.queue_take(seq);
         self.runtime_dirty = true;
     }
 
-    fn take_now(&self, end: u32) -> Take {
-        Take {
-            clicks: self.rec.clicks.clone(),
-            end,
-        }
-    }
-
-    /// The model's sequence with this pass's take applied, or `None` when there is nothing.
-    fn sequence_with_take(
-        &self,
-        seq: Uuid,
-        end: u32,
-    ) -> Option<(String, Sequence, Vec<String>, usize)> {
-        let model = self.model.as_ref()?;
-        let (deck, sequence) = model.find_sequence(seq)?;
-        let take = self.take_now(end);
-        if take.clicks.is_empty() || end == 0 {
-            return None;
-        }
-        let index = self.index.as_ref();
-        let seq_layer = self.cfg.seq_layer.clone();
-        let r = apply_take(sequence, &take, |name| {
-            name != seq_layer
-                && index.is_some_and(|i| i.layers.iter().filter(|l| l.name == name).count() == 1)
-        });
-        Some((deck.to_owned(), r.sequence, r.layers, r.steps))
-    }
-
-    /// The run plays this pass's take from its next pass on.
-    fn queue_take(&mut self, seq: Uuid) {
+    /// Writes this pass's take into the model now (the first click of a pass makes the undo step)
+    /// and lets the run play it from its next pass.
+    fn punch_in(&mut self, seq: Uuid) {
         let Some((_, pass_ticks)) = self.rec.pos.or_else(|| self.scheduler.position(seq)) else {
-            return;
-        };
-        let end = (pass_ticks / u64::from(TICKS_PER_SIXTEENTH)) as u32;
-        let sequence = match self.sequence_with_take(seq, end) {
-            Some((_, s, _, _)) => s,
-            None => match self.model.as_ref().and_then(|m| m.find_sequence(seq)) {
-                Some((_, s)) => s.clone(),
-                None => return,
-            },
-        };
-        let Some(index) = self.index.clone() else {
-            return;
-        };
-        let resolution = resolve_sequence(&sequence, &index);
-        let mut spec = RunSpec::new(&sequence, &resolution);
-        spec.repeat = Repeat::Infinite;
-        spec.seed = seq.as_u128() as u64 ^ u64::from(self.rec.pass);
-        for (lane, run_lane) in sequence.lanes.iter().zip(spec.lanes.iter_mut()) {
-            if lane.layer == self.cfg.seq_layer {
-                run_lane.layer_id = None;
-            }
-        }
-        self.scheduler.set_next_pass(spec);
-    }
-
-    /// Writes the take of the pass that ends at `end` ticks into the model (one undo step).
-    fn commit_take(&mut self, seq: Uuid, end_ticks: u64) {
-        let end = (end_ticks / u64::from(TICKS_PER_SIXTEENTH)) as u32;
-        let Some((deck, sequence, layers, steps)) = self.sequence_with_take(seq, end) else {
             return;
         };
         let Some(model) = self.model.clone() else {
             return;
         };
+        let Some((deck, current)) = model
+            .find_sequence(seq)
+            .map(|(d, s)| (d.to_owned(), s.clone()))
+        else {
+            return;
+        };
+        let first = self.rec.base.is_none();
+        let base = self.rec.base.get_or_insert(current).clone();
+        let take = Take {
+            clicks: self.rec.clicks.clone(),
+            end: (pass_ticks / u64::from(TICKS_PER_SIXTEENTH)) as u32,
+        };
+        let index = self.index.as_ref();
+        let seq_layer = self.cfg.seq_layer.clone();
+        let result = apply_take(&base, &take, |name| {
+            name != seq_layer
+                && index.is_some_and(|i| i.layers.iter().filter(|l| l.name == name).count() == 1)
+        });
         let mut new = model.clone();
         let Some(slot) = new
             .decks
@@ -448,26 +483,49 @@ impl Engine {
         else {
             return;
         };
-        let name = sequence.name.clone();
-        *slot = sequence.clone();
+        *slot = result.sequence.clone();
         if let Err(errors) = seq_core::validate(&new) {
-            let first = errors.first().map(ToString::to_string).unwrap_or_default();
-            self.notice(format!("recording of {name:?} not saved: {first}"));
+            let first_error = errors.first().map(ToString::to_string).unwrap_or_default();
+            self.notice(format!("recording not saved: {first_error}"));
+            self.rec.clicks.pop();
             return;
         }
-        self.undo.push(model);
-        if self.undo.len() > MAX_UNDO {
-            self.undo.remove(0);
+        if first {
+            self.undo.push(model);
+            if self.undo.len() > MAX_UNDO {
+                self.undo.remove(0);
+            }
+            self.redo.clear();
         }
-        self.redo.clear();
         self.set_model(new);
-        // What runs now is what was recorded: no "edited" badge.
-        self.snapshots.insert(seq, (deck, sequence));
-        log::info!(
-            "recorded pass {} of {name:?}: {} ({steps} step{})",
-            self.rec.pass,
-            layers.join(", "),
-            if steps == 1 { "" } else { "s" }
-        );
+        // What runs is what was recorded: no "edited" badge.
+        self.snapshots.insert(seq, (deck, result.sequence));
+        self.queue_next_pass(seq);
+    }
+
+    /// The run plays the model's sequence from its next pass on, looping.
+    fn queue_next_pass(&mut self, seq: Uuid) {
+        let Some(sequence) = self
+            .model
+            .as_ref()
+            .and_then(|m| m.find_sequence(seq))
+            .map(|(_, s)| s.clone())
+        else {
+            return;
+        };
+        let Some(index) = self.index.clone() else {
+            return;
+        };
+        let resolution = resolve_sequence(&sequence, &index);
+        let mut spec = RunSpec::new(&sequence, &resolution);
+        spec.repeat = Repeat::Infinite;
+        spec.min_ticks = self.rec.min_ticks;
+        spec.seed = seq.as_u128() as u64 ^ u64::from(self.rec.pass);
+        for (lane, run_lane) in sequence.lanes.iter().zip(spec.lanes.iter_mut()) {
+            if lane.layer == self.cfg.seq_layer {
+                run_lane.layer_id = None;
+            }
+        }
+        self.scheduler.set_next_pass(spec);
     }
 }

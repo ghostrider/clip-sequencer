@@ -207,6 +207,9 @@ pub struct RunSpec {
     /// Seed for `random` picks; the engine sets a fresh one per start (SPEC §6: no IO here, tests
     /// pass a fixed one).
     pub seed: u64,
+    /// The shortest pass: a recording of an empty sequence runs for this pattern length
+    /// (SPEC §7.9). `0` = only the lanes count.
+    pub min_ticks: u64,
 }
 
 impl RunSpec {
@@ -258,12 +261,18 @@ impl RunSpec {
             after_last_pass: seq.after_last_pass,
             lanes,
             seed: 0,
+            min_ticks: 0,
         }
     }
 
-    /// One pass = the longest lane (SPEC §5), counting silent lanes too.
+    /// One pass = the longest lane (SPEC §5), counting silent lanes too, at least `min_ticks`.
     pub fn pass_ticks(&self) -> u64 {
-        self.lanes.iter().map(RunLane::ticks).max().unwrap_or(0)
+        self.lanes
+            .iter()
+            .map(RunLane::ticks)
+            .max()
+            .unwrap_or(0)
+            .max(self.min_ticks)
     }
 
     /// Number of passes; `None` = infinite.
@@ -900,7 +909,7 @@ impl Scheduler {
         if spec.pass_ticks() == 0 {
             return Err(StartError::Empty);
         }
-        if !spec.lanes.iter().any(RunLane::is_active) {
+        if !spec.lanes.iter().any(RunLane::is_active) && spec.min_ticks == 0 {
             return Err(StartError::NoPlayableLanes);
         }
         let seq = spec.seq_id;
@@ -933,7 +942,7 @@ impl Scheduler {
         if spec.pass_ticks() == 0 {
             return Err(StartError::Empty);
         }
-        if !spec.lanes.iter().any(RunLane::is_active) {
+        if !spec.lanes.iter().any(RunLane::is_active) && spec.min_ticks == 0 {
             return Err(StartError::NoPlayableLanes);
         }
         let seq = spec.seq_id;
