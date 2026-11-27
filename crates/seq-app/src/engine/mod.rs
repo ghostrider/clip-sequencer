@@ -2290,7 +2290,14 @@ impl Engine {
             saved: self.saved,
             save_error: self.save_error.clone(),
             seq_sync_busy: self.seq_sync_busy,
-            record: self.rec.view(),
+            record: self.rec.view(|id| {
+                self.index
+                    .as_ref()?
+                    .layers
+                    .iter()
+                    .find(|l| l.id == id)
+                    .map(|l| l.name.clone())
+            }),
         }
     }
 

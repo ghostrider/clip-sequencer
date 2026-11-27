@@ -218,6 +218,28 @@
   let bpm = $derived(app.runtime?.clock.bpm ?? 120);
   // This sequence records from Resolume (SPEC §7.9): its yielded lanes are the ones you play.
   let recording = $derived(app.runtime?.record?.seq === seq.id && !!app.runtime?.record?.recording);
+  let rec = $derived(recording ? app.runtime?.record ?? null : null);
+
+  /** Start (sixteenths) of each step of a lane. */
+  function stepStarts(lane: Lane): number[] {
+    const out: number[] = [];
+    let at = 0;
+    for (const st of lane.steps) {
+      out.push(at);
+      at += st.length;
+    }
+    return out;
+  }
+  /** Recording (SPEC §7.9): this step was recorded in the current pass / by its newest click. */
+  function takeMark(layer: string, start: number): 'new' | 'take' | null {
+    if (!rec) return null;
+    let i = -1;
+    rec.take.forEach((m, k) => {
+      if (m.layer === layer && m.at === start) i = k;
+    });
+    if (i < 0) return null;
+    return i === rec.take.length - 1 ? 'new' : 'take';
+  }
   /** Below this block width the fade label is just `↗ 1` (SPEC §9.3). */
   const NARROW_PX = 120;
 
@@ -307,6 +329,9 @@
             {@const notConfirmed = rl?.not_confirmed.includes(si)}
             {@const selected = app.selectedStep?.lane === li && app.selectedStep?.index === si}
             {@const dragged = drag?.active && drag.lane === li && drag.from === si}
+            {@const start = stepStarts(lane)[si]}
+            {@const mark = takeMark(lane.layer, start)}
+            {@const holding = !!rec && rec.held.includes(lane.layer) && run != null && start * TICKS_PER_SIXTEENTH <= run.pos && run.pos < (start + step.length) * TICKS_PER_SIXTEENTH}
             {@const fade = stepFade(lane, step)}
             {@const blockPx = len(li, si, step) * zoom}
             {@const fadeWarns = fade ? fadeWarnings(fade.t, app.laneLayers.find((l) => l.name === lane.layer), clip, bpm) : []}
@@ -324,6 +349,7 @@
                 class:dragged
                 class:warn={r?.ambiguous || r?.other_layer}
                 class:tied={!!step.tie}
+                class:take={mark != null}
                 style:background-image={thumb ? `linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), color-mix(in srgb, var(--bg) 55%, transparent)), url(${thumb})` : null}
                 title={`${stepLabel(step, r)}${step.column != null && r?.state === 'empty' ? ' · plays as a rest' : ''}${r?.ambiguous ? ' · ambiguous match' : ''}${r?.other_layer ? ' · clip is on another layer' : ''}${notConfirmed ? ' · not confirmed by Resolume' : ''}`}
                 role="button"
@@ -344,6 +370,12 @@
                     <line x1="0" y1="100" x2={x} y2={y} vector-effect="non-scaling-stroke" />
                   </svg>
                   {#if fadePx > blockPx}<span class="fade-more" title="The fade still runs when the next step starts">›</span>{/if}
+                {/if}
+                {#if mark === 'new'}{#key rec?.clicks}<div class="take-flash" aria-hidden="true"></div>{/key}{/if}
+                {#if holding && run}
+                  <!-- Held down (Piano): what lies after the playhead is cut at the release. -->
+                  <div class="holding" aria-hidden="true" title="Held: ends where you let go"
+                    style:left={`${(run.pos / TICKS_PER_SIXTEENTH - start) * zoom}px`}></div>
                 {/if}
                 <div class="name">{stepLabel(step, r)}</div>
                 <!-- Badges share the length row (the length gives way first), so they never cover the clip name. -->

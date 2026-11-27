@@ -311,6 +311,18 @@ pub struct RecordView {
     pub pass: u32,
     /// Clicks in this pass so far.
     pub clicks: usize,
+    /// Where they landed (for the editor's take marks), in arrival order.
+    pub take: Vec<TakeMark>,
+    /// Layers with a clip held down (Piano trigger style).
+    pub held: Vec<String>,
+}
+
+/// One click of the current take: layer name and sixteenth in the pass.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TakeMark {
+    pub layer: String,
+    pub at: u32,
+    pub rest: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

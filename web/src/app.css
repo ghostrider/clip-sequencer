@@ -251,3 +251,8 @@ button.pill { cursor: pointer; font: inherit; }
 .lane-sum { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .lane-info { font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tag.ok { color: var(--ok-text); border: 1px solid var(--ok-line); background: var(--ok-bg); }
+/* Recording (SPEC §7.9): steps of the current take, the newest click, a clip held down. */
+.step.take { outline: 1px solid var(--err); outline-offset: -1px; }
+.step .take-flash { position: absolute; inset: 0; background: var(--err); opacity: 0; pointer-events: none; animation: take-flash 700ms ease-out; }
+@keyframes take-flash { from { opacity: .45; } to { opacity: 0; } }
+.step .holding { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--err) 30%, transparent) 0 4px, transparent 4px 9px); border-left: 2px solid var(--err); }

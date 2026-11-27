@@ -595,7 +595,9 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
 - **Stop** while recording keeps the take so far (it is already written).
 - The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits for its start and
   `REC in N` (beats) while the start counts in. Next to it a chip says whether the grid is lined up with the beat:
-  `in sync`, `⚠ not synced` (with what to do) or `⚠ starts now` (a start mode `now`). The log says
+  `in sync`, `⚠ not synced` (with what to do) or `⚠ starts now` (a start mode `now`). In the grid, the steps
+  recorded in the current pass have a red outline, the one of the newest click flashes once, and a clip held down
+  shows hatched from the playhead on (it ends at the release). The log says
   `recorded pass 3 of Drop: BG, FG (2 steps)`.
 
 ## 8. Thumbnails

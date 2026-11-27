@@ -56,12 +56,22 @@ pub(super) struct Recorder {
 }
 
 impl Recorder {
-    pub(super) fn view(&self) -> Option<RecordView> {
+    pub(super) fn view(&self, layer_name: impl Fn(u64) -> Option<String>) -> Option<RecordView> {
         self.armed.map(|seq| RecordView {
             seq,
             recording: self.recording,
             pass: self.pass,
             clicks: self.clicks.len(),
+            take: self
+                .clicks
+                .iter()
+                .map(|c| TakeMark {
+                    layer: c.layer.clone(),
+                    at: c.at,
+                    rest: c.hit == Hit::Rest,
+                })
+                .collect(),
+            held: self.held.keys().filter_map(|l| layer_name(*l)).collect(),
         })
     }
 

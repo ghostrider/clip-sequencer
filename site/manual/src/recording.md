@@ -13,7 +13,8 @@ pass, the next layer in the second while the first one plays back, and so on.
 2. Start it (▶ or Space). It starts as usual, by its start mode: a bar start gives you a count-in. While it records
    it shows `● REC · pass 1` and loops pass after pass, whatever its repeat setting.
 3. Click clips in Resolume, or press a layer's **Clear** button for a rest, in time with the music.
-4. What you play appears in the sequence at once, and the next pass plays it.
+4. What you play appears in the sequence at once, and the next pass plays it. Steps recorded in this pass have a
+   red outline, the newest flashes once, and a clip you hold down is hatched from the playhead on until you let go.
 5. **Stop** (or **⏺** again) ends the recording.
 
 Each pass is **one undo step**: **Ctrl+Z** removes the last pass you recorded.

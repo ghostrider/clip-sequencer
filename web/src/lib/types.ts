@@ -557,4 +557,8 @@ export interface RecordView {
   recording: boolean;
   pass: number;
   clicks: number;
+  /** Where this pass's clicks landed (sixteenths). */
+  take: { layer: string; at: number; rest: boolean }[];
+  /** Layers with a clip held down (Piano). */
+  held: string[];
 }
