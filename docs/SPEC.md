@@ -593,7 +593,9 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
 - **Slot lanes** (§4.5) record the **column** that was clicked; Clip lanes record the clip (by id, name and file,
   as a drop from the clip browser does).
 - **Stop** while recording keeps the take so far (it is already written).
-- The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits; the log says
+- The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits for its start and
+  `REC in N` (beats) while the start counts in. Next to it a chip says whether the grid is lined up with the beat:
+  `in sync`, `⚠ not synced` (with what to do) or `⚠ starts now` (a start mode `now`). The log says
   `recorded pass 3 of Drop: BG, FG (2 steps)`.
 
 ## 8. Thumbnails

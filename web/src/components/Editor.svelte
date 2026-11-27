@@ -76,8 +76,22 @@
       </span>
       {#if run?.edited}<span class="tag pending">● edited · applies at next start</span>{/if}
       {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{waitLabel(waiting)}</span>{/if}
-      {#if rec?.recording}<span class="tag rec mono" title="Click clips in Resolume in time: each pass is written when it ends">● REC · pass {rec.pass}{rec.clicks ? ` · ${rec.clicks} click${rec.clicks === 1 ? '' : 's'}` : ''}</span>
+      {#if rec?.recording}<span class="tag rec mono" title="Click clips in Resolume in time: they show at once and play from the next pass">● REC · pass {rec.pass}{rec.clicks ? ` · ${rec.clicks} click${rec.clicks === 1 ? '' : 's'}` : ''}</span>
+      {:else if rec && waiting}<span class="tag rec mono" title="Count-in: recording starts with the sequence">● REC in {Math.ceil(waiting.wait_ticks / 24)}</span>
       {:else if rec}<span class="tag rec armed mono" title="Records from its next start">● armed</span>{/if}
+      {#if rec}
+        <!-- Clicks snap to the sequence's grid: it must be lined up with the music (SPEC §7.9). -->
+        {@const clock = app.runtime?.clock}
+        {#if !clock?.bar_synced}
+          <span class="tag bad mono" title={clock?.source === 'resolume'
+            ? "The grid is not lined up with Resolume's beat: press Resync in Resolume on the first beat of a bar, or clicks land a sixteenth early or late"
+            : 'The grid is not lined up with the beat yet (no MIDI Start): clicks may land a sixteenth early or late'}>⚠ not synced</span>
+        {:else if s.start.mode === 'immediate'}
+          <span class="tag bad mono" title="This sequence starts &quot;now&quot;, off the beat: give it a bar start so its grid lines up with the music">⚠ starts now</span>
+        {:else}
+          <span class="tag ok mono" title="The grid is lined up with the beat">in sync</span>
+        {/if}
+      {/if}
       <div class="spacer"></div>
       <div class="repeat startmode" role="group" aria-label="Start mode">
         <span>Start</span>

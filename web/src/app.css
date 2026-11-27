@@ -250,3 +250,4 @@ button.pill { cursor: pointer; font: inherit; }
 .lanehead.selected { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent-bg) 60%, transparent); }
 .lane-sum { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .lane-info { font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tag.ok { color: var(--ok-text); border: 1px solid var(--ok-line); background: var(--ok-bg); }

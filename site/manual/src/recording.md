@@ -20,7 +20,8 @@ Each pass is **one undo step**: **Ctrl+Z** removes the last pass you recorded.
 
 For clicks to land where you play them, the sequence's grid must be lined up with the music: with Resolume's
 tempo as the clock, press **Resync** in Resolume on a bar's first beat, and give the sequence a **bar** start
-mode rather than *now*. The app shows a notice when a recording starts without that.
+mode rather than *now*. A chip next to the REC tag says `in sync` when it is, `⚠ not synced` or `⚠ starts now`
+when it isn't. While the start waits for its bar, the tag counts the beats down: `● REC in 3`.
 
 ## What gets recorded
 
