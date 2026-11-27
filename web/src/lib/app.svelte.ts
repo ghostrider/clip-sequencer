@@ -85,6 +85,8 @@ class AppState {
   viewDeckKey = $state<string | null>(null);
   selectedSeq = $state<Uuid | null>(null);
   selectedStep = $state<{ lane: number; index: number } | null>(null);
+  /** Selected lane of the selected sequence (lane inspector, SPEC §9.4); a selected step wins. */
+  selectedLane = $state<number | null>(null);
   /** Pixels per sixteenth in the lane grid. */
   zoom = $state(7);
   search = $state('');
@@ -357,6 +359,15 @@ class AppState {
     });
     this.selectedSeq = id;
     this.selectedStep = null;
+  }
+
+  /** Moves a lane; the selected step and lane stay with their lane. */
+  moveLane(seq: Uuid, from: number, to: number) {
+    this.edit({ op: 'move_lane', seq, from, to });
+    const swap = (i: number) => (i === from ? to : i === to ? from : i);
+    const sel = this.selectedStep;
+    if (sel) this.selectedStep = { lane: swap(sel.lane), index: sel.index };
+    if (this.selectedLane != null) this.selectedLane = swap(this.selectedLane);
   }
 
   clipRef(c: ClipView): ClipRef {

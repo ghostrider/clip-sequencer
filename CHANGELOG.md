@@ -42,8 +42,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **New logo**: in the top bar, on the splash screen, as the app and window icon, in the About dialog and on the
   website, replacing the "§ SEQ" mark. The Unbounded font (used only by the old mark) is no longer bundled.
-- While a sequence runs, the lane head shows **M** and **S** in place of the move buttons, and the yielded pill
-  itself resumes the lane (no separate *Resume lane* button), so the lane head keeps its height.
+- **Lane inspector:** a lane's mode, end, default transition, move and delete are in the right panel (click the
+  lane head). The lane head keeps the layer, M/S while running, a one-line summary and the state; the yielded
+  pill itself resumes the lane.
 - **Starting a running sequence** works from either side: ▶ in the app restarts it and keeps its link to the `§`
   clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
   at a time").

@@ -641,11 +641,11 @@ Single screen, everything controlled from here (no separate live view).
   badge (only when running and edited), **Repeat** control (Once / ×N with number input / ∞),
   pass counter while running (`pass 2 / 4`), `+ Lane`, `Push thumbnail to Resolume`, Start/Stop.
 - Lane grid:
-  - Left column per lane: layer name (choose from the deck's layers), end behaviour
-    (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `↗ none` when the lane has no transitions, Resolume's own applies; `↗ orig.` when only steps have one), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
-    is the "Resume lane" action), **M** and **S** buttons while the sequence runs in place of the move buttons
-    (§7.8; the lane head keeps its height), delete lane.
+  - Left column per lane, the **lane head** (changed 2026-11-27: it had run out of room): the layer (choose from
+    the deck's layers), **M** and **S** next to it while the sequence runs (§7.8), a one-line summary
+    (`clip · loop · ↗ 1 beat`; mode, end, default transition, `↗ steps` when only steps have one) and the state
+    pill (`idle` / `playing` / `yielded ↺` / `muted` / `rec`; the yielded pill is the "Resume lane" action).
+    Clicking the head selects the lane: its settings are in the **lane inspector** (§9.4).
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
@@ -690,6 +690,9 @@ Single screen, everything controlled from here (no separate live view).
   as in Resolume), clip thumbnails with names; draggable onto lanes. Each thumbnail shows its
   **column number** (1-based, the number a slot lane uses, §4.5) as a small overlay in its top-left
   corner, in every lane mode.
+- **Lane inspector** for a selected lane (click its head; a selected step wins): Clips | Slots (§4.5), the end
+  behaviour (`Loop to end` / `Hold` / `Clear`, explained), the default transition (length and blend mode, or none,
+  §7.7), move up / down, delete lane.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
   in sixteenths with bars shown. For a slot step instead: column stepper (1 … column count) and the

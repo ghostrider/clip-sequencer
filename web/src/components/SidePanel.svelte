@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, formatLength, layerLabel, isSlotLane, whenWarning } from '../lib/app.svelte';
-  import type { Choice, ClipView, LayerView, StepResolution, Transition, When } from '../lib/types';
+  import type { Choice, ClipView, LaneEnd, LaneMode, LayerView, StepResolution, Transition, When } from '../lib/types';
   import { fadeLength, fadeWarnings, stepFade } from '../lib/fade';
   import FadePicker from './FadePicker.svelte';
 
@@ -116,6 +116,19 @@
     if (view && sel && (n === null || n >= 1)) {
       app.edit({ op: 'set_step_column', seq: view.sequence.id, lane: sel.lane, index: sel.index, column: n });
     }
+  }
+
+  // ---- lane inspector (SPEC §9.4): the lane's settings, out of the lane head ----
+
+  let laneIndex = $derived(view && !step && app.selectedLane != null && app.selectedLane < view.sequence.lanes.length ? app.selectedLane : null);
+  let lane = $derived(view && laneIndex != null ? view.sequence.lanes[laneIndex] : null);
+  const laneEnds: { value: LaneEnd; label: string; hint: string }[] = [
+    { value: 'loop_to_end', label: 'Loop to end', hint: 'its steps start again until the pass ends' },
+    { value: 'hold', label: 'Hold', hint: 'the last clip keeps playing until the pass ends' },
+    { value: 'clear', label: 'Clear', hint: 'the layer is cleared and stays dark until the pass ends' },
+  ];
+  function laneEdit(op: Record<string, unknown>) {
+    if (view && laneIndex != null) app.edit({ seq: view.sequence.id, lane: laneIndex, ...op } as never);
   }
 
   // ---- transition (SPEC §7.7, §9.4) ----
@@ -348,9 +361,52 @@
         </div>
       </div>
       {@render v4Fields()}
+    {:else if view && lane && laneIndex != null}
+      {@const li = laneIndex}
+      {@const layer = app.laneLayers.find((l) => l.name === lane.layer)}
+      {@const anyOwn = lane.steps.some((s) => s.transition)}
+      <div class="caps">Lane inspector · {lane.layer}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span class="meta">Plays</span>
+        <div class="mode-switch" role="group" aria-label="Lane mode" style="align-self:flex-start">
+          <button aria-pressed={lane.mode !== 'slot'} onclick={() => lane.mode === 'slot' && laneEdit({ op: 'set_lane_mode', mode: 'clip' as LaneMode })}>Clips</button>
+          <button aria-pressed={lane.mode === 'slot'} onclick={() => lane.mode !== 'slot' && laneEdit({ op: 'set_lane_mode', mode: 'slot' as LaneMode })}>Slots</button>
+        </div>
+        <span class="meta">{lane.mode === 'slot' ? 'Each step plays whatever is in a column of this layer' : 'Each step plays its clip, wherever it moves'}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span class="meta">When the lane is shorter than the sequence</span>
+        <select class="pill-select" style="max-width:none;align-self:flex-start" value={lane.end}
+          onchange={(e) => laneEdit({ op: 'set_lane_end', end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
+          {#each laneEnds as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+        </select>
+        <span class="meta">{laneEnds.find((o) => o.value === lane.end)?.hint}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span class="meta">Default transition · steps without their own</span>
+        {#if lane.transition}
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <FadePicker transition={lane.transition} options={layer?.blend_options ?? []}
+              onchange={(t: Transition) => laneEdit({ op: 'set_lane_transition', transition: t })} />
+            <button class="btn" onclick={() => laneEdit({ op: 'set_lane_transition', transition: null })}>No default</button>
+          </div>
+        {:else}
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button class="btn" onclick={() => laneEdit({ op: 'set_lane_transition', transition: { length: 4 } })}>Set a default</button>
+          </div>
+          <span class="meta">{anyOwn ? "Steps without their own transition get the layer's original." : "None: the app doesn't touch this layer's transition."}</span>
+        {/if}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" disabled={li === 0} onclick={() => view && app.moveLane(view.sequence.id, li, li - 1)}>▲ Move up</button>
+        <button class="btn" disabled={li === view.sequence.lanes.length - 1} onclick={() => view && app.moveLane(view.sequence.id, li, li + 1)}>▼ Move down</button>
+        <button class="btn danger" disabled={view.sequence.lanes.length === 1}
+          title={view.sequence.lanes.length === 1 ? 'A sequence needs at least one lane' : 'Delete this lane (Ctrl+Z brings it back)'}
+          onclick={() => { if (view) { app.edit({ op: 'remove_lane', seq: view.sequence.id, lane: li }); app.selectedLane = null; } }}>Delete lane</button>
+      </div>
     {:else}
-      <div class="caps">Step inspector</div>
-      <div class="hint">Select a step in the lane grid.</div>
+      <div class="caps">Inspector</div>
+      <div class="hint">Select a step in the lane grid, or click a lane head for the lane's settings.</div>
     {/if}
   </div>
 </aside>

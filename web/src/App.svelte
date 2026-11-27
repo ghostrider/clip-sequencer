@@ -77,6 +77,7 @@
     }
     if (e.key === 'Escape') {
       app.selectedStep = null;
+      app.selectedLane = null;
       app.selectedSection = null;
       app.relinking = false;
       return;

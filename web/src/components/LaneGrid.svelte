@@ -1,8 +1,7 @@
 <script lang="ts">
   import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane, whenLabel, whenWarning } from '../lib/app.svelte';
-  import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution, Transition } from '../lib/types';
+  import type { DeckView, Lane, SequenceView, Step, LaneEnd, StepResolution } from '../lib/types';
   import { fadeLabel, fadeLength, fadeWarnings, stepFade } from '../lib/fade';
-  import FadePicker from './FadePicker.svelte';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
 
@@ -180,6 +179,7 @@
     const d = drag;
     drag = null;
     app.selectedSection = null;
+    app.selectedLane = null;
     if (!d || !d.active) {
       app.selectedStep = { lane, index };
       return;
@@ -200,30 +200,24 @@
     app.zoom = Math.min(30, Math.max(2, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
   }
 
-  function moveLane(from: number, to: number) {
-    app.edit({ op: 'move_lane', seq: seq.id, from, to });
-    // Keep the selected step on the lane it belongs to.
-    const sel = app.selectedStep;
-    if (sel?.lane === from) app.selectedStep = { lane: to, index: sel.index };
-    else if (sel?.lane === to) app.selectedStep = { lane: from, index: sel.index };
-  }
-
   function laneState(li: number): string {
     return run?.lanes[li]?.state ?? 'idle';
   }
 
-  function setMode(lane: number, mode: LaneMode) {
-    if ((seq.lanes[lane].mode ?? 'clip') !== mode) app.edit({ op: 'set_lane_mode', seq: seq.id, lane, mode });
-  }
-
-  function setLaneFade(lane: number, transition: Transition | null) {
-    app.edit({ op: 'set_lane_transition', seq: seq.id, lane, transition });
+  /** The lane's settings in one line (`full`: spelled out, for the tooltip). */
+  function laneSummary(lane: Lane, full: boolean): string {
+    const mode = isSlotLane(lane) ? 'slot' : 'clip';
+    const end = ends.find((o) => o.value === lane.end)?.label ?? lane.end;
+    const fade = lane.transition
+      ? lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`
+      : lane.steps.some((s) => s.transition) ? (full ? "steps' own fades" : '↗ steps') : '';
+    if (full) return `${mode} lane · ${end}${fade ? ` · ${fade}` : ''} · click for the lane settings`;
+    return [mode, end.split(' ')[0].toLowerCase(), fade].filter(Boolean).join(' · ');
   }
 
   let bpm = $derived(app.runtime?.clock.bpm ?? 120);
   // This sequence records from Resolume (SPEC §7.9): its yielded lanes are the ones you play.
   let recording = $derived(app.runtime?.record?.seq === seq.id && !!app.runtime?.record?.recording);
-  let fadeMenu = $state<{ lane: number; x: number; y: number } | null>(null);
   /** Below this block width the fade label is just `↗ 1` (SPEC §9.3). */
   const NARROW_PX = 120;
 
@@ -242,9 +236,15 @@
         {@const res = view.resolution?.lanes[li]}
         {@const state = laneState(li)}
         {@const rlane = run?.lanes[li]}
-        <div class="lanehead" class:bad={res && res.layer !== 'ok'}>
+        <!-- The lane head (SPEC §9.3): layer, state, M/S while running and a summary; the rest is in the
+             lane inspector (click the head). -->
+        <div class="lanehead" class:bad={res && res.layer !== 'ok'} class:selected={app.selectedLane === li && !app.selectedStep}
+          role="button" tabindex="-1" title="Click: lane settings in the inspector"
+          onclick={() => { app.selectedLane = li; app.selectedStep = null; app.selectedSection = null; }}
+          onkeydown={(e) => e.key === 'Enter' && (app.selectedLane = li)}>
           <div class="row-between">
             <select class="layer-select mono" value={lane.layer} title={res?.layer === 'ok' ? 'layer' : `layer ${res?.layer}`}
+              onclick={(e) => e.stopPropagation()}
               onchange={(e) => app.edit({ op: 'set_lane_layer', seq: seq.id, lane: li, layer: (e.currentTarget as HTMLSelectElement).value })}>
               {#if !app.laneLayers.some((l) => l.name === lane.layer)}
                 <option value={lane.layer}>{lane.layer} (missing)</option>
@@ -255,50 +255,24 @@
                 </option>
               {/each}
             </select>
-            <span class="lane-tools">
-              <!-- While it runs, mute and solo take the place of the move buttons (the lane head keeps its height). -->
-              {#if run && rlane && state !== 'idle' && state !== 'taken_over'}
-                <span class="mode-switch ms" role="group" aria-label="Mute and solo">
-                  <button aria-pressed={rlane.mute} title="Mute: clear the layer, keep counting; back at the next step"
-                    onclick={() => app.send({ cmd: 'set_lane_mute', seq: seq.id, lane: li, on: !rlane.mute })}>M</button>
-                  <button aria-pressed={rlane.solo} title="Solo: mute the other lanes of this sequence"
-                    onclick={() => app.send({ cmd: 'set_lane_solo', seq: seq.id, lane: li, on: !rlane.solo })}>S</button>
-                </span>
-              {:else}
-                <button class="x" aria-label="Move lane up" title="Move lane up" disabled={li === 0}
-                  onclick={() => moveLane(li, li - 1)}>▲</button>
-                <button class="x" aria-label="Move lane down" title="Move lane down" disabled={li === seq.lanes.length - 1}
-                  onclick={() => moveLane(li, li + 1)}>▼</button>
-              {/if}
-            <button class="x" aria-label="Delete lane" title={seq.lanes.length === 1 ? 'A sequence needs at least one lane' : 'Delete lane'}
-              disabled={seq.lanes.length === 1} onclick={() => app.edit({ op: 'remove_lane', seq: seq.id, lane: li })}>✕</button>
-            </span>
+            {#if run && rlane && state !== 'idle' && state !== 'taken_over'}
+              <span class="mode-switch ms" role="group" aria-label="Mute and solo">
+                <button aria-pressed={rlane.mute} title="Mute: clear the layer, keep counting; back at the next step"
+                  onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'set_lane_mute', seq: seq.id, lane: li, on: !rlane.mute }); }}>M</button>
+                <button aria-pressed={rlane.solo} title="Solo: mute the other lanes of this sequence"
+                  onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'set_lane_solo', seq: seq.id, lane: li, on: !rlane.solo }); }}>S</button>
+              </span>
+            {/if}
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            <div class="mode-switch" role="group" aria-label="Lane mode"
-              title="Clip: steps follow their clips. Slot: steps play whatever is in a column of this layer.">
-              <button aria-pressed={!isSlotLane(lane)} onclick={() => setMode(li, 'clip')}>Clip</button>
-              <button aria-pressed={isSlotLane(lane)} onclick={() => setMode(li, 'slot')}>Slot</button>
-            </div>
-            <!-- The lane's default transition (SPEC §7.7, §9.3): a chip, click to edit. -->
-            <button class="fade-chip" class:none={!lane.transition}
-              title={lane.transition ? 'Lane default transition: steps without their own fade in like this. Click to edit'
-                : lane.steps.some((s) => s.transition) ? "Steps without their own transition get the layer's original. Click to set a lane default"
-                : "The app doesn't touch this layer's transition. Click to set a lane default"}
-              onclick={(e) => { e.stopPropagation(); fadeMenu = fadeMenu?.lane === li ? null : { lane: li, x: e.clientX, y: e.clientY }; }}>
-              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? '↗ orig.' : '↗ none'}
-            </button>
-            <select class="pill-select" value={lane.end}
-              onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
-              {#each ends as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-            </select>
+          <span class="lane-info mono" title={laneSummary(lane, true)}>{laneSummary(lane, false)}</span>
+          <div class="lane-sum">
             {#if rlane?.silent}
               <span class="pill muted" title={rlane.mute ? 'Muted: counts, sends nothing' : 'Another lane is soloed'}>muted</span>
             {:else if state === 'yielded' && recording}
-              <span class="pill rec" title="Recording: you play this layer in Resolume; the take plays from the next pass">rec</span>
+              <span class="pill rec" title="Recording: you play this layer in Resolume">rec</span>
             {:else if state === 'yielded'}
               <button class="pill yielded" title="Played by hand in Resolume. Click: Resume lane (plays again from its next step)"
-                onclick={() => app.send({ cmd: 'resume_lane', seq: seq.id, lane: li })}>yielded ↺</button>
+                onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'resume_lane', seq: seq.id, lane: li }); }}>yielded ↺</button>
             {:else}
               <span class="pill" class:playing={state === 'playing'} class:yielded={state === 'resume_pending'}>
                 {state === 'resume_pending' ? 'resuming' : state === 'taken_over' ? 'taken over' : state}
@@ -436,24 +410,7 @@
   </div>
 </div>
 
-<svelte:window onclick={() => { rulerMenu = null; fadeMenu = null; }} />
-{#if fadeMenu && seq.lanes[fadeMenu.lane]}
-  {@const fl = fadeMenu.lane}
-  {@const lt = seq.lanes[fl].transition}
-  <div class="menu fade-menu" style:left={`${fadeMenu.x}px`} style:top={`${fadeMenu.y + 8}px`} role="dialog" aria-label="Lane default transition"
-    tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (fadeMenu = null)}>
-    <div class="meta">Lane default · steps without their own transition</div>
-    {#if lt}
-      <div style="display:flex;gap:4px;align-items:center">
-        <FadePicker transition={lt} options={app.laneLayers.find((l) => l.name === seq.lanes[fl].layer)?.blend_options ?? []}
-          onchange={(t) => setLaneFade(fl, t)} />
-      </div>
-      <button role="menuitem" class="danger" onclick={() => { setLaneFade(fl, null); fadeMenu = null; }}>No lane default</button>
-    {:else}
-      <button role="menuitem" onclick={() => setLaneFade(fl, { length: 4 })}>Set a lane default (↗ 1 beat)</button>
-    {/if}
-  </div>
-{/if}
+<svelte:window onclick={() => (rulerMenu = null)} />
 {#if rulerMenu}
   {@const m = rulerMenu}
   <div class="menu" style:left={`${m.x}px`} style:top={`${m.y}px`} role="menu">

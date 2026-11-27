@@ -68,15 +68,20 @@ Below: **Start** (now / beat / bar / 2 · 4 · 8 · 16 bars: when a start begins
 
 **Lanes.** Each lane has a head on the left:
 
-- the **layer** it plays on (only named layers of the deck; [Setting up Resolume](resolume-setup.md));
-- **Clip | Slot**: whether its steps play particular clips or the clips in columns of the layer
-  ([Slot lanes](slot-lanes.md));
-- **▲ ▼** to reorder lanes (display only) and **×** to delete the lane; while the sequence runs, **M** (mute) and
-  **S** (solo) take the place of ▲ ▼ ([Playing live](playing-live.md));
-- the **end behaviour** for when the lane is shorter than the sequence: *Loop to end* (start the lane's steps
-  again), *Hold* (keep the last clip playing), *Clear* (clear the layer and stay silent);
+- the **layer** it plays on (only named layers of the deck; [Setting up Resolume](resolume-setup.md)), and while
+  the sequence runs **M** (mute) and **S** (solo) ([Playing live](playing-live.md));
+- a one-line summary of its settings, such as `clip · loop · ↗ 1 beat`;
 - the lane's **state**: `idle`, `playing`, `muted`, `rec` (you play it while recording,
   [Recording from Resolume](recording.md)), or `yielded ↺`: click it to resume the lane.
+
+Click a lane head for its settings in the **lane inspector** on the right:
+
+- **Clips | Slots**: whether its steps play particular clips or the clips in columns of the layer
+  ([Slot lanes](slot-lanes.md));
+- what happens when the lane is shorter than the sequence: *Loop to end* (start the lane's steps again), *Hold*
+  (keep the last clip playing), *Clear* (clear the layer and stay silent);
+- the **default transition** of its steps ([Transitions](transitions.md));
+- **Move up**, **Move down** (display only) and **Delete lane** (**Ctrl+Z** brings it back).
 
 The **ruler** numbers the bars, with eighth (and, zoomed in, sixteenth) ticks. Zoom with **Ctrl+mouse wheel** over
 the grid.

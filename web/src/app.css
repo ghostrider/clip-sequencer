@@ -244,3 +244,9 @@ button.pill { cursor: pointer; font: inherit; }
 .step.tied { border-left-style: dashed; }
 .step.tied::before { content: "⌒"; position: absolute; left: 2px; top: -2px; font-size: 14px; line-height: 1; color: var(--accent-text); pointer-events: none; z-index: 1; }
 .tie-toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+/* Lane head (SPEC §9.3): layer, state and a summary; click for the lane inspector. */
+.lanehead { cursor: pointer; border-left: 2px solid transparent; }
+.lanehead:hover { background: color-mix(in srgb, var(--control) 40%, transparent); }
+.lanehead.selected { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent-bg) 60%, transparent); }
+.lane-sum { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.lane-info { font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

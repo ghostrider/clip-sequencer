@@ -173,7 +173,7 @@ folder and logs a warning.
   `Space` starts/stops, `Esc` deselects, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, `Ctrl+wheel` zooms.
 - **Rests** clear the layer (it shows nothing; layers below show through). If the lane's clip
   lives on another layer (⚠ on the step) and is still playing, that layer is cleared too.
-- **Lanes** can be reordered with ▲ / ▼ on the lane head. **Red steps** are unresolved (clip not found): they trigger nothing.
+- **Lanes:** click a lane head for its settings (mode, end, default transition, move, delete). **Red steps** are unresolved (clip not found): they trigger nothing.
   The step inspector shows which of clip id / name / file still match and offers *Relink*.
 - **Lane ends** (when a lane is shorter than the sequence): *Loop to end*, *Hold* (last clip keeps
   playing), *Clear*. **Repeat:** once, ×N or ∞; after the last pass the layers are cleared or held.

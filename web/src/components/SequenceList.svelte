@@ -27,7 +27,10 @@
   }
 
   function select(v: SequenceView) {
-    if (app.selectedSeq !== v.sequence.id) app.selectedStep = null;
+    if (app.selectedSeq !== v.sequence.id) {
+      app.selectedStep = null;
+      app.selectedLane = null;
+    }
     app.selectedSeq = v.sequence.id;
   }
 
