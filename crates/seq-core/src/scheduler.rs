@@ -30,12 +30,44 @@
 //! checked against the pass counter (a step that doesn't play sends nothing), then one of its
 //! options is picked by the step's play counter: in turn (`cycle`) or from the run's seed
 //! (`random`, a pure function of seed, lane, step and counter, so it can be known ahead).
+//!
+//! **Transitions** (SPEC §7.7): a lane that has a transition anywhere gives each of its steps a
+//! [`Fade`] (its own, the lane's, or the layer's original); other lanes never touch the layer's
+//! transition. [`Action::SetTransition`] goes out one sixteenth before the step, or, while the fade
+//! of the step before still runs (a new value would rescale it, notes §19), when that fade ends, or
+//! at the latest just before the step's trigger on the same tick. The condition and pick are decided
+//! then, as at the boundary, so a step that will not play sets nothing.
+//! [`Action::TransitionReleased`] says that no running lane with transitions holds a layer any more;
+//! it comes before any clear of that layer, so the clear uses the original.
 
 use uuid::Uuid;
 
 use crate::model::{
-    AfterLastPass, LaneEnd, Pick, Repeat, Sequence, Start, When, TICKS_PER_SIXTEENTH,
+    AfterLastPass, LaneEnd, Pick, Repeat, Sequence, Start, Transition, When, TICKS_PER_SIXTEENTH,
 };
+
+/// A transition goes out this many ticks before its step at the earliest (one sixteenth).
+pub const FADE_LEAD: u64 = TICKS_PER_SIXTEENTH as u64;
+
+/// The transition a step of a lane with transitions gets (SPEC §7.7 rules 1–3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fade {
+    /// This length (sixteenths) and, if named, blend mode (the step's own or the lane's).
+    Set(Transition),
+    /// The layer's original transition (rule 3).
+    Original,
+}
+
+impl Fade {
+    /// Ticks the fade runs, as far as the scheduler knows (the original's length is in seconds
+    /// and unknown here: 0).
+    pub fn ticks(&self) -> u64 {
+        match self {
+            Fade::Set(t) => u64::from(t.length) * FADE_LEAD,
+            Fade::Original => 0,
+        }
+    }
+}
 use crate::resolve::{LayerResolution, SequenceResolution, StepResolution};
 
 /// Ticks per beat (quarter note) and per bar in 4/4.
@@ -74,10 +106,12 @@ pub struct RunStep {
     pub choices: Vec<StepTarget>,
     /// How an option is picked when there are choices.
     pub pick: Pick,
+    /// Its transition; `None` in a lane without transitions (rule 4: the layer's is left alone).
+    pub fade: Option<Fade>,
 }
 
 impl RunStep {
-    /// A plain step: one option, every pass.
+    /// A plain step: one option, every pass, no transition.
     pub fn new(ticks: u64, target: StepTarget) -> Self {
         Self {
             ticks,
@@ -85,6 +119,7 @@ impl RunStep {
             when: None,
             choices: Vec::new(),
             pick: Pick::Random,
+            fade: None,
         }
     }
 
@@ -154,6 +189,11 @@ impl RunLane {
     pub fn is_active(&self) -> bool {
         self.layer_id.is_some() && self.ticks() > 0
     }
+
+    /// The lane sets its layer's transition (SPEC §7.7 rules 1–3).
+    pub fn fades(&self) -> bool {
+        self.steps.iter().any(|s| s.fade.is_some())
+    }
 }
 
 /// Snapshot of a sequence taken at start.
@@ -176,29 +216,39 @@ impl RunSpec {
             .lanes
             .iter()
             .zip(&resolution.lanes)
-            .map(|(lane, res)| RunLane {
-                layer_id: match res.layer {
-                    LayerResolution::Found { id, .. } => Some(id),
-                    _ => None,
-                },
-                end: lane.end,
-                steps: lane
-                    .steps
-                    .iter()
-                    .zip(&res.steps)
-                    .enumerate()
-                    .map(|(si, (step, sr))| RunStep {
-                        ticks: u64::from(step.length) * u64::from(TICKS_PER_SIXTEENTH),
-                        target: target_of(sr),
-                        when: step.when,
-                        choices: res
-                            .choices
-                            .get(si)
-                            .map(|c| c.iter().map(target_of).collect())
-                            .unwrap_or_default(),
-                        pick: step.pick.unwrap_or_default(),
-                    })
-                    .collect(),
+            .map(|(lane, res)| {
+                let fades =
+                    lane.transition.is_some() || lane.steps.iter().any(|s| s.transition.is_some());
+                RunLane {
+                    layer_id: match res.layer {
+                        LayerResolution::Found { id, .. } => Some(id),
+                        _ => None,
+                    },
+                    end: lane.end,
+                    steps: lane
+                        .steps
+                        .iter()
+                        .zip(&res.steps)
+                        .enumerate()
+                        .map(|(si, (step, sr))| RunStep {
+                            ticks: u64::from(step.length) * u64::from(TICKS_PER_SIXTEENTH),
+                            target: target_of(sr),
+                            when: step.when,
+                            choices: res
+                                .choices
+                                .get(si)
+                                .map(|c| c.iter().map(target_of).collect())
+                                .unwrap_or_default(),
+                            pick: step.pick.unwrap_or_default(),
+                            fade: fades.then(|| {
+                                step.transition
+                                    .as_ref()
+                                    .or(lane.transition.as_ref())
+                                    .map_or(Fade::Original, |t| Fade::Set(t.clone()))
+                            }),
+                        })
+                        .collect(),
+                }
             })
             .collect();
         Self {
@@ -354,6 +404,21 @@ pub enum Action {
         lane: usize,
         silent: bool,
     },
+    /// Set the layer's transition for `step` of the lane, which starts within [`FADE_LEAD`]
+    /// ticks or on this tick (then this comes before its trigger). Also before a lane end
+    /// *Clear* (the original). The engine sends it only if the layer has another value.
+    SetTransition {
+        seq: Uuid,
+        lane: usize,
+        step: usize,
+        layer_id: u64,
+        fade: Fade,
+    },
+    /// No running lane with transitions holds this layer any more: its original goes back
+    /// (before a clear of it in the same list).
+    TransitionReleased {
+        layer_id: u64,
+    },
 }
 
 /// A slot lane step that starts a given number of ticks from now (see
@@ -441,6 +506,11 @@ struct LaneRt {
     /// Start position of each step within the lane.
     starts: Vec<u64>,
     len: u64,
+    /// The next step's transition went out ahead.
+    fade_sent: bool,
+    /// Run tick ([`Run::elapsed`]) the lane last sent a step, and when that step's fade ends.
+    step_sent_at: u64,
+    fade_end: u64,
 }
 
 impl LaneRt {
@@ -470,6 +540,92 @@ struct Run {
     pos: u64,
     pass_ticks: u64,
     lanes: Vec<LaneRt>,
+    /// Ticks since the run began (not reset by a pass or a resync).
+    elapsed: u64,
+}
+
+impl Run {
+    /// The step of `lane` that starts exactly `k` ticks from now (≥ 1) and the pass it is in,
+    /// if the run is still going then.
+    fn step_in(&self, lane: usize, k: u64) -> Option<(usize, u32)> {
+        let mut at = self.pos + k;
+        let mut pass = self.pass;
+        if at >= self.pass_ticks {
+            let passes_left = self
+                .spec
+                .passes()
+                .map_or(u64::MAX, |n| u64::from(n.saturating_sub(self.pass)));
+            let wraps = at / self.pass_ticks;
+            if wraps > passes_left {
+                return None;
+            }
+            pass += wraps as u32;
+            at %= self.pass_ticks;
+        }
+        let step = self.lanes[lane].step_starting_at(self.spec.lanes[lane].end, at)?;
+        Some((step, pass))
+    }
+
+    /// The lane triggers at its next step boundary (playing, or yielded with a resume pending)
+    /// and is not silenced.
+    fn will_play(&self, lane: usize) -> bool {
+        let rt = &self.lanes[lane];
+        !rt.silent
+            && matches!(
+                rt.state,
+                LaneState::Playing
+                    | LaneState::Yielded {
+                        resume_pending: true
+                    }
+            )
+    }
+
+    /// The option `step` plays next time on `pass`, or `None` if its condition keeps it silent.
+    fn next_option(&self, lane: usize, step: usize, pass: u32) -> Option<usize> {
+        let rs = &self.spec.lanes[lane].steps[step];
+        plays_on(rs.when, pass, self.spec.passes())
+            .then(|| pick_option(rs, self.spec.seed, lane, step, self.lanes[lane].plays[step]))
+    }
+
+    /// Transitions that go out ahead on this tick (see the module docs).
+    fn fades_ahead(&mut self) -> Vec<Action> {
+        let mut out = Vec::new();
+        let now = self.elapsed;
+        for lane in 0..self.lanes.len() {
+            let rt = &self.lanes[lane];
+            if rt.fade_sent
+                || !self.spec.lanes[lane].fades()
+                || !self.will_play(lane)
+                || now <= rt.step_sent_at
+                || now < rt.fade_end
+            {
+                continue;
+            }
+            let Some((step, pass)) = (1..=FADE_LEAD).find_map(|k| self.step_in(lane, k)) else {
+                continue;
+            };
+            let Some(option) = self.next_option(lane, step, pass) else {
+                continue;
+            };
+            let rs = &self.spec.lanes[lane].steps[step];
+            if rs.option(option) == StepTarget::Unresolved {
+                continue;
+            }
+            let (Some(fade), Some(layer_id)) = (rs.fade.clone(), self.spec.lanes[lane].layer_id)
+            else {
+                continue;
+            };
+            self.lanes[lane].fade_sent = true;
+            out.push(Action::SetTransition {
+                seq: self.spec.seq_id,
+                lane,
+                step,
+                layer_id,
+                fade,
+            });
+        }
+        out
+    }
 }
 
 struct PendingStart {
@@ -495,6 +651,9 @@ pub struct Scheduler {
     /// Bar phase of the last tick (ticks since bar index 0 began); `None` until the first tick
     /// after a reset, which is then phase 0.
     phase: Option<u64>,
+    /// Layers a run that is beginning will set transitions on (while it ends the runs it
+    /// replaces, so their layers are not released in between).
+    incoming: Vec<u64>,
 }
 
 impl Scheduler {
@@ -868,19 +1027,31 @@ impl Scheduler {
             .filter(|l| l.is_active())
             .filter_map(|l| l.layer_id)
             .collect();
+        let new_fade_layers: Vec<u64> = spec
+            .lanes
+            .iter()
+            .filter(|l| l.is_active() && l.fades())
+            .filter_map(|l| l.layer_id)
+            .collect();
         for run in &mut self.runs {
             for (i, rt) in run.lanes.iter_mut().enumerate() {
-                let layer = run.spec.lanes[i].layer_id;
-                if rt.state.owns_layer() && layer.is_some_and(|l| new_layers.contains(&l)) {
+                let lane = &run.spec.lanes[i];
+                let Some(layer) = lane.layer_id else { continue };
+                if rt.state.owns_layer() && new_layers.contains(&layer) {
                     rt.state = LaneState::TakenOver;
                     out.push(Action::LaneStateChanged {
                         seq: run.spec.seq_id,
                         lane: i,
                         state: rt.state,
                     });
+                    // Taken by a lane without transitions: the original goes back first.
+                    if lane.fades() && !new_fade_layers.contains(&layer) {
+                        out.push(Action::TransitionReleased { layer_id: layer });
+                    }
                 }
             }
         }
+        self.incoming = new_fade_layers;
         if let Some(i) = self.runs.iter().position(|r| r.spec.seq_id == seq) {
             out.extend(self.end_run(i, StopMode::AfterLastPass, EndReason::Restarted));
         }
@@ -891,6 +1062,7 @@ impl Scheduler {
         {
             out.extend(self.end_run(i, StopMode::Release, EndReason::TakenOver));
         }
+        self.incoming.clear();
 
         let lanes = spec
             .lanes
@@ -915,6 +1087,9 @@ impl Scheduler {
                     option: None,
                     starts,
                     len: at,
+                    fade_sent: false,
+                    step_sent_at: 0,
+                    fade_end: 0,
                 }
             })
             .collect();
@@ -925,6 +1100,7 @@ impl Scheduler {
             pos: 0,
             pass_ticks,
             lanes,
+            elapsed: 0,
         };
         out.push(Action::Started { seq, origin });
         out.push(Action::PassStarted { seq, pass: 1 });
@@ -1023,42 +1199,19 @@ impl Scheduler {
             return out;
         }
         for run in &self.runs {
-            let mut at = run.pos + ahead;
-            let mut pass = run.pass;
-            if at >= run.pass_ticks {
-                let passes_left = run
-                    .spec
-                    .passes()
-                    .map_or(u64::MAX, |n| u64::from(n.saturating_sub(run.pass)));
-                let wraps = at / run.pass_ticks;
-                if wraps > passes_left {
+            for lane in 0..run.lanes.len() {
+                if !run.will_play(lane) {
                     continue;
                 }
-                pass += wraps as u32;
-                at %= run.pass_ticks;
-            }
-            for (lane, rt) in run.lanes.iter().enumerate() {
-                let will_play = matches!(
-                    rt.state,
-                    LaneState::Playing
-                        | LaneState::Yielded {
-                            resume_pending: true
-                        }
-                );
-                if !will_play || rt.silent {
-                    continue;
-                }
-                let spec = &run.spec.lanes[lane];
-                let Some(step) = rt.step_starting_at(spec.end, at) else {
+                let Some((step, pass)) = run.step_in(lane, ahead) else {
                     continue;
                 };
-                let rs = &spec.steps[step];
-                if !plays_on(rs.when, pass, run.spec.passes()) {
+                let Some(option) = run.next_option(lane, step, pass) else {
                     continue;
-                }
-                let option = pick_option(rs, run.spec.seed, lane, step, rt.plays[step]);
+                };
+                let spec = &run.spec.lanes[lane];
                 if let (StepTarget::Slot(column), Some(layer_id)) =
-                    (rs.option(option), spec.layer_id)
+                    (spec.steps[step].option(option), spec.layer_id)
                 {
                     out.push(UpcomingSlot {
                         seq: run.spec.seq_id,
@@ -1081,6 +1234,8 @@ impl Scheduler {
         for run in &mut self.runs {
             run.pos = 0;
             for lane in 0..run.lanes.len() {
+                // A transition sent ahead was for another step.
+                run.lanes[lane].fade_sent = false;
                 out.extend(boundary(run, lane, Some(0)));
             }
         }
@@ -1107,6 +1262,7 @@ impl Scheduler {
                 continue; // at position 0 on this tick
             }
             run.pos += 1;
+            run.elapsed += 1;
             let seq = run.spec.seq_id;
             if run.pos >= run.pass_ticks {
                 if run.spec.passes().is_some_and(|n| run.pass >= n) {
@@ -1122,32 +1278,47 @@ impl Scheduler {
                 for lane in 0..run.lanes.len() {
                     out.extend(boundary(run, lane, Some(0)));
                 }
-                continue;
-            }
-            for lane in 0..run.lanes.len() {
-                let rt = &run.lanes[lane];
-                if !rt.state.owns_layer() {
-                    continue;
-                }
-                let end = run.spec.lanes[lane].end;
-                let step = rt.step_starting_at(end, run.pos);
-                if step.is_some() {
-                    out.extend(boundary(run, lane, step));
-                } else if end == LaneEnd::Clear
-                    && run.pos == rt.len
-                    && rt.state == LaneState::Playing
-                    && !rt.silent
-                {
-                    // Lane shorter than the pass ran out: clear and stay silent.
-                    out.push(Action::Clear {
-                        seq,
-                        lane,
-                        layer_id: run.spec.lanes[lane]
+            } else {
+                for lane in 0..run.lanes.len() {
+                    let rt = &run.lanes[lane];
+                    if !rt.state.owns_layer() {
+                        continue;
+                    }
+                    let end = run.spec.lanes[lane].end;
+                    let step = rt.step_starting_at(end, run.pos);
+                    if step.is_some() {
+                        out.extend(boundary(run, lane, step));
+                    } else if end == LaneEnd::Clear
+                        && run.pos == rt.len
+                        && rt.state == LaneState::Playing
+                        && !rt.silent
+                    {
+                        // Lane shorter than the pass ran out: clear and stay silent. With
+                        // transitions the clear uses the original (SPEC §7.7).
+                        let layer_id = run.spec.lanes[lane]
                             .layer_id
-                            .expect("active lane has a layer"),
-                    });
+                            .expect("active lane has a layer");
+                        if run.spec.lanes[lane].fades() {
+                            let rt = &mut run.lanes[lane];
+                            rt.step_sent_at = run.elapsed;
+                            rt.fade_end = run.elapsed;
+                            out.push(Action::SetTransition {
+                                seq,
+                                lane,
+                                step: rt.starts.len() - 1,
+                                layer_id,
+                                fade: Fade::Original,
+                            });
+                        }
+                        out.push(Action::Clear {
+                            seq,
+                            lane,
+                            layer_id,
+                        });
+                    }
                 }
             }
+            out.extend(run.fades_ahead());
         }
         for ri in finished.into_iter().rev() {
             out.extend(self.end_run(ri, StopMode::AfterLastPass, EndReason::Finished));
@@ -1155,10 +1326,30 @@ impl Scheduler {
         out
     }
 
+    /// A running lane with transitions owns this layer, or a beginning run will.
+    fn fade_layer_held(&self, layer_id: u64) -> bool {
+        self.incoming.contains(&layer_id)
+            || self.runs.iter().any(|r| {
+                r.lanes.iter().zip(&r.spec.lanes).any(|(rt, l)| {
+                    rt.state.owns_layer() && l.layer_id == Some(layer_id) && l.fades()
+                })
+            })
+    }
+
     fn end_run(&mut self, index: usize, mode: StopMode, reason: EndReason) -> Vec<Action> {
         let run = self.runs.remove(index);
         let seq = run.spec.seq_id;
         let mut out = Vec::new();
+        // Originals go back before the clears (SPEC §7.7), unless another lane with
+        // transitions holds the layer or is about to.
+        for (rt, lane) in run.lanes.iter().zip(&run.spec.lanes) {
+            let Some(layer_id) = lane.layer_id else {
+                continue;
+            };
+            if rt.state.owns_layer() && lane.fades() && !self.fade_layer_held(layer_id) {
+                out.push(Action::TransitionReleased { layer_id });
+            }
+        }
         for (i, rt) in run.lanes.iter().enumerate() {
             let clear = match mode {
                 StopMode::AfterLastPass => {
@@ -1215,8 +1406,10 @@ fn step_actions(run: &mut Run, lane: usize, step: usize) -> Vec<Action> {
     let seq = run.spec.seq_id;
     let mut out = vec![Action::StepStarted { seq, lane, step }];
     let passes = run.spec.passes();
+    let now = run.elapsed;
     let rs = &run.spec.lanes[lane].steps[step];
     let rt = &mut run.lanes[lane];
+    let fade_sent = std::mem::take(&mut rt.fade_sent);
     if !plays_on(rs.when, run.pass, passes) {
         // Not on this pass: nothing is sent, the previous clip plays through (SPEC §6).
         rt.option = None;
@@ -1232,6 +1425,21 @@ fn step_actions(run: &mut Run, lane: usize, step: usize) -> Vec<Action> {
     let layer_id = run.spec.lanes[lane]
         .layer_id
         .expect("playing lane has a layer");
+    if let (Some(fade), false) = (&rs.fade, target == StepTarget::Unresolved) {
+        // Not sent ahead (first step, a fade that ran until now, a lane just back): now, before
+        // the trigger (a set in the same instant counts, notes §19).
+        if !fade_sent {
+            out.push(Action::SetTransition {
+                seq,
+                lane,
+                step,
+                layer_id,
+                fade: fade.clone(),
+            });
+        }
+        rt.step_sent_at = now;
+        rt.fade_end = now + fade.ticks();
+    }
     match target {
         StepTarget::Clip(clip_id) => out.push(Action::Trigger {
             seq,

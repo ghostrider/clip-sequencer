@@ -1503,6 +1503,8 @@ impl Engine {
                 Action::PassStarted { .. }
                 | Action::StepStarted { .. }
                 | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
+                // Sent from M21's engine step on.
+                Action::SetTransition { .. } | Action::TransitionReleased { .. } => {}
             }
         }
     }
