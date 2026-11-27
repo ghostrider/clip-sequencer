@@ -92,6 +92,9 @@ pub struct ClipInfo {
     /// The clip's own transition when it is not layer determined (recording, SPEC §7.9).
     #[serde(default)]
     pub own_transition: Option<ClipTransition>,
+    /// Plays only while held (Piano trigger style, its own or the composition's; notes §20).
+    #[serde(default)]
+    pub piano: bool,
 }
 
 /// A clip's own transition: milliseconds (the index compares exactly, so no float) and blend mode.
@@ -327,6 +330,7 @@ pub(crate) mod test_support {
                     sequence_param: None,
                     layer_determined: true,
                     own_transition: None,
+                    piano: false,
                 });
             }
             self

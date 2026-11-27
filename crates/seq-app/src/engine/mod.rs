@@ -857,7 +857,7 @@ impl Engine {
                 } else if was.is_some_and(ClipState::is_connected) {
                     self.on_clip_disconnected(clip_id);
                     if let Some(layer_id) = self.layer_of_clip(clip_id) {
-                        self.record_disconnect(layer_id, at);
+                        self.record_disconnect(clip_id, layer_id, at);
                     }
                 }
             }

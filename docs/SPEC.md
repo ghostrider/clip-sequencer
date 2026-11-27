@@ -559,6 +559,11 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   its lane from its position up to the **next step that was already there**, or your next click on that layer, or
   the end of the pass. Everything else stays, so a clip clicked between two others keeps the later ones. Steps
   cut by a click keep their conditions, choices and transitions, shortened; a step replaced whole loses them.
+- **Held clips** (Piano trigger style, the clip's own or the composition's `cliptriggerstyle`; requested
+  2026-11-27): a clip pressed and held records **from press to release** and overwrites what lies in between.
+  While it is held its lane triggers nothing (it yields); after the release the lane plays again from its next
+  step. A hold that runs over the end of a pass goes on in the next: that lane begins the pass quiet, and the
+  clip is recorded there from the start until its release. (Add where you click, overwrite where you hold.)
 - A lane shorter than the pass is first written out to the pass length as it plays (*Loop to end*: its steps
   repeated; *Hold*: the last step longer; *Clear*: a rest), then overwritten. Its end mode stays.
 - **While recording:** every lane plays on as usual, also the one you click on (its next step comes in where the

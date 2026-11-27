@@ -210,6 +210,9 @@ pub struct RunSpec {
     /// The shortest pass: a recording of an empty sequence runs for this pattern length
     /// (SPEC §7.9). `0` = only the lanes count.
     pub min_ticks: u64,
+    /// Lanes on these layers begin the pass yielded (a clip held by hand while recording, §7.9);
+    /// only for [`Scheduler::set_next_pass`].
+    pub yielded_layers: Vec<u64>,
 }
 
 impl RunSpec {
@@ -262,6 +265,7 @@ impl RunSpec {
             lanes,
             seed: 0,
             min_ticks: 0,
+            yielded_layers: Vec::new(),
         }
     }
 
@@ -601,6 +605,14 @@ impl Run {
                     if old.state == LaneState::TakenOver {
                         rt.state = LaneState::TakenOver;
                     }
+                }
+                if rt.state == LaneState::Playing
+                    && l.layer_id
+                        .is_some_and(|id| spec.yielded_layers.contains(&id))
+                {
+                    rt.state = LaneState::Yielded {
+                        resume_pending: false,
+                    };
                 }
                 rt
             })

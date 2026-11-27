@@ -40,8 +40,9 @@ mode rather than *now*. The app shows a notice when a recording starts without t
 
 ## Limits
 
-- Clips in **Piano** trigger style record as you play them: the clip from press to release, then a rest. A
-  quick tap records at least a sixteenth. **Toggle** clips record a rest when you click them off.
+- Clips in **Piano** trigger style record as you play them: the clip from press to release, then a rest. While
+  you hold one, it **overwrites** whatever the lane had in that time, and the lane stays quiet; after you let go,
+  the lane plays again from its next step. A quick tap records at least a sixteenth. **Toggle** clips record a rest when you click them off.
 - Clicking the clip that is already playing does nothing in Resolume, so it can't be recorded: the step just
   goes on.
 - A layer's **Clear** with a fade is reported only when the fade has ended; the sequencer places it one fade

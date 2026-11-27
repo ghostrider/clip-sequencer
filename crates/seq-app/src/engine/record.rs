@@ -51,6 +51,8 @@ pub(super) struct Recorder {
     own_clears: HashMap<u64, (Instant, f64)>,
     /// Layers that already warned about an ambiguous name in this recording.
     warned: Vec<String>,
+    /// Clips held by hand (Piano trigger style), by layer id: their lanes are quiet until the release.
+    held: HashMap<u64, u64>,
 }
 
 impl Recorder {
@@ -119,8 +121,20 @@ impl Engine {
 
     fn end_recording(&mut self) {
         self.log_take();
+        let held: Vec<u64> = self.rec.held.keys().copied().collect();
         self.rec = Recorder::default();
+        for layer_id in held {
+            self.resume_held_lane(layer_id);
+        }
         self.runtime_dirty = true;
+    }
+
+    /// A held clip was let go (or the recording ended): its lane plays again from its next step.
+    fn resume_held_lane(&mut self, layer_id: u64) {
+        if let Some((seq, lane)) = self.scheduler.owner_of(layer_id) {
+            let acts = self.scheduler.resume_lane(seq, lane);
+            self.execute(acts);
+        }
     }
 
     /// After each tick: remember where the recording run is (for the clicks until the next one).
@@ -180,6 +194,30 @@ impl Engine {
         self.rec.clicks = std::mem::take(&mut self.rec.carry);
         self.rec.maybe_clears.retain(|m| m.pass >= pass);
         self.rec.pos = self.scheduler.position(seq);
+        // A clip still held runs on into this pass: it is recorded from its start (its lane began
+        // the pass quiet, `RunSpec::yielded_layers`).
+        let held: Vec<(u64, u64)> = self.rec.held.iter().map(|(l, c)| (*l, *c)).collect();
+        for (layer_id, clip_id) in held {
+            let clip = self
+                .index
+                .as_ref()
+                .and_then(|i| i.clip_by_id(clip_id))
+                .cloned();
+            let name = self.layer_name(layer_id);
+            if let (Some(clip), Some(name)) = (clip, name) {
+                self.rec.clicks.retain(|c| !(c.layer == name && c.at == 0));
+                self.rec.clicks.push(Click {
+                    layer: name,
+                    at: 0,
+                    hit: Hit::Clip {
+                        clip: clip_ref_for(&clip),
+                        column: clip.column as u32,
+                        held: true,
+                    },
+                    transition: None,
+                });
+            }
+        }
         if !self.rec.clicks.is_empty() {
             self.punch_in(seq);
         }
@@ -251,10 +289,26 @@ impl Engine {
             return true;
         };
         let fade = self.click_transition(clip, layer_id);
+        let held = clip.piano;
         let hit = Hit::Clip {
             clip: clip_ref_for(clip),
             column: clip.column as u32,
+            held,
         };
+        if held {
+            // While it is held, the lane must not trigger its own steps over it.
+            self.rec.held.insert(layer_id, clip.id);
+            if self
+                .scheduler
+                .owner_of(layer_id)
+                .is_some_and(|(s, _)| s == seq)
+            {
+                let acts = self.scheduler.yield_layer(layer_id);
+                self.execute(acts);
+            }
+        } else {
+            self.rec.held.remove(&layer_id);
+        }
         self.add_click(seq, layer_name, ticks, hit, fade);
         true
     }
@@ -272,9 +326,17 @@ impl Engine {
 
     /// A clip disconnected: perhaps a clear (or a Piano release) of its layer, checked after
     /// [`CLEAR_SETTLE`]. Its place in the run is taken now, one fade earlier (notes §20).
-    pub(super) fn record_disconnect(&mut self, layer_id: u64, at: Instant) {
+    pub(super) fn record_disconnect(&mut self, clip_id: u64, layer_id: u64, at: Instant) {
         if !self.rec.recording {
             return;
+        }
+        // A held clip let go: its lane plays again from its next step.
+        if self.rec.held.get(&layer_id) == Some(&clip_id) {
+            self.rec.held.remove(&layer_id);
+            self.resume_held_lane(layer_id);
+            if let Some(seq) = self.rec.armed {
+                self.queue_next_pass(seq);
+            }
         }
         // The end of a fade: another clip of the layer plays.
         if self.layer_has_connected(layer_id) {
@@ -520,6 +582,7 @@ impl Engine {
         let mut spec = RunSpec::new(&sequence, &resolution);
         spec.repeat = Repeat::Infinite;
         spec.min_ticks = self.rec.min_ticks;
+        spec.yielded_layers = self.rec.held.keys().copied().collect();
         spec.seed = seq.as_u128() as u64 ^ u64::from(self.rec.pass);
         for (lane, run_lane) in sequence.lanes.iter().zip(spec.lanes.iter_mut()) {
             if lane.layer == self.cfg.seq_layer {

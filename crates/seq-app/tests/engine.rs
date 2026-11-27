@@ -2851,3 +2851,55 @@ async fn recording_keeps_the_transition_of_each_click() {
     h.runtime(|r| r.record.is_none()).await;
     h.app.shutdown().await;
 }
+
+/// SPEC §7.9: a Piano clip held while recording overwrites what lies under it until its release; its
+/// lane is quiet while it is held and plays again from its next step.
+#[tokio::test]
+async fn a_held_piano_clip_overwrites_until_its_release() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.mock
+        .edit(|v| v["layers"][1]["clips"][2]["triggerstyle"]["value"] = "Piano".into());
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.osc(1).await;
+    h.ticks(24); // sixteenth 4: press LIQUID (Piano) and hold
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.clear_osc_log();
+    h.mock.manual_connect(2, 3);
+    h.runtime(|r| {
+        r.running
+            .first()
+            .is_some_and(|x| x.lanes[0].state == "yielded")
+    })
+    .await;
+    h.ticks(96); // tick 120 = sixteenth 20: the lane's own step at 96 is not sent
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(h.mock.osc_log().is_empty(), "quiet while held");
+    h.mock.manual_clear(2); // let go
+    h.runtime(|r| {
+        r.running
+            .first()
+            .is_some_and(|x| x.lanes[0].state != "yielded")
+    })
+    .await;
+    assert_eq!(
+        h.lanes_of_a(|l| l[0].1.len() == 3 && l[0].1[1].1 == 16)
+            .await,
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 16), ("-", 12)])])
+    );
+    h.app.shutdown().await;
+}

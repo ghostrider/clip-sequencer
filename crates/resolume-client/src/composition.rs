@@ -104,10 +104,21 @@ pub fn parse_clip(
     column: usize,
 ) -> Result<(ClipInfo, Option<ClipState>), ParseError> {
     let raw: RawClip = serde_json::from_str(json)?;
-    Ok(clip_info(raw, layer, column))
+    Ok(clip_info(raw, layer, column, false))
 }
 
-fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<ClipState>) {
+/// `piano_default`: the composition's `cliptriggerstyle` is Piano (for clips that follow it).
+fn clip_info(
+    clip: RawClip,
+    layer: usize,
+    column: usize,
+    piano_default: bool,
+) -> (ClipInfo, Option<ClipState>) {
+    let piano = match clip.triggerstyle.as_ref().map(|p| p.value.as_str()) {
+        Some("Piano") => true,
+        Some("Composition Determined") | None => piano_default,
+        Some(_) => false,
+    };
     let state = ClipState::from_resolume(&clip.connected.value);
     let (file_path, sequence_param) = match clip.video {
         Some(v) => (
@@ -152,6 +163,7 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         sequence_param,
         layer_determined,
         own_transition,
+        piano,
     };
     (info, state)
 }
@@ -191,6 +203,10 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
     let mut states = HashMap::new();
     let mut lut_effects: Vec<LutEffect> = Vec::new();
     let mut transitions = HashMap::new();
+    let piano_default = raw
+        .cliptriggerstyle
+        .as_ref()
+        .is_some_and(|p| p.value == "Piano");
     let mut add_luts = |effects: Vec<serde_json::Value>, place: &dyn Fn() -> LutPlace| {
         lut_effects.extend(effects.into_iter().filter_map(|e| lut_effect(e, place())));
     };
@@ -238,7 +254,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
                 column: ci + 1,
                 name: clip_name.clone(),
             });
-            let (info, state) = clip_info(clip, layer_index, ci + 1);
+            let (info, state) = clip_info(clip, layer_index, ci + 1, piano_default);
             if let Some(s) = state {
                 states.insert(info.id, s);
             }
@@ -280,6 +296,9 @@ struct RawComposition {
     columns: Vec<RawColumn>,
     #[serde(default)]
     tempocontroller: Option<RawTempoController>,
+    /// The clips' default trigger style (notes §20).
+    #[serde(default)]
+    cliptriggerstyle: Option<Param<String>>,
     #[serde(default)]
     video: Option<RawEffects>,
 }
@@ -409,6 +428,8 @@ struct RawClip {
     thumbnail: Option<RawThumbnail>,
     #[serde(default)]
     transition: Option<RawClipTransition>,
+    #[serde(default)]
+    triggerstyle: Option<Param<String>>,
 }
 
 #[derive(Deserialize)]

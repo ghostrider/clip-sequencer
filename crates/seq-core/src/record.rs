@@ -3,7 +3,8 @@
 //! into [`Click`]s and saves the result as one edit.
 //!
 //! Clicks are **punched in**: each replaces its lane from its position up to the next step that was
-//! already there (or the next click on that layer, or the end); the rest of the lane stays. A lane
+//! already there (or the next click on that layer, or the end); the rest of the lane stays. A clip
+//! **held** (Piano trigger style) runs until its release and overwrites what lies in between. A lane
 //! shorter than the pass is first written out as it plays (loop, hold or clear), so its steps stay
 //! where they were heard.
 
@@ -15,8 +16,13 @@ use crate::TICKS_PER_SIXTEENTH;
 /// What a click put on a layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hit {
-    /// A clip, with its 1-based column (a slot lane records the column).
-    Clip { clip: ClipRef, column: u32 },
+    /// A clip, with its 1-based column (a slot lane records the column). `held`: pressed and held
+    /// (Piano trigger style): it lasts until its release and overwrites what lies in between.
+    Clip {
+        clip: ClipRef,
+        column: u32,
+        held: bool,
+    },
     /// The layer was cleared.
     Rest,
 }
@@ -170,13 +176,19 @@ fn overwrite(lane: &mut Lane, clicks: &[&Click], end: u32) {
     let mut cuts = Vec::new();
     for (i, c) in clicks.iter().enumerate() {
         let next_click = clicks.get(i + 1).map_or(end, |n| n.at);
-        let next_step = starts.iter().copied().find(|&s| s > c.at).unwrap_or(end);
+        let held = matches!(c.hit, Hit::Clip { held: true, .. });
+        // A held clip runs until it is let go; a click until the next step that is there.
+        let next_step = if held {
+            end
+        } else {
+            starts.iter().copied().find(|&s| s > c.at).unwrap_or(end)
+        };
         let stop = next_click.min(next_step).min(end);
         if stop <= c.at {
             continue;
         }
         let mut step = rest(stop - c.at);
-        if let Hit::Clip { clip, column } = &c.hit {
+        if let Hit::Clip { clip, column, .. } = &c.hit {
             if slot {
                 step.column = Some(*column);
             } else {
@@ -299,6 +311,7 @@ mod tests {
                 Some(n) => Hit::Clip {
                     clip: clip(n),
                     column,
+                    held: false,
                 },
                 None => Hit::Rest,
             },
@@ -459,6 +472,29 @@ mod tests {
         assert_eq!(
             shape(&r.sequence.lanes[0]),
             sh(&[("-", 4), ("x", 8), ("-", 4), ("z", 4), ("y", 12)])
+        );
+    }
+
+    #[test]
+    fn a_held_clip_overwrites_until_its_release() {
+        let s = seq(vec![lane(
+            "BG",
+            LaneEnd::Hold,
+            vec![step(Some("a"), 8), step(Some("b"), 8), step(Some("c"), 16)],
+        )]);
+        let mut held = click("BG", 4, Some("h"), 1, None);
+        if let Hit::Clip { held: h, .. } = &mut held.hit {
+            *h = true;
+        }
+        let take = Take {
+            clicks: vec![held, click("BG", 20, None, 0, None)], // released at 20
+            end: 32,
+        };
+        let r = apply_take(&s, &take, |_| true);
+        // b is gone, c is cut; the release is a rest up to c's rest (the next step after it).
+        assert_eq!(
+            shape(&r.sequence.lanes[0]),
+            sh(&[("a", 4), ("h", 16), ("-", 12)])
         );
     }
 

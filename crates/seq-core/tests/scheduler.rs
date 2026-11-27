@@ -33,6 +33,7 @@ fn spec(id: u128, repeat: Repeat, after: AfterLastPass, lanes: Vec<RunLane>) -> 
         lanes,
         seed: 7,
         min_ticks: 0,
+        yielded_layers: Vec::new(),
     }
 }
 
@@ -677,6 +678,7 @@ fn run_spec_from_sequence_and_resolution() {
         sequence_param: None,
         layer_determined: true,
         own_transition: None,
+        piano: false,
     };
     let idx = CompositionIndex::new(
         "Show".into(),
