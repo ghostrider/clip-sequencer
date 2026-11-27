@@ -337,7 +337,7 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       `§` connecting while pending links the pending start. Tests for every order.
 - [x] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
 
-## M25 — Record from Resolume (SPEC §7.9; G6)  ⟵ next
+## M25 — Record from Resolume (SPEC §7.9; G6)  ✓ done 2026-11-27
 - [x] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
       layer without a lane does (new lane?), stop recording, undo as one step; slot lanes record columns.
       Done 2026-11-27 (§7.9): loops until Stop, one take per pass written at its end (one undo each) and played
@@ -358,7 +358,7 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       for empty sequences, held Piano clips overwrite, ties (format v4 `tie`) and clips running on over the loop;
       design round: lane inspector, count-in and sync chip, live take marks, ties on the grid, quantize and latency
       (Preferences → Recording), per-lane ⏺, new lanes switch, punch in / replace.
-- [ ] Docs (manual, changelog, README) and a live check with Uli. Docs written; live check of the design round open.
+- [x] Docs (manual, changelog, README) and a live check with Uli. Live checks passed 2026-11-27 (design round too).
 
 ## M26 — Pre-show check (G16)
 - [ ] Probe: the clip play mode field (Loop / Play once …) and the clip duration, notes §19 or §20.
@@ -402,6 +402,11 @@ Today the UI server answers only on `127.0.0.1` (SPEC §12.2). Let another compu
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
 ## Release 0.5.0 — before tagging
+
+Drafted 2026-11-27 (version 0.5.0, changelog dated) with M14, M19–M25 and M27. **M26 (pre-show check) is not in
+0.5.0**; it moves to the next release together with M28 and M29. The open checks below were not run before the
+draft; the live checks of M21 and M25 were.
+
 - [ ] Housekeeping: M11c and the plugin docs boxes (shipped since 0.2.0; the "⟵ next" markers are already gone); dependency PRs
       (cargo/npm/actions minor bumps; TypeScript 7 only after `npm run check` passes); LUT effects in layer groups
       (optional).

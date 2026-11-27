@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
 ### Added
 
 - **Start mode** per sequence (sequence file format **v4**): start now, on the next beat, on the next bar, or on the
@@ -36,6 +38,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   instead of starting again, also across the loop (sequence file format v4, field `tie`).
 - **Resizing steps:** the left edge of a step can be dragged too (it moves the boundary with the step before), and
   while an edge is dragged a marker through the grid shows where it is and the new length.
+- **Log debug messages** (Preferences → Log): every OSC message sent to Resolume and each trigger's confirmation
+  go to the Console tab and the log file, with their times. Off by default; applies at once. They are no longer
+  shown in the status bar.
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up
@@ -43,6 +48,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Sequence files** are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
+  original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
 - **New logo**: in the top bar, on the splash screen, as the app and window icon, in the About dialog and on the
   website, replacing the "§ SEQ" mark. The Unbounded font (used only by the old mark) is no longer bundled.
 - **Lane inspector:** a lane's mode, end, default transition, move and delete are in the right panel (click the
@@ -54,10 +61,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
   picture with a split to drag. It uses the whole width of the tab and is as high as the image needs.
 
-- **Log debug messages** (Preferences → Log): every OSC message sent to Resolume and each trigger's confirmation
-  go to the Console tab and the log file, with their times. Off by default; applies at once. They are no longer
-  shown in the status bar.
-
 ### Fixed
 
 - The **OSC** chip turns red when Resolume ignores the triggers (for example with its OSC input off): before, it
@@ -66,8 +69,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A disabled main button (such as **Download and install** when the app can't update itself) looks disabled.
 - The splash screen keeps its own size and stays centred instead of reopening at the main window's last size.
 - Picking a clip for a choice or a relink no longer shifts the clip browser down.
-- Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
-  original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
 
 ## [0.4.0] - 2026-11-22
 
@@ -156,7 +157,8 @@ First public release.
 - The data folder is now `%APPDATA%\clip-sequencer`; the old `%APPDATA%\resolume-sequencer` of earlier builds is
   moved there on first start.
 
-[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ghostrider/clip-sequencer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ghostrider/clip-sequencer/releases/tag/v0.2.0
