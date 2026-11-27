@@ -10,8 +10,10 @@
 use std::collections::HashMap;
 
 use seq_core::index::{
-    ClipInfo, ClipState, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo, TextParam, Thumbnail,
+    ClipInfo, ClipState, ClipTransition, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo,
+    TextParam, Thumbnail, TransitionParams,
 };
+use seq_core::transition::LayerTransition;
 
 /// Display name of the text parameter of the "1000A Sequence" FFGL source (SPEC §12).
 pub const SEQUENCE_PARAM: &str = "Sequence";
@@ -37,6 +39,8 @@ pub struct CompositionSnapshot {
     /// Resolume's own LUT effects on the composition, the layers and the live deck's clips, in that
     /// order (notes §18). Layer groups are not read (their JSON is not probed).
     pub lut_effects: Vec<LutEffect>,
+    /// Each layer's transition at the time of the push, by layer id (notes §19).
+    pub transitions: HashMap<u64, LayerTransition>,
 }
 
 /// One instance of Resolume's LUT effect: its `LUT 3D` file parameter and where it sits.
@@ -100,10 +104,21 @@ pub fn parse_clip(
     column: usize,
 ) -> Result<(ClipInfo, Option<ClipState>), ParseError> {
     let raw: RawClip = serde_json::from_str(json)?;
-    Ok(clip_info(raw, layer, column))
+    Ok(clip_info(raw, layer, column, false))
 }
 
-fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<ClipState>) {
+/// `piano_default`: the composition's `cliptriggerstyle` is Piano (for clips that follow it).
+fn clip_info(
+    clip: RawClip,
+    layer: usize,
+    column: usize,
+    piano_default: bool,
+) -> (ClipInfo, Option<ClipState>) {
+    let piano = match clip.triggerstyle.as_ref().map(|p| p.value.as_str()) {
+        Some("Piano") => true,
+        Some("Composition Determined") | None => piano_default,
+        Some(_) => false,
+    };
     let state = ClipState::from_resolume(&clip.connected.value);
     let (file_path, sequence_param) = match clip.video {
         Some(v) => (
@@ -119,6 +134,19 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         None => (None, None),
     };
     let thumbnail = clip.thumbnail.unwrap_or_default();
+    let (layer_determined, own_transition) = match clip.transition {
+        Some(t) => {
+            let ld = t.layer_determined.is_none_or(|p| p.value);
+            let own = (!ld).then(|| ClipTransition {
+                millis: t
+                    .duration
+                    .map_or(0, |d| (d.value.max(0.0) * 1000.0).round() as u32),
+                blend: t.blend_mode.map(|b| b.value).unwrap_or_default(),
+            });
+            (ld, own)
+        }
+        None => (true, None),
+    };
     let info = ClipInfo {
         id: clip.id,
         layer,
@@ -133,6 +161,9 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         connected_param: clip.connected.id,
         name_param: clip.name.id,
         sequence_param,
+        layer_determined,
+        own_transition,
+        piano,
     };
     (info, state)
 }
@@ -171,6 +202,11 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
     let mut clips = Vec::new();
     let mut states = HashMap::new();
     let mut lut_effects: Vec<LutEffect> = Vec::new();
+    let mut transitions = HashMap::new();
+    let piano_default = raw
+        .cliptriggerstyle
+        .as_ref()
+        .is_some_and(|p| p.value == "Piano");
     let mut add_luts = |effects: Vec<serde_json::Value>, place: &dyn Fn() -> LutPlace| {
         lut_effects.extend(effects.into_iter().filter_map(|e| lut_effect(e, place())));
     };
@@ -186,11 +222,29 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
                 name: layer_name.clone(),
             }
         });
+        let transition = layer.transition.and_then(|t| {
+            let (d, b) = (t.duration?, t.blend_mode?);
+            (d.id != 0 && b.id != 0).then(|| {
+                transitions.insert(
+                    layer.id,
+                    LayerTransition {
+                        seconds: d.value,
+                        blend: b.value.clone(),
+                    },
+                );
+                TransitionParams {
+                    duration_param: d.id,
+                    blend_param: b.id,
+                    blend_options: b.options,
+                }
+            })
+        });
         layers.push(LayerInfo {
             id: layer.id,
             index: layer_index,
             name: layer.name.value,
             name_param: layer.name.id,
+            transition,
         });
         for (ci, mut clip) in layer.clips.into_iter().enumerate() {
             let effects = clip.video.as_mut().map(|v| std::mem::take(&mut v.effects));
@@ -200,7 +254,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
                 column: ci + 1,
                 name: clip_name.clone(),
             });
-            let (info, state) = clip_info(clip, layer_index, ci + 1);
+            let (info, state) = clip_info(clip, layer_index, ci + 1, piano_default);
             if let Some(s) = state {
                 states.insert(info.id, s);
             }
@@ -225,6 +279,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
         states,
         tempo,
         lut_effects,
+        transitions,
     }
 }
 
@@ -241,6 +296,9 @@ struct RawComposition {
     columns: Vec<RawColumn>,
     #[serde(default)]
     tempocontroller: Option<RawTempoController>,
+    /// The clips' default trigger style (notes §20).
+    #[serde(default)]
+    cliptriggerstyle: Option<Param<String>>,
     #[serde(default)]
     video: Option<RawEffects>,
 }
@@ -324,6 +382,38 @@ struct RawLayer {
     clips: Vec<RawClip>,
     #[serde(default)]
     video: Option<RawEffects>,
+    #[serde(default)]
+    transition: Option<RawLayerTransition>,
+}
+
+/// A layer's `transition` (notes §19).
+#[derive(Deserialize)]
+struct RawLayerTransition {
+    #[serde(default)]
+    duration: Option<Param<f64>>,
+    #[serde(default)]
+    blend_mode: Option<RawChoice>,
+}
+
+#[derive(Deserialize)]
+struct RawChoice {
+    #[serde(default)]
+    id: u64,
+    #[serde(default)]
+    value: String,
+    #[serde(default)]
+    options: Vec<String>,
+}
+
+/// A clip's `transition`: only whether it follows the layer.
+#[derive(Deserialize)]
+struct RawClipTransition {
+    #[serde(default)]
+    layer_determined: Option<Param<bool>>,
+    #[serde(default)]
+    duration: Option<Param<f64>>,
+    #[serde(default)]
+    blend_mode: Option<RawChoice>,
 }
 
 #[derive(Deserialize)]
@@ -336,6 +426,10 @@ struct RawClip {
     video: Option<RawVideo>,
     #[serde(default)]
     thumbnail: Option<RawThumbnail>,
+    #[serde(default)]
+    transition: Option<RawClipTransition>,
+    #[serde(default)]
+    triggerstyle: Option<Param<String>>,
 }
 
 #[derive(Deserialize)]

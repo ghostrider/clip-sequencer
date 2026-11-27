@@ -18,6 +18,10 @@ getting started and for building from source.*
 - Lanes per Resolume layer with clips and rests on a 1/8 or 1/16-bar grid; repeat once, ×N or endlessly.
 - Slot lanes: a lane can play whatever clip sits in a column of its layer, so clips can be swapped in Resolume
   while the sequence runs.
+- Record from Resolume: arm a sequence and click clips in time; each pass is written to the grid and plays back
+  the next pass, so a pattern can be built up pass by pass (fades included).
+- Transitions per step (or a lane default): a fade in beats with a blend mode, set on the layer just before the
+  step and put back when the sequence stops.
 - Locked to an incoming MIDI clock, or without MIDI to Resolume's own tempo (Resync lines it up with Resolume's
   beat); triggers are confirmed over Resolume's WebSocket.
 - Start and stop from the app or from Resolume (`§ <name>` clips on a `SEQ` layer); manual clip clicks
@@ -165,11 +169,11 @@ folder and logs a warning.
 - **Sequences:** `+ New`, right-click for rename / duplicate / delete. Sequences of decks that no
   longer exist are listed under their old deck name; move them with right-click.
 - **Editor:** drag clips from the browser onto a lane; drag a block's right edge to resize (1/8
-  bar steps, hold `Shift` for 1/16); drag to reorder, Alt-drag to duplicate; `Del` removes, `R` inserts a rest,
+  bar steps, hold `Shift` for 1/16) or its left edge to move its start, with a marker at the edge; drag to reorder, Alt-drag to duplicate; `Del` removes, `R` inserts a rest,
   `Space` starts/stops, `Esc` deselects, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, `Ctrl+wheel` zooms.
 - **Rests** clear the layer (it shows nothing; layers below show through). If the lane's clip
   lives on another layer (⚠ on the step) and is still playing, that layer is cleared too.
-- **Lanes** can be reordered with ▲ / ▼ on the lane head. **Red steps** are unresolved (clip not found): they trigger nothing.
+- **Lanes:** click a lane head for its settings (mode, end, default transition, move, delete). **Red steps** are unresolved (clip not found): they trigger nothing.
   The step inspector shows which of clip id / name / file still match and offers *Relink*.
 - **Lane ends** (when a lane is shorter than the sequence): *Loop to end*, *Hold* (last clip keeps
   playing), *Clear*. **Repeat:** once, ×N or ∞; after the last pass the layers are cleared or held.

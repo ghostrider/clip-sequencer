@@ -364,3 +364,91 @@ changes in Resolume; the app side only read the composition, except one WebSocke
 Result: Resolume's own LUT effect is enough for live grading. The app writes a `.cube` (temp file + rename), every
 LUT effect pointing at that file reloads, and the app can point an effect at a file over the WebSocket. No own
 plugin is needed (M18 decision, 2026-11-22).
+
+## 19. Layer transitions (probed for M21, 2026-11-27, Arena 7.29.0)
+
+Can the app set a layer's transition just before a step, and what does a fade look like on the WebSocket? Layer 2
+of the probe composition, two generator clips (Gradient, Sine Wave). Every scene starts at 0 s / Alpha with clip 1
+connected and puts the layer back to 0 s / Alpha. Script `tools/resolume-probe/scripts/m21_transition_scenes.sh`;
+logs `docs/samples/m21-*.jsonl`. A fade's length is measured from the WebSocket: the outgoing clip stays
+`Connected` until the fade is over, then reports `Disconnected`.
+
+**Shape** (`GET /composition`, per layer):
+
+```json
+"transition": {
+  "duration":   {"id": …, "valuetype": "ParamRange", "min": 0, "max": 10, "in": 0, "out": 10, "value": 0},
+  "blend_mode": {"id": …, "valuetype": "ParamChoice", "index": 2, "value": "Alpha", "options": ["Add", …, "Zoom Out"]},
+  "params": null
+}
+```
+
+Each clip has the same two plus `layer_determined` (`ParamBoolean`), and its `blend_mode` options start with
+`"Layer Determined"`. The layer's 52 options are the mixer list (`Add`, `Alpha`, `Cut`, `Dissolve`, `Wipe Ellipse`,
+…, including installed FFGL mixers such as `Add Example`). Over the WebSocket the paths are
+`/composition/layers/{L}/transition/duration`, `/composition/layers/{L}/video/transition/mixer/blendmode` and
+`/composition/layers/{L}/clips/{C}/transition/layerdetermined` (not the REST keys).
+
+| Question | Result | Status |
+|---|---|---|
+| `set` duration / blend mode **by id** | works: `parameter_set` (old value), then `parameter_update` to subscribers, within ~1 ms. Duration in **seconds** (2.5 → 2.5). Blend mode by **option name** (`"Dissolve"`). | ✅ `m21-01` |
+| `set` by path (`…/layers/2/transition/duration`, `…/transition/blend_mode`) | `{"error":"Invalid parameter path"}`: by id only | ✅ `m21-01` |
+| blend mode by `index` only | `"Cannot set parameter, missing value"` | ✅ `m21-01` |
+| unknown blend name | `{"path":…,"error":"Invalid choice name for param"}`, value unchanged | ✅ `m21-01` |
+| duration out of range (12, −1) | clamped to 10 and 0, no error | ✅ `m21-01` |
+| Side effect of a set | a **full composition push** (~870 KB) ~85 ms later, for each changed value | ✅ `m21-01` |
+| Set 1 s, 30 ms, or **0 ms** (same instant: WS `set`, then the OSC `connect`) before a connect | the fade has the new value every time (2.00 s, 2.00 s, 1.97 s) | ✅ `m21-s1`, `s2`, `s3` |
+| Duration changed **during a running fade** | the fade keeps its progress and the rest is rescaled: at 25 % of a 4 s fade, 8 s → ends after 1 + 0.75 × 8 = 7 s, 2 s → 2.5 s, **0 → ends at once** | ✅ `m21-s4`, `s7`, `s8` |
+| Blend mode changed during a fade | the length is unchanged (3 s); how the picture changes was not watched | ✅ / ❓ look `m21-s6` |
+| Layer **clear** (OSC `clear` 1, 0) with 3 s | the clear **fades** too: the clip reports `Disconnected` after 3.0 s | ✅ `m21-s5` |
+| During a fade | **two clips** of the layer are `Connected`; connecting the outgoing one again sends no update (it never disconnected) and the other one leaves after the rest of the fade | ✅ `m21-s9` |
+| Clip `layer_determined: false` (clip's own duration 0) | the clip ignores the layer: cut although the layer has 2 s | ✅ `m21-s10` |
+| Clip `layer_determined: true` and a `set` of the clip's own duration | answered (`parameter_set`) but **ignored**: no update, value stays; the layer's 3 s fade is used | ✅ `m21-s11` |
+| Param ids across a **deck switch** | layer ids and the transition param ids stay the same | ✅ |
+| Value across a deck switch | belongs to the layer: 1.5 s stays 1.5 s on the other deck and back | ✅ `m21-deck3`, `deck4` |
+| Param ids after **reloading** the composition | not probed. Param ids (1795…) are much newer than layer ids (1787…), so they are probably minted at load; look them up from the composition by layer id each time | ❓ |
+
+Consequences (SPEC §7.7): send a value only when it differs (every set costs a composition push); a set sent in the
+same instant as the trigger is in time, so the lead time only has to keep clear of a running fade, which any
+change of duration rescales; the stop's clear fades, so the original goes back **before** the clear; while a fade
+runs, the outgoing clip's late `Disconnected` is no user action.
+
+## 20. Clicks and clears made by hand (probed for M25, 2026-11-27, Arena 7.29.0)
+
+What the WebSocket reports when the user plays clips in Resolume's own UI, for recording (SPEC §7.9). Layer 1 had
+a transition of 2.37 s (Displace), layer 2 none; every clip *Layer Determined*. The probe only listened
+(`connected` of the clips of layers 1–2 and both layers' transition parameters, subscribed by id). Log
+`docs/samples/m25-clicks.jsonl` (composition pushes left out).
+
+| Action in Resolume | WebSocket | Status |
+|---|---|---|
+| Click a clip on an empty layer | `parameter_update` `Connected` for it, same shape as for an OSC trigger (§5.3) | ✅ |
+| Click another clip, layer with a 2.37 s fade | the new clip `Connected` at once; the old one `Disconnected` **2.34 s later**, when the fade ends | ✅ |
+| Click the clip that is playing | **nothing** (as for OSC, §13) | ✅ |
+| Layer **Clear** button, layer with a 2.37 s fade | the playing clip `Disconnected` only at the **end** of the fade-out; nothing at the press | ✅ |
+| Layer Clear, layer with no fade | `Disconnected` at once | ✅ |
+| Switch clips with a cut (§19 scene 10, OSC) | old `Disconnected` and new `Connected` in the **same millisecond**, the `Disconnected` first | ✅ |
+| Preview a clip | `Connected & previewing` (still connected), `Previewing` alone (not connected) | ✅ |
+| Transition duration typed in the layer | one `parameter_update` (`2`, later `0`) | ✅ |
+
+**Piano trigger style** (same day; per clip `triggerstyle` `Composition Determined` / `Normal` / `Piano` /
+`Toggle`, WS path `…/clips/{C}/cliptriggerstyle`; the composition default is `cliptriggerstyle`). Logs
+`m25-piano-osc.jsonl` (OSC, set by the probe) and `m25-piano-hand.jsonl` (by hand):
+
+| Action | WebSocket | Status |
+|---|---|---|
+| OSC `connect` 1 on a Piano clip, no release | `Connected`, and it stays (1.5 s watched) | ✅ |
+| OSC `connect` 0 afterwards | `Disconnected` at once | ✅ |
+| OSC 1 and 0 back to back | `Connected`; the release is ignored | ✅ |
+| Hold a Piano clip by hand ~1 s | `Connected` on press, `Disconnected` on release (1.08 s later) | ✅ |
+| Tap by hand | connected for **91 ms** (less than a sixteenth at 128 BPM) | ✅ |
+| Hold 1.8 s with a 1 s layer fade | `Disconnected` 2.84 s after the press: the release **fades out** like a clear | ✅ |
+
+So a release is a clear: recorded as a rest one fade before its `Disconnected`. The app's own triggers (1 only)
+keep a Piano clip playing until the next step or a rest replaces it.
+
+Consequences (SPEC §7.9): a click is a `Connected` that the app didn't cause. A clear is a `Disconnected` of the
+layer's last connected clip that no `Connected` on the same layer follows within a few milliseconds (a cut
+switch sends both together); with a fade it arrives one fade later, so the press was at that time minus the
+layer's duration. A `Disconnected` while another clip of the layer is connected is the end of a fade, nothing to
+record.

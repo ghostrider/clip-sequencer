@@ -1,7 +1,7 @@
 //! Scheduler rules from SPEC §3, §5 and §7, driven by simulated tick streams.
 
 use seq_core::scheduler::{
-    bar_beat, Action, EndReason, LaneState, Origin, RunLane, RunSpec, RunStep, Scheduler,
+    bar_beat, Action, EndReason, Fade, LaneState, Origin, RunLane, RunSpec, RunStep, Scheduler,
     StartError, StepTarget, StopMode, Wait,
 };
 use seq_core::{AfterLastPass, LaneEnd, Repeat, Start};
@@ -32,6 +32,8 @@ fn spec(id: u128, repeat: Repeat, after: AfterLastPass, lanes: Vec<RunLane>) -> 
         after_last_pass: after,
         lanes,
         seed: 7,
+        min_ticks: 0,
+        yielded_layers: Vec::new(),
     }
 }
 
@@ -674,6 +676,9 @@ fn run_spec_from_sequence_and_resolution() {
         connected_param: 0,
         name_param: 0,
         sequence_param: None,
+        layer_determined: true,
+        own_transition: None,
+        piano: false,
     };
     let idx = CompositionIndex::new(
         "Show".into(),
@@ -684,6 +689,7 @@ fn run_spec_from_sequence_and_resolution() {
             index: 1,
             name: "BG".into(),
             name_param: 0,
+            transition: None,
         }],
         vec![ColumnInfo {
             id: 1,
@@ -760,8 +766,8 @@ fn run_spec_from_sequence_and_resolution() {
     assert_eq!(rs.pass_ticks(), 132);
     assert_eq!(rs.passes(), Some(2));
 
-    // Format v4: condition, choices (resolved like option 1) and pick reach the snapshot (M22);
-    // sections and transitions don't change it (transitions: M21).
+    // Format v4: condition, choices (resolved like option 1), pick and transition reach the
+    // snapshot (M22, M21); sections don't change it.
     use seq_core::model::{Choice, Pick, Section, Transition, When};
     let mut v4 = sequence.clone();
     v4.start = seq_core::Start::Bar { bars: 4 };
@@ -781,10 +787,12 @@ fn run_spec_from_sequence_and_resolution() {
         } else {
             Pick::Random
         });
-        step.transition = Some(Transition {
-            length: 0,
-            blend: None,
-        });
+        if i != 1 {
+            step.transition = Some(Transition {
+                length: 0,
+                blend: None,
+            });
+        }
     }
     let v4rs = RunSpec::new(&v4, &resolve_sequence(&v4, &idx));
     let mut expected = rs.clone();
@@ -796,8 +804,36 @@ fn run_spec_from_sequence_and_resolution() {
         } else {
             Pick::Random
         };
+        // Rule 1 the step's own, rule 2 the lane's (SPEC §7.7).
+        step.fade = Some(Fade::Set(Transition {
+            length: if i == 1 { 4 } else { 0 },
+            blend: (i == 1).then(|| "Add".into()),
+        }));
     }
     assert_eq!(v4rs, expected);
+    assert!(v4rs.lanes[0].fades() && !v4rs.lanes[1].fades());
+
+    // Rule 3: a lane with a transition on one step only gives the others the original.
+    let mut r3 = sequence.clone();
+    r3.lanes[0].steps[2].transition = Some(Transition {
+        length: 8,
+        blend: None,
+    });
+    let r3rs = RunSpec::new(&r3, &resolve_sequence(&r3, &idx));
+    let fades: Vec<_> = r3rs.lanes[0].steps.iter().map(|s| s.fade.clone()).collect();
+    assert_eq!(
+        fades,
+        vec![
+            Some(Fade::Original),
+            Some(Fade::Original),
+            Some(Fade::Set(Transition {
+                length: 8,
+                blend: None
+            }))
+        ]
+    );
+    // Rule 4: no transition anywhere in the lane, nothing is touched.
+    assert!(r3rs.lanes[1].steps.iter().all(|s| s.fade.is_none()));
 }
 
 // ---- pass conditions and choices (format v4, SPEC §6) ----
@@ -1745,4 +1781,543 @@ fn a_seq_clip_adopts_a_running_sequence_without_a_restart() {
     // Nothing is sent by the adoption itself; the run goes on as before.
     let log = ticks(&mut s, BAR - 40);
     assert_eq!(triggers(&log), [(BAR - 40, 10)]);
+}
+
+// ---- transitions (SPEC §7.7) ----
+
+use seq_core::model::Transition;
+
+fn set(length: u32) -> Option<Fade> {
+    Some(Fade::Set(Transition {
+        length,
+        blend: None,
+    }))
+}
+
+/// A lane with transitions: `(eighths, target, fade)` per step (`None` = the original).
+fn fade_lane(layer: u64, end: LaneEnd, steps: &[(u64, StepTarget, Option<Fade>)]) -> RunLane {
+    RunLane {
+        layer_id: Some(layer),
+        end,
+        steps: steps
+            .iter()
+            .map(|(eighths, target, fade)| RunStep {
+                fade: Some(fade.clone().unwrap_or(Fade::Original)),
+                ..RunStep::new(eighths * E, *target)
+            })
+            .collect(),
+    }
+}
+
+/// (tick, lane, step, fade) of every transition set.
+fn fade_sets(log: &[(u64, Action)]) -> Vec<(u64, usize, usize, Fade)> {
+    log.iter()
+        .filter_map(|(t, a)| match a {
+            Action::SetTransition {
+                lane, step, fade, ..
+            } => Some((*t, *lane, *step, fade.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// (tick, step) of every transition set.
+fn fade_ticks(log: &[(u64, Action)]) -> Vec<(u64, usize)> {
+    fade_sets(log).iter().map(|x| (x.0, x.2)).collect()
+}
+
+fn released(log: &[(u64, Action)]) -> Vec<(u64, u64)> {
+    log.iter()
+        .filter_map(|(t, a)| match a {
+            Action::TransitionReleased { layer_id } => Some((*t, *layer_id)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Position of the first action matching `f` in the log.
+fn index_of(log: &[(u64, Action)], f: impl Fn(&Action) -> bool) -> usize {
+    log.iter()
+        .position(|(_, a)| f(a))
+        .expect("action in the log")
+}
+
+fn at(t: u64, actions: Vec<Action>) -> impl Iterator<Item = (u64, Action)> {
+    actions.into_iter().map(move |a| (t, a))
+}
+
+#[test]
+fn a_transition_goes_out_one_sixteenth_ahead_and_with_the_first_trigger() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::Hold,
+            &[
+                (8, Clip(1), set(2)),
+                (8, Clip(2), set(4)),
+                (8, Clip(3), None),
+            ],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 3 * BAR);
+    let f = |l| set(l).unwrap();
+    assert_eq!(
+        fade_sets(&log),
+        vec![
+            (0, 0, 0, f(2)),
+            (BAR - S, 0, 1, f(4)),
+            (2 * BAR - S, 0, 2, Fade::Original)
+        ]
+    );
+    // The first one comes before its trigger.
+    let set0 = index_of(&log, |a| matches!(a, Action::SetTransition { step: 0, .. }));
+    let trig0 = index_of(&log, |a| matches!(a, Action::Trigger { clip_id: 1, .. }));
+    assert!(set0 < trig0);
+}
+
+#[test]
+fn a_running_fade_is_not_rescaled_the_next_value_waits_for_its_end() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::Hold,
+            &[
+                // 1 bar, a fade of 15 sixteenths (90 ticks): ends exactly at the lead.
+                (8, Clip(1), set(15)),
+                // 2 bars from tick 96, a fade of 32 sixteenths (192 ticks): ends at 288, when
+                // the next step starts, so its value goes out with its trigger.
+                (16, Clip(2), set(32)),
+                // 1 bar from tick 288, a fade of 2 bars: longer than its step, the same.
+                (8, Clip(3), set(32)),
+                (8, Clip(4), set(1)),
+            ],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 5 * BAR);
+    assert_eq!(
+        fade_ticks(&log),
+        vec![(0, 0), (BAR - S, 1), (3 * BAR, 2), (4 * BAR, 3),]
+    );
+    for (step, clip) in [(2, 3), (3, 4)] {
+        let set = index_of(
+            &log,
+            |a| matches!(a, Action::SetTransition { step: s, .. } if *s == step),
+        );
+        let trig = index_of(
+            &log,
+            |a| matches!(a, Action::Trigger { clip_id: c, .. } if *c == clip),
+        );
+        assert!(set < trig, "step {step}: set before its trigger");
+    }
+}
+
+#[test]
+fn a_fade_that_ends_inside_the_lead_sets_the_next_value_when_it_ends() {
+    let mut s = Scheduler::new();
+    // A 3/8 step (36 ticks) with a fade of 5 sixteenths (30 ticks): it ends at the lead.
+    let sp = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::Hold,
+            &[
+                (3, Clip(1), set(5)),
+                (3, Clip(2), set(0)),
+                (1, Clip(3), set(0)),
+            ],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 7 * E);
+    // Step 1 at 36: set at 30 (the fade ends at 30). Step 2 at 72: lead 66.
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (30, 1), (66, 2)]);
+
+    // A fade of 6 sixteenths (36 ticks) on the same step ends with it: set with the trigger.
+    let mut s = Scheduler::new();
+    let sp = spec(
+        2,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::Hold,
+            &[(3, Clip(1), set(6)), (3, Clip(2), set(0))],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 6 * E);
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (36, 1)]);
+}
+
+#[test]
+fn sixteenth_steps_set_the_next_value_one_tick_after_their_trigger() {
+    let mut s = Scheduler::new();
+    let steps: Vec<RunStep> = (0..3)
+        .map(|i| RunStep {
+            fade: set(0),
+            ..RunStep::new(S, Clip(i + 1))
+        })
+        .collect();
+    let sp = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(100),
+            end: LaneEnd::Hold,
+            steps,
+        }],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 3 * S);
+    // Never on the tick of the step before: that would replace its own fade (notes §19).
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (1, 1), (S + 1, 2)]);
+}
+
+#[test]
+fn lanes_without_transitions_never_set_one() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Clear,
+        vec![lane(100, LaneEnd::LoopToEnd, &[(4, Clip(1)), (4, Rest)])],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 3 * BAR);
+    assert!(fade_sets(&log).is_empty());
+    assert!(released(&log).is_empty());
+}
+
+#[test]
+fn a_step_that_will_not_play_sets_nothing_and_unresolved_sets_nothing() {
+    use seq_core::model::When;
+    let mut s = Scheduler::new();
+    let mut l = fade_lane(
+        100,
+        LaneEnd::LoopToEnd,
+        &[
+            (8, Clip(1), set(1)),
+            (8, Clip(2), set(2)),
+            (8, Unresolved, set(3)),
+        ],
+    );
+    l.steps[1].when = Some(When::NotFirst);
+    let sp = spec(1, Repeat::Count { count: 2 }, AfterLastPass::Hold, vec![l]);
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 6 * BAR);
+    // Pass 1: step 1 doesn't play, step 2 is unresolved. Pass 2 (from 3 bars): step 0 ahead of
+    // it, then step 1.
+    assert_eq!(
+        fade_ticks(&log),
+        vec![(0, 0), (3 * BAR - S, 0), (4 * BAR - S, 1)]
+    );
+}
+
+#[test]
+fn stopping_releases_the_layer_before_clearing_it() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![
+            fade_lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1), set(4))]),
+            lane(200, LaneEnd::LoopToEnd, &[(8, Clip(2))]),
+        ],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, BAR / 2);
+    log.extend(at(99, s.stop(seq(1), StopMode::AfterLastPass)));
+    // Only the layer with transitions is released, and before its clear.
+    assert_eq!(released(&log), vec![(99, 100)]);
+    let rel = index_of(&log, |a| matches!(a, Action::TransitionReleased { .. }));
+    let clr = index_of(&log, |a| matches!(a, Action::Clear { layer_id: 100, .. }));
+    assert!(rel < clr);
+
+    // Release mode (deck change): released, nothing cleared; finishing releases too.
+    let mut s = Scheduler::new();
+    let sp = spec(
+        2,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![fade_lane(100, LaneEnd::Hold, &[(8, Clip(1), set(4))])],
+    );
+    let start = s.start(sp.clone(), Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 4);
+    log.extend(at(99, s.stop_all(StopMode::Release)));
+    assert_eq!(released(&log), vec![(99, 100)]);
+    assert!(clears(&log).is_empty());
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, BAR);
+    assert_eq!(released(&log), vec![(BAR, 100)]);
+}
+
+#[test]
+fn handing_a_layer_over_keeps_it_taking_it_without_transitions_releases_it() {
+    let mut s = Scheduler::new();
+    let a = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![fade_lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1), set(4))])],
+    );
+    let b = spec(
+        2,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![fade_lane(100, LaneEnd::LoopToEnd, &[(8, Clip(2), set(8))])],
+    );
+    let c = spec(
+        3,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![lane(100, LaneEnd::LoopToEnd, &[(8, Clip(3))])],
+    );
+    let start = s.start(a.clone(), Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    // B takes the layer (A ends, taken over): nothing released, B sets its own value.
+    log.extend(at(20, s.start(b, Origin::Ui, Start::Immediate).unwrap()));
+    // A restarts and takes it back: still nothing released.
+    log.extend(at(30, s.start(a, Origin::Ui, Start::Immediate).unwrap()));
+    assert!(released(&log).is_empty());
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (20, 0), (30, 0)]);
+    // C has no transitions: the original goes back before C's trigger.
+    let from = log.len();
+    log.extend(at(40, s.start(c, Origin::Ui, Start::Immediate).unwrap()));
+    assert_eq!(released(&log), vec![(40, 100)]);
+    let rel = index_of(&log[from..], |a| {
+        matches!(a, Action::TransitionReleased { .. })
+    });
+    let trig = index_of(&log[from..], |a| {
+        matches!(a, Action::Trigger { clip_id: 3, .. })
+    });
+    assert!(rel < trig);
+    assert!(fade_sets(&log[from..]).is_empty());
+    // Stopping C releases nothing more.
+    let tail = s.stop(seq(3), StopMode::AfterLastPass);
+    assert!(!tail
+        .iter()
+        .any(|a| matches!(a, Action::TransitionReleased { .. })));
+}
+
+#[test]
+fn a_lane_end_clear_uses_the_original() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Hold,
+        vec![
+            fade_lane(100, LaneEnd::Clear, &[(4, Clip(1), set(2))]),
+            lane(200, LaneEnd::Hold, &[(8, Clip(2))]),
+        ],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, BAR + 4 * E);
+    let sets: Vec<(u64, Fade)> = fade_sets(&log).into_iter().map(|x| (x.0, x.3)).collect();
+    assert_eq!(
+        sets,
+        vec![
+            (0, set(2).unwrap()),
+            (4 * E, Fade::Original), // the lane ran out: the original, then the clear
+            (BAR - S, set(2).unwrap()), // pass 2
+            (BAR + 4 * E, Fade::Original),
+        ]
+    );
+    let orig = index_of(&log, |a| {
+        matches!(
+            a,
+            Action::SetTransition {
+                fade: Fade::Original,
+                ..
+            }
+        )
+    });
+    let clr = index_of(&log, |a| matches!(a, Action::Clear { layer_id: 100, .. }));
+    assert!(orig < clr);
+}
+
+#[test]
+fn a_muted_lane_sets_nothing_and_sets_ahead_again_when_it_comes_back() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::LoopToEnd,
+            &[(8, Clip(1), set(1)), (8, Clip(2), set(2))],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 0, true)));
+    for t in 11..=BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    log.extend(at(BAR, s.set_mute(seq(1), 0, false)));
+    for t in BAR + 1..=2 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    // Muted at tick 10 (step 1 is not set ahead), back at tick 96 after step 1 began silently:
+    // step 0 of the next loop is set ahead again.
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (2 * BAR - S, 0)]);
+}
+
+#[test]
+fn a_lane_back_from_mute_sets_its_value_with_the_trigger() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![fade_lane(
+            100,
+            LaneEnd::LoopToEnd,
+            &[(8, Clip(1), set(1)), (8, Clip(2), set(2))],
+        )],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 0, true)));
+    for t in 11..BAR - 2 {
+        log.extend(at(t, s.on_tick()));
+    }
+    // Unmuted 2 ticks before step 1, inside its lead: the next tick's lead check sends it.
+    log.extend(at(BAR - 2, s.set_mute(seq(1), 0, false)));
+    for t in BAR - 1..=BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    assert_eq!(fade_ticks(&log), vec![(0, 0), (BAR - 1, 1)]);
+}
+
+// ---- recording: the next pass plays a new spec (SPEC §7.9) ----
+
+#[test]
+fn a_spec_set_for_the_next_pass_takes_over_at_the_boundary() {
+    let mut s = Scheduler::new();
+    let once = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![
+            lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1))]),
+            lane(200, LaneEnd::LoopToEnd, &[(8, Clip(2))]),
+        ],
+    );
+    let start = s.start(once.clone(), Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 1, true)));
+    log.extend(at(10, s.yield_layer(100)));
+    // The take: lane 100 now plays clip 3, a new lane 300 clip 4, and it loops.
+    let mut next = once.clone();
+    next.repeat = Repeat::Infinite;
+    next.lanes[0] = lane(100, LaneEnd::LoopToEnd, &[(4, Clip(3)), (4, Clip(5))]);
+    next.lanes
+        .push(lane(300, LaneEnd::LoopToEnd, &[(8, Clip(4))]));
+    assert!(s.set_next_pass(next));
+    assert_eq!(s.position(seq(1)), Some((10, BAR)));
+    for t in 11..2 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    let tr: Vec<(u64, u64)> = triggers(&log).into_iter().filter(|(t, _)| *t > 0).collect();
+    // At the boundary: the yielded lane plays again, the muted one stays muted, the new one plays.
+    assert_eq!(tr, vec![(BAR, 3), (BAR, 4), (BAR + 4 * E, 5)]);
+    assert!(ended(&log).is_empty(), "once, but the take loops");
+    let st = s.status();
+    assert!(st[0].lanes[1].mute && st[0].lanes.len() == 3);
+}
+
+// ---- ties (SPEC §6 `tie`) ----
+
+fn tied(eighths: u64, target: StepTarget) -> RunStep {
+    RunStep {
+        tie: true,
+        ..RunStep::new(eighths * E, target)
+    }
+}
+
+#[test]
+fn a_tied_step_continues_the_clip_that_still_plays() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(100),
+            end: LaneEnd::LoopToEnd,
+            // A, A tied (continues), B tied (another clip: plays), A tied over the loop.
+            steps: vec![
+                tied(8, Clip(1)),
+                tied(8, Clip(1)),
+                tied(8, Clip(2)),
+                RunStep::new(8 * E, Clip(1)),
+            ],
+        }],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 8 * BAR);
+    // Pass 1: A at 0 (nothing to continue at the start), B at 2 bars, A at 3 bars. Pass 2: step 1 is
+    // tied to A, which still plays: nothing until B.
+    assert_eq!(
+        triggers(&log),
+        vec![
+            (0, 1),
+            (2 * BAR, 2),
+            (3 * BAR, 1),
+            (6 * BAR, 2),
+            (7 * BAR, 1)
+        ]
+    );
+}
+
+#[test]
+fn a_tie_after_a_mute_or_a_rest_triggers_again() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(100),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![
+                RunStep::new(8 * E, Clip(1)),
+                tied(8, Clip(1)),
+                RunStep::new(8 * E, Rest),
+                tied(8, Clip(1)),
+            ],
+        }],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 0, true)));
+    log.extend(at(10, s.set_mute(seq(1), 0, false)));
+    for t in 11..4 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    // Muted (the layer was cleared): the tied step 2 plays again; after the rest, step 4 too.
+    assert_eq!(triggers(&log), vec![(0, 1), (BAR, 1), (3 * BAR, 1)]);
+    // Pass 2: A, then a click in Resolume puts clip 9 on the layer: the tied step 2 triggers A again.
+    let mut log: Vec<(u64, Action)> = at(4 * BAR, s.on_tick()).collect();
+    s.layer_now_plays(100, Some((9, 3)));
+    for t in 4 * BAR + 1..=5 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    assert_eq!(triggers(&log), vec![(4 * BAR, 1), (5 * BAR, 1)]);
 }

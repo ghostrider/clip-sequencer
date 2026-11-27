@@ -317,6 +317,11 @@ automatically. Sequences are grouped by deck name.
   0–256 (`0` = cut); the UI shows it in beats. `blend`: a Resolume blend mode name, 1–64 characters; absent = keep
   the layer's original blend mode. A step's own `transition` wins over the lane's. Which transition a step gets
   and how it is applied: §7.7.
+- `tie` (step, version 4, optional, decided 2026-11-27): `true` ties the step to the step **directly before** it
+  in its lane (across the loop: the lane's last step of the pass before). When the step starts and its picked
+  clip (or column) is the one the lane's layer still plays, nothing is sent: the clip plays on, no restart, no
+  new transition. Otherwise (the first start, another clip, a rest or a mute in between, someone else changed the
+  layer) it triggers as usual. Only written when `true`. Versions 1–3 have no ties.
 - `when` (step, version 4, optional): plays the step only on some passes. The pass is the sequence's pass counter
   (1-based, `pass 2 / 4` on the card); all loops of a short lane within one pass count as that pass.
   - `{ "is": "first" }` / `{ "is": "not_first" }`: pass 1 / every pass but 1.
@@ -337,7 +342,7 @@ automatically. Sequences are grouped by deck name.
   - Each option is resolved by itself (§4.3); a picked unresolved option triggers nothing. Relink, the red
     unresolved mark and the pre-show check cover every option.
 - **Version 4** (release 0.5, decided 2026-11-24) changes `start` from a string to an object and adds `sections`,
-  `transition`, `when`, `choices`, `pick`. All new fields are optional, so a v4 file that uses none of them
+  `transition`, `when`, `choices`, `pick` and (2026-11-27) `tie`. All new fields are optional, so a v4 file that uses none of them
   differs from v3 only in `version` and `start`.
 - **Version 3** (M13, 2026-11-04) adds `mode` and `column`; lengths as in version 2.
 - **Version 2** (2026-11-01) counts `length` in sixteenths.
@@ -458,11 +463,13 @@ optional default per lane. Resolume's **layer transition** is the means: the app
 the step triggers. Clip-level transitions in the composition are never changed. Nothing is cleaned up by hand:
 when the sequence lets go of the layer, the layer gets back the transition it had before.
 
-*Resolume side (to be confirmed by the M21 probe, notes §19; until then nothing here is built):* each layer has
-`transition.duration` (ParamRange 0–10 s) and `transition.blend_mode` (ParamChoice), each with a parameter id; each
-clip has the same plus `layer_determined` (seen in `docs/samples/composition.json`). Open: setting them over the
-WebSocket, their units, whether a set that arrives just before an OSC `connect` already counts, whether a change
-disturbs a fade that is still running, whether a layer clear fades, and what `layer_determined` covers.
+*Resolume side (probed 2026-11-27, notes §19):* each layer has `transition.duration` (ParamRange, seconds, 0–10,
+clamped) and `transition.blend_mode` (ParamChoice, set by option name), each with a parameter id; they are set over
+the WebSocket **by id only**, and every change costs a full composition push. Ids and values belong to the layer and
+survive deck switches. A set sent in the same instant as the OSC `connect` (WebSocket first) already counts. A
+change of duration **during a running fade** rescales the rest of it (0 ends it at once). A layer clear fades too.
+While a fade runs, both clips of the layer are `Connected`; the outgoing one reports `Disconnected` when it ends. A
+clip with `layer_determined: false` uses its own transition and ignores the layer's.
 
 **Which transition a step gets**
 1. its own `transition`, else
@@ -472,13 +479,18 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
 4. otherwise **Resolume's own**: the app never touches this layer's transition.
 
 **Sending**
-- The value goes out **ahead of the step**, separately from the trigger: at the latest one sixteenth before the
-  step starts, and only if it differs from what the layer has. For the first step of a run it goes out with the
-  start, before the first trigger. The trigger still goes out exactly on its tick (§3). The scheduler (pure)
-  decides the next step's pass condition and pick at that moment, so the transition matches the clip that will
-  play; a step that doesn't play sets nothing. (The exact lead time follows from the probe.)
+- The value goes out **ahead of the step**, separately from the trigger, and only if it differs from what the
+  layer has. It goes out one sixteenth before the step starts, unless the layer is still fading then (the fade
+  of the step before): a new duration would rescale that fade, so the value waits until the fade has ended. If
+  the fade lasts until the step starts, the value goes out with the trigger, the WebSocket set just before the OSC
+  message. For the first step of a run it goes out with the start, before the first trigger. The trigger still
+  goes out exactly on its tick (§3). The scheduler (pure) decides the next step's pass condition and pick at that
+  moment, so the transition matches the clip that will play; a step that doesn't play sets nothing.
 - The length is converted to seconds at the current tempo and sent again (throttled) when the tempo changes while
-  the value is set. Resolume's maximum is 10 s: a longer fade is capped and the step shows a warning.
+  the value is set; a fade that is running then is rescaled with it, so it still ends on its beat. Resolume's
+  maximum is 10 s: a longer fade is capped and the step shows a warning.
+- While a fade runs, the outgoing clip's `Disconnected` at its end is no user action, and triggering the outgoing
+  clip again counts as confirmed at once (it never disconnected, §7.5).
 - `blend` is checked against the layer's option list from the composition. Unknown name: only the length is set,
   warning on the step and in the pre-show check.
 - Clips whose own transition doesn't follow the layer (`layer_determined: false`) ignore the layer value: warning
@@ -492,12 +504,16 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
   layer.
 - A layer handed from one sequence to another (§7.3) keeps the first original, not the value in between.
 - When no running lane holds the layer any more (stop, finish, Stop all, a deck change, or a takeover by a lane
-  without transitions), the original is set back. A restore after a layer clear is sent after the clear.
-- **The user wins:** if the layer's transition changes in Resolume and the change isn't one the app sent, the
+  without transitions), the original is set back. **The clear uses the original** (decided 2026-11-27): a clear
+  fades with the layer's transition, so the original goes back first and the clear follows in the same instant;
+  stopping looks as it did before transitions (usually a cut). A lane end *Clear* does the same.
+- **The user wins:** if the layer's transition changes in Resolume (a `parameter_update` with a value other than
+  the one the app sent last; updates carry no origin), the
   original is dropped and nothing is restored on that layer for this run: the user's value stays. The lane keeps
   setting its steps' transitions (as with a manual override, the log says so).
 - **Crash or quit while holding a layer:** originals are also written to `<data-dir>/transitions-pending.json`
-  (composition name, layer id, original values). On the next connection to that composition the app restores them
+  (composition name, layer id, original values; param ids are looked up again from the composition, they may
+  change when it is reloaded). On the next connection to that composition the app restores them
   and deletes the file. Entries whose layer is gone are dropped with a log line.
 - The log shows `transition on BG restored (0.0 s, Alpha)`.
 
@@ -514,6 +530,83 @@ with every lane unmuted.
   started by hand on it yields it (§7.3; unmuting then also resumes it). Muting a yielded lane clears the layer.
 - Stopping and finishing apply as usual; a muted lane's layer is already dark.
 - The log says `BG muted at 3.2` / `BG unmuted at 3.4 (plays from its next step)`.
+
+### 7.9 Record from Resolume (release 0.5, decided 2026-11-27)
+
+Build a pattern by playing it (G6): arm a sequence, start it, and click clips (or clear layers) in Resolume in
+time. What you click lands on the grid, and the next pass plays it back, so a pattern can be built up pass by pass.
+
+- **Arm:** the ⏺ button in the editor header arms the selected sequence of the **live** deck (one at a time). Armed,
+  it records from its next start; the start waits for its start mode as usual (a bar start is the count-in).
+  Arming a running sequence records from that moment, and it loops from its next pass. Disarm or Stop ends the
+  recording (Stop also disarms; a disarmed run goes on looping until stopped). A sequence **without steps** asks
+  for a **pattern length** (1–16 bars) when armed and loops over that length (changed 2026-11-27 after the live
+  check; no placeholder step, which would clear a layer).
+- **Takes:** each pass is one **take**. While recording, the sequence loops pass after pass, whatever its repeat
+  setting. Each click is written into the sequence **at once** (it shows in the editor right away); the clicks of
+  one pass are **one undoable edit** (Ctrl+Z removes that pass's take so far), and the next pass plays them.
+- **What counts as a click:** a clip that becomes connected on a layer (WebSocket `connected`, §7.5) that the app
+  did not trigger itself (the window of §7.3), and a layer that is cleared without the app clearing it (records a
+  rest). A clear is the `Disconnected` of the layer's last connected clip that no `Connected` on that layer
+  follows within 20 ms (a cut sends both in the same millisecond); it arrives at the end of the clear's fade, so
+  it counts at that time minus the layer's duration. A `Disconnected` while another clip of the layer is
+  connected is the end of a fade and records nothing (notes §20). Clicks on the SEQ layer are not recorded (they start sequences as usual).
+  Clicking the clip that already plays reports nothing in Resolume (notes §13), so it can't be recorded: the step
+  just goes on.
+- **Piano trigger style** (checked 2026-11-27, notes §20): pressing a Piano clip is a click, releasing it a clear,
+  so a held clip records as the clip until the release and a rest from there. A tap shorter than a sixteenth
+  still records a sixteenth: a rest that snaps onto the sixteenth of the clip before it moves one sixteenth on.
+  *Toggle* works the same way (the second click disconnects: a rest).
+- **Snap:** each click goes to the nearest sixteenth of the pass (or eighth, or beat: **quantize**), from its
+  arrival time minus a **latency** offset (ms, ±500, positive = clicks arrive late) and the tempo. Both are set in
+  Preferences → Recording (saved in `settings.json` as `record_quantize`, `record_latency_ms`); quantize also
+  next to the REC tag; changes apply at once. A click in the last half grid step of a pass belongs to the start of
+  the next one. Two clicks on one layer that snap to the same place: the later one counts.
+- **Punch in** (changed 2026-11-27 after the live check, was "overwrite to the end of the pass"): a click replaces
+  its lane from its position up to the **next step that was already there**, or your next click on that layer, or
+  the end of the pass. Everything else stays, so a clip clicked between two others keeps the later ones. Steps
+  cut by a click keep their conditions, choices and transitions, shortened; a step replaced whole loses them.
+- **Across the loop** (decided 2026-11-27): a clip of the take that still plays when the pass ends (nothing comes
+  after it on its lane, or it is held) goes on into the next pass: it is recorded there at the start as a
+  **tied** step (§6 `tie`), up to the next step that is there (or its release), and the next pass doesn't restart
+  it.
+- **What is recorded** (decided 2026-11-27, kept for the session, not in the file): while armed each lane head
+  has a ⏺ toggle: a lane switched off doesn't record, and a click on its layer is a manual override (§7.3) as
+  without recording. **+ lanes** on/off: whether a click on a layer without a lane adds one. Mode **punch in**
+  (the default, above) or **replace**: a click runs to the next click on its layer or the end of the pass over
+  the steps there, and the lane is quiet from that click until the pass ends (a clear too). The controls sit in
+  one row of the editor header while armed (REC tag, quantize, mode, + lanes, sync chip).
+- **Held clips** (Piano trigger style, the clip's own or the composition's `cliptriggerstyle`; requested
+  2026-11-27): a clip pressed and held records **from press to release** and overwrites what lies in between.
+  While it is held its lane triggers nothing (it yields); after the release the lane plays again from its next
+  step. A hold that runs over the end of a pass goes on in the next: that lane begins the pass quiet, and the
+  clip is recorded there from the start until its release. (Add where you click, overwrite where you hold.)
+- A lane shorter than the pass is first written out to the pass length as it plays (*Loop to end*: its steps
+  repeated; *Hold*: the last step longer; *Clear*: a rest), then overwritten. Its end mode stays.
+- **While recording:** every lane plays on as usual, also the one you click on (its next step comes in where the
+  punch-in ends); the new take plays from the next pass on. Manual override (§7.3) doesn't apply to the recorded
+  sequence while it records.
+- **The grid:** clicks are snapped to the sequence's grid. When it isn't lined up with the music (no Resync with
+  Resolume's tempo, no MIDI Start, or a start mode `now`), clicks land a sixteenth early or late; a notice says
+  so when the recording starts.
+- **New layers:** a click on a layer without a lane in the sequence adds a lane for it (Clip mode, *Loop to end*,
+  a rest up to the first click). Layers whose name is not unique can't get a lane: notice, not recorded.
+- **Transitions** (§7.7, requested 2026-11-27): each recorded step gets the transition Resolume used for that
+  click: the layer's (`transition.duration` / `blend_mode` at that moment, as the app follows it) for a clip that
+  is *Layer Determined*, else the clip's own. The duration becomes sixteenths at the current tempo (nearest
+  sixteenth, at most 256), the blend mode its name. A cut (0 s) is recorded as `{ "length": 0 }` only if another
+  step of the lane has a transition; otherwise the step gets none, so a lane played without fades stays a lane
+  without transitions (§7.7 rule 4). A recorded rest (layer clear) gets no transition. A lane with transitions
+  keeps setting them as it plays, so a click on its layer uses the value of the step playing then.
+- **Slot lanes** (§4.5) record the **column** that was clicked; Clip lanes record the clip (by id, name and file,
+  as a drop from the clip browser does).
+- **Stop** while recording keeps the take so far (it is already written).
+- The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits for its start and
+  `REC in N` (beats) while the start counts in. Next to it a chip says whether the grid is lined up with the beat:
+  `in sync`, `⚠ not synced` (with what to do) or `⚠ starts now` (a start mode `now`). In the grid, the steps
+  recorded in the current pass have a red outline, the one of the newest click flashes once, and a clip held down
+  shows hatched from the playhead on (it ends at the release). The log says
+  `recorded pass 3 of Drop: BG, FG (2 steps)`.
 
 ## 8. Thumbnails
 
@@ -560,10 +653,11 @@ Single screen, everything controlled from here (no separate live view).
   badge (only when running and edited), **Repeat** control (Once / ×N with number input / ∞),
   pass counter while running (`pass 2 / 4`), `+ Lane`, `Push thumbnail to Resolume`, Start/Stop.
 - Lane grid:
-  - Left column per lane: layer name (choose from the deck's layers), end behaviour
-    (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted`; yielded has a
-    "Resume lane" action), **M** and **S** buttons while the sequence runs (§7.8), delete lane.
+  - Left column per lane, the **lane head** (changed 2026-11-27: it had run out of room): the layer (choose from
+    the deck's layers), **M** and **S** next to it while the sequence runs (§7.8), a one-line summary
+    (`clip · loop · ↗ 1 beat`; mode, end, default transition, `↗ steps` when only steps have one) and the state
+    pill (`idle` / `playing` / `yielded ↺` / `muted` / `rec`; the yielded pill is the "Resume lane" action).
+    Clicking the head selects the lane: its settings are in the **lane inspector** (§9.4).
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
@@ -575,6 +669,8 @@ Single screen, everything controlled from here (no separate live view).
     Guide lines every 8/16/32 bars (or off) are a view setting.
   - **Step badges** (format v4): a condition as a small chip in the block's top right (`2:4`, `1st`, `!1st`,
     `last`, `!last`); choices as `1/3` with the pick (`⤨` random, `↻` cycle). The block shows option 1.
+    A **tied** step has an arc `⌒` over the gap to the step before (dimmed when that step surely plays another
+    clip, so the tie has no effect) and `⌒` in its length line; **T** ties or unties the selected step.
   - **Transition display** (§7.7; colour token `--fade` in `tokens.css`, `themes.ts` and the mockup; sketch
     `docs/images/transition-fade-sketch.png`):
     - a **fade wedge** at the left edge, rising from bottom left to top right, on the grid scale: its width is
@@ -589,7 +685,10 @@ Single screen, everything controlled from here (no separate live view).
 - Interactions:
   - Drag a clip from the browser onto a lane → appends or inserts a step (default length 16 = one bar).
   - Drag a block's right edge → resize, snapping to eighths (min 1/8); hold Shift to snap to
-    sixteenths (min 1/16).
+    sixteenths (min 1/16). Drag its **left edge** (not the first step's) → move its start: the step before gets
+    longer or shorter by as much, nothing after it moves (edit `move_step_start`, one undo step). While an edge is
+    dragged, a marker like the playhead runs through the grid at the edge, labelled `bar.beat.sixteenth` and the
+    step's new length (added 2026-11-27).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence; Shift+Space → cue it (§3.3). Esc → deselect.
@@ -607,12 +706,15 @@ Single screen, everything controlled from here (no separate live view).
   as in Resolume), clip thumbnails with names; draggable onto lanes. Each thumbnail shows its
   **column number** (1-based, the number a slot lane uses, §4.5) as a small overlay in its top-left
   corner, in every lane mode.
+- **Lane inspector** for a selected lane (click its head; a selected step wins): Clips | Slots (§4.5), the end
+  behaviour (`Loop to end` / `Hold` / `Clear`, explained), the default transition (length and blend mode, or none,
+  §7.7), move up / down, delete lane.
 - Step inspector for the selected step: thumbnail, name, resolution status per method
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
   in sixteenths with bars shown. For a slot step instead: column stepper (1 … column count) and the
   clip currently in that slot (or "empty → rest").
-  Format v4 (§6): **Transition** (inherit from lane / own: length in beats, blend mode from the layer's list,
-  warnings), **Play on** (always / first / not first / last / not last / A of B), **Choices** (the options with
+  Format v4 (§6): **Tie** to the step before (checkbox), **Transition** (inherit from lane / own: length in beats,
+  blend mode from the layer's list, warnings), **Play on** (always / first / not first / last / not last / A of B), **Choices** (the options with
   thumbnails and resolution status, add, remove, reorder, relink each; pick random / cycle).
 
 ### 9.5 Status bar

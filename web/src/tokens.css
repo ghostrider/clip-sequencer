@@ -43,6 +43,8 @@
   --err-bg: #2A1517;
   --err-line: #7E2F2A;
   --err-text: #FFB8B0;
+  /* transition = a step's fade (SPEC §7.7) */
+  --fade: #B08CFF;
 
   /* type */
   --font: 'Barlow', system-ui, sans-serif;

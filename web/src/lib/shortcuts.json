@@ -23,6 +23,10 @@
         "what": "Insert a one-bar rest after the selected step"
       },
       {
+        "keys": "T",
+        "what": "Tie the selected step to the step before (or untie it)"
+      },
+      {
         "keys": "Esc",
         "what": "Deselect"
       },

@@ -4,6 +4,8 @@
 //! directly, and publishes UI state on watch channels. It never awaits HTTP or disk: those run
 //! in worker tasks that report back through [`Aux`] messages.
 
+mod fades;
+mod record;
 pub mod view;
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -104,6 +106,19 @@ pub enum EngineCommand {
     SyncSeqLayer {
         remove_orphans: bool,
     },
+    /// Recording quantize (sixteenths) and latency offset (ms), SPEC §7.9 (Preferences → Recording).
+    SetRecordOptions {
+        quantize: u32,
+        latency_ms: i32,
+    },
+    /// What a recording takes (SPEC §7.9): lanes off, new lanes, punch in or replace.
+    SetRecordScope(RecordScope),
+    /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9). `bars`: the pattern
+    /// length of a sequence without steps.
+    SetArmed {
+        seq: Option<Uuid>,
+        bars: Option<u32>,
+    },
     /// Point one of Resolume's LUT effects at a `.cube` file (LUT tab, SPEC §14): a `set` on its `LUT 3D`
     /// parameter. Shown at once in the LUT effect list; Resolume's update or next push confirms it.
     SetLutFile {
@@ -183,6 +198,9 @@ enum ParamTarget {
     TempoResync,
     /// The `LUT 3D` file of one of Resolume's LUT effects (SPEC §14), by effect id.
     LutFile(u64),
+    /// A layer's transition duration and blend mode (SPEC §7.7), by layer id.
+    LayerFadeDuration(u64),
+    LayerFadeBlend(u64),
 }
 
 /// Resolume sends two `resync` updates per press (press and release, ~100 ms apart, no value;
@@ -273,6 +291,12 @@ pub struct Engine {
     tempo_ctl: Option<TempoController>,
     /// Resolume's LUT effects from the last composition push (SPEC §14): shown in the LUT tab.
     lut_effects: Vec<LutEffect>,
+    /// Layer transitions: originals, values, the pending file (SPEC §7.7).
+    fades: fades::Fades,
+    /// Recording from Resolume (SPEC §7.9).
+    rec: record::Recorder,
+    rec_options: record::RecordOptions,
+    rec_scope: RecordScope,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
@@ -320,6 +344,11 @@ impl Engine {
     ) -> (Self, Outputs) {
         let (structure_tx, structure) = watch::channel(StructureState::default());
         let (runtime_tx, runtime) = watch::channel(RuntimeState::default());
+        let fades = fades::Fades::load(storage.dir());
+        let rec_options = {
+            let s = crate::settings::Settings::load(storage.dir());
+            record::RecordOptions::new(s.record_quantize.unwrap_or(1), s.record_latency_ms)
+        };
         let engine = Self {
             cfg,
             osc,
@@ -362,6 +391,10 @@ impl Engine {
             resolume_clock: None,
             tempo_ctl: None,
             lut_effects: Vec::new(),
+            fades,
+            rec: record::Recorder::default(),
+            rec_options,
+            rec_scope: RecordScope::default(),
             phase_synced: false,
             bar_synced: false,
             last_resync: None,
@@ -522,6 +555,7 @@ impl Engine {
                 self.request_upcoming_slots(at);
                 let actions = self.scheduler.on_tick();
                 self.execute(actions);
+                self.record_tick(at);
                 if !self.snapshots.is_empty() {
                     self.runtime_dirty = true;
                 }
@@ -571,6 +605,7 @@ impl Engine {
                 self.ws_connected = false;
                 // Without the WebSocket nothing can be confirmed: the OSC verdict starts over.
                 self.unanswered_triggers = 0;
+                self.transitions_connection_lost();
                 // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
                 self.phase_synced = false;
                 if self.follows_resolume() {
@@ -643,6 +678,7 @@ impl Engine {
             states,
             tempo,
             lut_effects,
+            transitions,
         } = snap;
         let old_live = self.index.as_ref().and_then(|i| i.live_deck.clone());
         let new_live = index.live_deck.clone();
@@ -677,6 +713,7 @@ impl Engine {
             self.rebuild_params(&index);
             self.structure_dirty = true;
         }
+        self.transitions_on_composition(transitions, &index);
         self.index = Some(index);
 
         if old_live.is_some() && old_live != new_live {
@@ -737,6 +774,8 @@ impl Engine {
 
     fn change_composition(&mut self, name: String) {
         log::info!("composition {name:?}");
+        let old = self.composition.clone();
+        self.transitions_composition_changed(old.as_deref());
         let acts = self.scheduler.stop_all(StopMode::Release);
         self.execute(acts);
         self.composition = Some(name.clone());
@@ -785,6 +824,12 @@ impl Engine {
         for l in &index.layers {
             self.params
                 .insert(l.name_param, ParamTarget::LayerName(l.id));
+            if let Some(t) = &l.transition {
+                self.params
+                    .insert(t.duration_param, ParamTarget::LayerFadeDuration(l.id));
+                self.params
+                    .insert(t.blend_param, ParamTarget::LayerFadeBlend(l.id));
+            }
         }
         // Always followed (cheap: Resolume only sends changes), so switching the clock source
         // needs no new subscriptions.
@@ -826,6 +871,9 @@ impl Engine {
                     self.on_clip_connected(clip_id, at);
                 } else if was.is_some_and(ClipState::is_connected) {
                     self.on_clip_disconnected(clip_id);
+                    if let Some(layer_id) = self.layer_of_clip(clip_id) {
+                        self.record_disconnect(clip_id, layer_id, at);
+                    }
                 }
             }
             ParamTarget::ClipName(clip_id) => {
@@ -921,6 +969,12 @@ impl Engine {
                     }
                 }
             }
+            ParamTarget::LayerFadeDuration(layer) => {
+                self.transition_param(layer, false, kind, value);
+            }
+            ParamTarget::LayerFadeBlend(layer) => {
+                self.transition_param(layer, true, kind, value);
+            }
             ParamTarget::LutFile(effect_id) => {
                 let Some(path) = value.as_str() else { return };
                 if let Some(e) = self
@@ -993,6 +1047,8 @@ impl Engine {
             };
             (clip, layer, index.live_deck.clone())
         };
+        // A cut sends the old clip's `Disconnected` just before this: no clear (SPEC §7.9).
+        self.record_connected(layer.id);
 
         // § placeholder on the SEQ layer: start that sequence of the live deck.
         if layer.name == self.cfg.seq_layer {
@@ -1042,6 +1098,10 @@ impl Engine {
             .last_layer_trigger
             .get(&layer.id)
             .is_some_and(|t| at.saturating_duration_since(*t) < self.cfg.override_window);
+        // Recording (SPEC §7.9): a click on the recording sequence's layer or a free one is recorded.
+        if !recent && self.record_click(&clip, layer.id, &layer.name, at) {
+            return;
+        }
         if !recent {
             if let Some((seq, lane)) = self.scheduler.owner_of(layer.id) {
                 let acts = self.scheduler.yield_layer(layer.id);
@@ -1099,6 +1159,28 @@ impl Engine {
             EngineCommand::CancelCue => {
                 let acts = self.scheduler.cancel_cue();
                 self.execute(acts);
+            }
+            EngineCommand::SetArmed { seq, bars } => self.set_armed(seq, bars),
+            EngineCommand::SetRecordScope(scope) => {
+                log::info!(
+                    "recording: {}{}{}",
+                    if scope.replace { "replace" } else { "punch in" },
+                    if scope.new_lanes { ", new lanes" } else { "" },
+                    if scope.off.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", not {}", scope.off.join(", "))
+                    }
+                );
+                self.rec_scope = scope;
+                self.runtime_dirty = true;
+            }
+            EngineCommand::SetRecordOptions {
+                quantize,
+                latency_ms,
+            } => {
+                self.rec_options = record::RecordOptions::new(quantize, latency_ms);
+                log::info!("recording: quantize {quantize}/16, latency {latency_ms} ms");
             }
             EngineCommand::SetLaneMute { seq, lane, on } => {
                 let acts = self.scheduler.set_mute(seq, lane, on);
@@ -1199,12 +1281,14 @@ impl Engine {
                 let _ = self.ws_cmd.send(WsCommand::Reconnect);
             }
             EngineCommand::Undo => {
+                self.record_undo();
                 if let (Some(prev), Some(cur)) = (self.undo.pop(), self.model.clone()) {
                     self.redo.push(cur);
                     self.set_model(prev);
                 }
             }
             EngineCommand::Redo => {
+                self.record_undo();
                 if let (Some(next), Some(cur)) = (self.redo.pop(), self.model.clone()) {
                     self.undo.push(cur);
                     self.set_model(next);
@@ -1406,6 +1490,11 @@ impl Engine {
             self.structure_dirty = true;
         }
         let mut spec = RunSpec::new(&sequence, &resolution);
+        // An armed sequence loops while it records, an empty one over its pattern length (SPEC §7.9).
+        if let Some(min_ticks) = self.rec.loops(seq) {
+            spec.repeat = seq_core::Repeat::Infinite;
+            spec.min_ticks = min_ticks;
+        }
         // A fresh seed per start for `random` picks (SPEC §6); seq-core itself reads no clock.
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1448,7 +1537,9 @@ impl Engine {
                     reason,
                     origin,
                 } => {
+                    self.record_ended(seq);
                     self.snapshots.remove(&seq);
+                    self.transitions_run_ended(seq);
                     self.pending.retain(|p| p.seq != seq);
                     self.lane_last_clip.retain(|(s, _), _| *s != seq);
                     if let (EndReason::Finished, Origin::SeqClip { clip_id }) = (reason, origin) {
@@ -1461,6 +1552,11 @@ impl Engine {
                         self.not_confirmed.retain(|(s, _), _| *s != seq);
                         self.snapshots.insert(seq, snapshot);
                     }
+                    self.record_started(seq);
+                    self.runtime_dirty = true;
+                }
+                Action::PassStarted { seq, pass } => {
+                    self.record_pass(seq, pass);
                     self.runtime_dirty = true;
                 }
                 Action::Pending { seq, .. } => {
@@ -1500,9 +1596,17 @@ impl Engine {
                     self.queued.remove(&seq);
                     self.runtime_dirty = true;
                 }
-                Action::PassStarted { .. }
-                | Action::StepStarted { .. }
-                | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
+                Action::StepStarted { .. } | Action::LaneStateChanged { .. } => {
+                    self.runtime_dirty = true
+                }
+                Action::SetTransition {
+                    seq,
+                    lane,
+                    step,
+                    layer_id,
+                    fade,
+                } => self.set_transition(seq, lane, step, layer_id, &fade),
+                Action::TransitionReleased { layer_id } => self.release_transition(layer_id),
             }
         }
     }
@@ -1622,6 +1726,7 @@ impl Engine {
             Ok(addr) => self.osc_sent(addr, t0.elapsed()),
             Err(e) => self.osc_error(e),
         }
+        self.record_own_clear(layer_id, t0);
         self.last_layer_trigger.insert(layer_id, t0);
     }
 
@@ -1826,6 +1931,8 @@ impl Engine {
     // ---- timer ----
 
     pub fn on_timer(&mut self, now: Instant) {
+        self.retime_transitions(now);
+        self.record_settle(now);
         // Subscriptions sent while Resolume loads a composition can be refused ("Invalid parameter
         // path", without saying which) or go unanswered: ask again for the ones still missing.
         if self.ws_connected
@@ -2219,6 +2326,14 @@ impl Engine {
             saved: self.saved,
             save_error: self.save_error.clone(),
             seq_sync_busy: self.seq_sync_busy,
+            record: self.rec.view(&self.rec_scope, |id| {
+                self.index
+                    .as_ref()?
+                    .layers
+                    .iter()
+                    .find(|l| l.id == id)
+                    .map(|l| l.name.clone())
+            }),
         }
     }
 

@@ -1,6 +1,6 @@
 # Slot lanes
 
-A lane plays in one of two modes, chosen in its head with **Clip | Slot**:
+A lane plays in one of two modes, chosen in the lane inspector (click the lane head) with **Clips | Slots**:
 
 - **Clip** (the default): each step plays a particular clip. If you move or rename the clip in Resolume, the step
   follows it ([Files and data](files.md) explains how clips are found).
@@ -10,7 +10,7 @@ A lane plays in one of two modes, chosen in its head with **Clip | Slot**:
 
 ## Making a slot lane
 
-1. Click **Slot** in the lane head. The steps are converted (and **Ctrl+Z** undoes it): each clip step becomes the
+1. Click the lane head, then **Slots** in the lane inspector. The steps are converted (and **Ctrl+Z** undoes it): each clip step becomes the
    column its clip is in now; a clip that can't be found becomes a rest.
 2. Drag clips from the browser onto the lane as usual. A slot lane takes the clip's **column**, not the clip. The
    clip browser shows each thumbnail's column number in its top-left corner.

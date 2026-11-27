@@ -22,7 +22,8 @@ if (!version) {
   console.error('check-version: no version in [workspace.package] of Cargo.toml');
   process.exit(1);
 }
-if (!/^\d+\.\d+\.\d+$/.test(version)) problems.push(`Cargo.toml: version "${version}" is not MAJOR.MINOR.PATCH`);
+// Between releases a pre-release suffix marks development builds (0.5.0-dev); a release tag must match exactly.
+if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) problems.push(`Cargo.toml: version "${version}" is not MAJOR.MINOR.PATCH[-pre]`);
 
 for (const dir of ['crates', 'tools']) {
   for (const name of readdirSync(join(root, dir))) {

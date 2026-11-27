@@ -27,7 +27,10 @@
   }
 
   function select(v: SequenceView) {
-    if (app.selectedSeq !== v.sequence.id) app.selectedStep = null;
+    if (app.selectedSeq !== v.sequence.id) {
+      app.selectedStep = null;
+      app.selectedLane = null;
+    }
     app.selectedSeq = v.sequence.id;
   }
 
@@ -123,7 +126,9 @@
             {:else}
               <span class="seqname" role="presentation" ondblclick={() => startRename(v)}>{v.sequence.name}</span>
             {/if}
-            {#if running}<span class="run-badge">RUN</span>{/if}
+            {#if app.runtime?.record?.seq === v.sequence.id}
+              <span class="run-badge rec" class:armed={!app.runtime.record.recording}>{app.runtime.record.recording ? 'REC' : 'ARMED'}</span>
+            {:else if running}<span class="run-badge">RUN</span>{/if}
           </div>
           <div class="meta">
             {v.sequence.lanes.length} {v.sequence.lanes.length === 1 ? 'lane' : 'lanes'} · {bars(v)} {bars(v) === '1' ? 'bar' : 'bars'} · {repeatLabel(v.sequence.repeat)}

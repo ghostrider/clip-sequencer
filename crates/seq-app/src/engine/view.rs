@@ -72,6 +72,8 @@ pub struct LayerView {
     pub ambiguous: bool,
     pub is_seq_layer: bool,
     pub clips: Vec<ClipView>,
+    /// The layer's transition blend modes (SPEC §7.7); empty if unknown.
+    pub blend_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -82,6 +84,8 @@ pub struct ClipView {
     pub file: Option<String>,
     /// Change marker for the thumbnail URL (`/thumbs/clip/{id}.png?v=...`).
     pub thumb: Option<String>,
+    /// Follows its layer's transition; `false`: it uses its own (SPEC §7.7 warning).
+    pub layer_determined: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -253,8 +257,14 @@ pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> 
                     name: c.name.clone(),
                     file: c.file_name().map(str::to_owned),
                     thumb: (!c.thumbnail.is_default).then(|| thumb_version(c)),
+                    layer_determined: c.layer_determined,
                 })
                 .collect(),
+            blend_options: l
+                .transition
+                .as_ref()
+                .map(|t| t.blend_options.clone())
+                .unwrap_or_default(),
         })
         .collect()
 }
@@ -287,6 +297,61 @@ pub struct RuntimeState {
     pub save_error: Option<String>,
     /// "Sync SEQ layer" is running (SPEC §7.6).
     pub seq_sync_busy: bool,
+    /// The armed sequence (SPEC §7.9), if any.
+    pub record: Option<RecordView>,
+}
+
+/// Recording from Resolume (SPEC §7.9).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RecordView {
+    pub seq: Uuid,
+    /// Its run goes and records (else armed, waiting for its start).
+    pub recording: bool,
+    /// The pass being recorded.
+    pub pass: u32,
+    /// Clicks in this pass so far.
+    pub clicks: usize,
+    /// Where they landed (for the editor's take marks), in arrival order.
+    pub take: Vec<TakeMark>,
+    /// Layers with a clip held down (Piano trigger style).
+    pub held: Vec<String>,
+    /// What is recorded (SPEC §7.9).
+    pub scope: RecordScope,
+}
+
+/// What a recording takes (SPEC §7.9): lanes switched off, whether clicks on layers without a lane add
+/// one, and punch in or replace to the end of the pass. Kept for the session.
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+pub struct RecordScope {
+    /// Layers whose lanes don't record.
+    #[serde(default)]
+    pub off: Vec<String>,
+    #[serde(default = "yes")]
+    pub new_lanes: bool,
+    #[serde(default)]
+    pub replace: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for RecordScope {
+    fn default() -> Self {
+        RecordScope {
+            off: Vec::new(),
+            new_lanes: true,
+            replace: false,
+        }
+    }
+}
+
+/// One click of the current take: layer name and sixteenth in the pass.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TakeMark {
+    pub layer: String,
+    pub at: u32,
+    pub rest: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

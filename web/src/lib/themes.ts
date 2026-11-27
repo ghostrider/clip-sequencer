@@ -76,6 +76,10 @@ export const COLOR_GROUPS = [
       ['err-text', 'Error text'],
     ],
   },
+  {
+    label: 'Transitions: the fade of a step',
+    tokens: [['fade', 'Fade']],
+  },
 ] as const;
 
 export type ColorToken = (typeof COLOR_GROUPS)[number]['tokens'][number][0];
@@ -165,6 +169,7 @@ export const BUILTIN_THEMES: Theme[] = [
       'info-text': '#B9BCFF', 'info-bg': '#1B1C33', 'info-line': '#3D4080',
       ok: '#6BD45A', 'ok-ink': '#0A1A06', 'ok-bg': '#16241A', 'ok-line': '#2E5A2A', 'ok-text': '#C2EDB8',
       err: '#FF5A4E', 'err-ink': '#FFFFFF', 'err-bg': '#2A1517', 'err-line': '#7E2F2A', 'err-text': '#FFB8B0',
+      fade: '#B08CFF',
     },
   },
   {
@@ -178,6 +183,7 @@ export const BUILTIN_THEMES: Theme[] = [
       'info-text': '#7FE8FF', 'info-bg': '#0D2236', 'info-line': '#1D5573',
       ok: '#47DE9C', 'ok-ink': '#04170F', 'ok-bg': '#0F2526', 'ok-line': '#1F5A4B', 'ok-text': '#B4F2D6',
       err: '#FF6A3D', 'err-ink': '#1F0800', 'err-bg': '#2A1424', 'err-line': '#80361F', 'err-text': '#FFC0A8',
+      fade: '#A99BFF',
     },
   },
   {
@@ -191,6 +197,7 @@ export const BUILTIN_THEMES: Theme[] = [
       'info-text': '#A9C9FF', 'info-bg': '#2C3445', 'info-line': '#4A5E86',
       ok: '#30C7B1', 'ok-ink': '#03201B', 'ok-bg': '#283B39', 'ok-line': '#2F6B62', 'ok-text': '#B4EEE4',
       err: '#FF6262', 'err-ink': '#2A0000', 'err-bg': '#4A2C2E', 'err-line': '#9A3E40', 'err-text': '#FFC4C4',
+      fade: '#C2A6FF',
     },
   },
   {
@@ -204,6 +211,7 @@ export const BUILTIN_THEMES: Theme[] = [
       'info-text': '#9DCBF0', 'info-bg': '#121C26', 'info-line': '#2A4A66',
       ok: '#4CC26E', 'ok-ink': '#0B1A10', 'ok-bg': '#13221A', 'ok-line': '#2F5B3A', 'ok-text': '#B6E3C2',
       err: '#E5484D', 'err-ink': '#FFFFFF', 'err-bg': '#1E1214', 'err-line': '#7A2A2F', 'err-text': '#FFB4B7',
+      fade: '#B79AF0',
     },
   },
   {
@@ -217,6 +225,7 @@ export const BUILTIN_THEMES: Theme[] = [
       'info-text': '#5A3FB8', 'info-bg': '#ECE7FB', 'info-line': '#A996E6',
       ok: '#1E8A3A', 'ok-ink': '#FFFFFF', 'ok-bg': '#E0F2E4', 'ok-line': '#8CC79A', 'ok-text': '#145C27',
       err: '#D11F2A', 'err-ink': '#FFFFFF', 'err-bg': '#FBE3E4', 'err-line': '#E79A9E', 'err-text': '#9A121B',
+      fade: '#7442C8',
     },
   },
 ];

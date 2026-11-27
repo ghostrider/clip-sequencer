@@ -72,7 +72,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 
 .grid { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--track); }
 .grid-inner { display: flex; min-width: 860px; }
-.lanehead-col { flex: 0 0 var(--lane-head-w); border-right: 1px solid var(--line); }
+.lanehead-col { flex: 0 0 var(--lane-head-w); min-width: 0; border-right: 1px solid var(--line); }
 .ruler-spacer { height: var(--ruler-h); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 12px; font: 11px var(--mono); color: var(--muted); }
 .lanehead { height: var(--lane-h); border-bottom: 1px solid var(--line-soft); padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; }
 .pill { font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); color: var(--text-2); }
@@ -188,7 +188,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .step.warn .len::after { content: " · ⚠"; color: var(--accent-text); }
 .lanehead.bad .layer-select { color: var(--err-text); border-color: var(--err-line); }
 .layer-select, .pill-select { background: var(--control); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 2px 4px; max-width: 120px; }
-.layer-select { font-weight: 600; }
+.layer-select { font-weight: 600; min-width: 0; flex: 1 1 auto; }
+.lanehead { min-width: 0; overflow: hidden; }
 .pill-select { font-size: 11px; color: var(--text-2); }
 .x { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 4px; }
 .x:disabled { opacity: .3; cursor: not-allowed; }
@@ -211,3 +212,57 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 .lane-tools { display: flex; gap: 0; flex: 0 0 auto; }
 .lane-tools .x { font-size: 10px; padding: 2px 3px; }
+
+/* Transitions (SPEC §7.7, §9.3): the fade wedge on the grid scale, own solid, inherited dashed. */
+.step .fade-wedge { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.step .fade-wedge polygon { fill: var(--fade); fill-opacity: .28; }
+.step .fade-wedge line { stroke: var(--fade); stroke-width: 1.5; }
+.step .fade-wedge.inherited polygon { fill-opacity: .14; }
+.step .fade-wedge.inherited line { stroke-dasharray: 4 3; }
+.step .fade-cut { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--fade); pointer-events: none; }
+.step .fade-more { position: absolute; right: 9px; bottom: 3px; font: 11px var(--mono); color: var(--fade); pointer-events: none; }
+.step .name, .step .step-foot { position: relative; }
+.step .fade-label { color: var(--fade); }
+.step .fade-label.bad { color: var(--err-text); }
+.fade-chip { font: 10px var(--mono); color: var(--fade); background: none; border: 1px solid var(--fade); border-radius: var(--radius-pill); padding: 1px 6px; cursor: pointer; white-space: nowrap; }
+.fade-chip.none { color: var(--faint); border: 1px dashed var(--line-strong); }
+.fade-chip.none:hover { color: var(--text-2); border-color: var(--fade); }
+.fade-pick { color: var(--fade); }
+.fade-menu { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 220px; }
+
+/* Recording from Resolume (SPEC §7.9): the error colours stand for "on air". */
+.tag.rec { color: var(--err-text); border: 1px solid var(--err-line); background: var(--err-bg); }
+.tag.rec.armed { background: none; }
+.run-badge.rec { background: var(--err); color: var(--err-ink); }
+.run-badge.rec.armed { background: none; color: var(--err-text); border: 1px solid var(--err-line); }
+.btn.rec-btn { color: var(--err-text); }
+.btn.rec-btn[aria-pressed='true'] { background: var(--err-bg); border-color: var(--err-line); }
+.pill.rec { color: var(--err-ink); background: var(--err); border-color: var(--err); }
+button.pill { cursor: pointer; font: inherit; }
+.lane-tools .ms button { padding: 0 6px; }
+/* A tied step (SPEC §6 tie): an arc over its left edge, joining it to the block before. */
+.step.tied { border-left-style: dashed; }
+.slot .tie-arc { position: absolute; left: -9px; top: 1px; z-index: 3; font-size: 16px; line-height: 1; color: var(--accent-text); cursor: help; }
+.slot .tie-arc.idle { color: var(--faint); opacity: .7; }
+.tie-toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+/* Lane head (SPEC §9.3): layer, state and a summary; click for the lane inspector. */
+.lanehead { cursor: pointer; border-left: 2px solid transparent; }
+.lanehead:hover { background: color-mix(in srgb, var(--control) 40%, transparent); }
+.lanehead.selected { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent-bg) 60%, transparent); }
+.lane-sum { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.lane-info { font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tag.ok { color: var(--ok-text); border: 1px solid var(--ok-line); background: var(--ok-bg); }
+/* Recording (SPEC §7.9): steps of the current take, the newest click, a clip held down. */
+.step.take { outline: 1px solid var(--err); outline-offset: -1px; }
+.step .take-flash { position: absolute; inset: 0; background: var(--err); opacity: 0; pointer-events: none; animation: take-flash 700ms ease-out; }
+@keyframes take-flash { from { opacity: .45; } to { opacity: 0; } }
+.step .holding { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--err) 30%, transparent) 0 4px, transparent 4px 9px); border-left: 2px solid var(--err); }
+.lane-rec { flex: none; font-size: 10px; padding: 1px 4px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: none; color: var(--faint); cursor: pointer; }
+.lane-rec[aria-pressed='true'] { color: var(--err); border-color: var(--err-line); background: var(--err-bg); }
+.btn.rec-new { font-size: 11px; padding: 2px 8px; }
+.btn.rec-new[aria-pressed='false'] { color: var(--faint); text-decoration: line-through; }
+.rec-bar { flex: 1 0 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* Resizing a step (SPEC §9.3): the left edge too, and a marker where the dragged edge is now. */
+.step .resize.start { right: auto; left: 0; }
+.edge-marker { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--text-2); pointer-events: none; z-index: 4; }
+.edge-label { position: absolute; top: 2px; transform: translateX(-50%); background: var(--text-2); color: var(--bg); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: var(--radius-sm); pointer-events: none; z-index: 4; white-space: nowrap; }

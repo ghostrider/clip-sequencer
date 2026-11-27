@@ -40,6 +40,8 @@ export interface Step {
   choices?: Choice[];
   pick?: Pick;
   transition?: Transition;
+  /** Tied to the step before: continues its clip if it still plays (SPEC §6). */
+  tie?: boolean;
 }
 
 export type LaneMode = 'clip' | 'slot';
@@ -121,6 +123,8 @@ export interface ClipView {
   name: string;
   file: string | null;
   thumb: string | null;
+  /** Follows its layer's transition; false: it uses its own (SPEC §7.7). */
+  layer_determined: boolean;
 }
 
 export interface LayerView {
@@ -130,6 +134,8 @@ export interface LayerView {
   ambiguous: boolean;
   is_seq_layer: boolean;
   clips: ClipView[];
+  /** The layer's transition blend modes; empty if unknown (SPEC §7.7). */
+  blend_options: string[];
 }
 
 export interface DeckView {
@@ -324,6 +330,8 @@ export interface RuntimeState {
   save_error: string | null;
   /** "Sync SEQ layer" is running (SPEC §7.6). */
   seq_sync_busy: boolean;
+  /** The armed sequence (SPEC §7.9). */
+  record?: RecordView | null;
 }
 
 // Edit operations (seq-core/src/edit.rs, tagged by "op").
@@ -351,6 +359,8 @@ export type EditOp =
   | { op: 'set_start'; seq: Uuid; start: Start }
   | { op: 'set_lane_transition'; seq: Uuid; lane: number; transition: Transition | null }
   | { op: 'set_step_transition'; seq: Uuid; lane: number; index: number; transition: Transition | null }
+  | { op: 'set_step_tie'; seq: Uuid; lane: number; index: number; tie: boolean }
+  | { op: 'move_step_start'; seq: Uuid; lane: number; index: number; by: number }
   | { op: 'set_step_when'; seq: Uuid; lane: number; index: number; when: When | null }
   | { op: 'add_choice'; seq: Uuid; lane: number; index: number; choice: Choice }
   | { op: 'remove_choice'; seq: Uuid; lane: number; index: number; option: number }
@@ -368,10 +378,13 @@ export type Command =
   | { cmd: 'cancel_cue' }
   | { cmd: 'set_guide_lines'; every: number | null }
   | { cmd: 'set_debug_log'; on: boolean }
+  | { cmd: 'set_record_options'; quantize: number; latency_ms: number }
+  | { cmd: 'set_record_scope'; scope: RecordScope }
   | { cmd: 'check_update' }
   | { cmd: 'update_answer'; skip: boolean }
   | { cmd: 'install_update' }
   | { cmd: 'set_update_check'; on: boolean }
+  | { cmd: 'set_armed'; seq: Uuid | null; bars?: number }
   | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
@@ -439,6 +452,9 @@ export interface Appearance {
   guide_lines: number | null;
   /** Preferences → Log debug messages. */
   debug_log: boolean;
+  /** Recording: quantize in sixteenths (1, 2, 4) and latency offset in ms (SPEC §7.9). */
+  record_quantize: number;
+  record_latency_ms: number;
   /** Selected theme id; `null` = the default. */
   theme: string | null;
   custom_themes: CustomTheme[];
@@ -538,4 +554,25 @@ export interface FfglResult {
   message?: string;
   error?: string;
   status: FfglStatus;
+}
+
+/** Recording from Resolume (SPEC §7.9). */
+export interface RecordView {
+  seq: Uuid;
+  /** Its run goes and records; else armed, waiting for its start. */
+  recording: boolean;
+  pass: number;
+  clicks: number;
+  /** Where this pass's clicks landed (sixteenths). */
+  take: { layer: string; at: number; rest: boolean }[];
+  /** Layers with a clip held down (Piano). */
+  held: string[];
+  /** What is recorded: lanes off, new lanes, replace instead of punch in. */
+  scope: RecordScope;
+}
+
+export interface RecordScope {
+  off: string[];
+  new_lanes: boolean;
+  replace: boolean;
 }

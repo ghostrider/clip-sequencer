@@ -68,14 +68,20 @@ Below: **Start** (now / beat / bar / 2 · 4 · 8 · 16 bars: when a start begins
 
 **Lanes.** Each lane has a head on the left:
 
-- the **layer** it plays on (only named layers of the deck; [Setting up Resolume](resolume-setup.md));
-- **Clip | Slot**: whether its steps play particular clips or the clips in columns of the layer
+- the **layer** it plays on (only named layers of the deck; [Setting up Resolume](resolume-setup.md)), and while
+  the sequence runs **M** (mute) and **S** (solo) ([Playing live](playing-live.md));
+- a one-line summary of its settings, such as `clip · loop · ↗ 1 beat`;
+- the lane's **state**: `idle`, `playing`, `muted`, `rec` (you play it while recording,
+  [Recording from Resolume](recording.md)), or `yielded ↺`: click it to resume the lane.
+
+Click a lane head for its settings in the **lane inspector** on the right:
+
+- **Clips | Slots**: whether its steps play particular clips or the clips in columns of the layer
   ([Slot lanes](slot-lanes.md));
-- **▲ ▼** to reorder lanes (display only) and **×** to delete the lane;
-- the **end behaviour** for when the lane is shorter than the sequence: *Loop to end* (start the lane's steps
-  again), *Hold* (keep the last clip playing), *Clear* (clear the layer and stay silent);
-- the lane's **state**: `idle`, `playing`, `muted`, or `yielded` with **Resume lane**, and while the sequence runs
-  **M** (mute) and **S** (solo) ([Playing live](playing-live.md)).
+- what happens when the lane is shorter than the sequence: *Loop to end* (start the lane's steps again), *Hold*
+  (keep the last clip playing), *Clear* (clear the layer and stay silent);
+- the **default transition** of its steps ([Transitions](transitions.md));
+- **Move up**, **Move down** (display only) and **Delete lane** (**Ctrl+Z** brings it back).
 
 The **ruler** numbers the bars, with eighth (and, zoomed in, sixteenth) ticks. Zoom with **Ctrl+mouse wheel** over
 the grid.
@@ -104,7 +110,8 @@ deletes sections. They are only marks for you: they don't change what plays.
 | `1/3 ⤨` or `1/3 ↻` badge | the step has choices, picked at random or in turn; while it plays, the first number is the option playing; red: a choice is unresolved |
 
 Editing: drag clips from the browser onto a lane; drag a step's **right edge** to resize (1/8 grid, **Shift** for
-1/16); drag a step to move it within the lane, **Alt+drag** to copy it; **Del** removes the selected step, **R**
+1/16), or its **left edge** to move its start (the step before gives or takes the difference); while you drag, a
+marker through the grid shows where the edge is (`bar.beat.sixteenth`) and the new length; drag a step to move it within the lane, **Alt+drag** to copy it; **Del** removes the selected step, **R**
 inserts a one-bar rest after it; **Ctrl+Z** / **Ctrl+Shift+Z** undo and redo. All changes are saved automatically.
 
 ## Clip browser and step inspector
@@ -122,6 +129,9 @@ The **step inspector** shows the selected step:
 - **Relink to clip…**: then click a clip in the browser to use it for this step (Esc cancels);
 - **Make rest**;
 - **Length** in sixteenths, with − / +, and the length in bars;
+- **⌒ Tie to the step before**: if the clip of the step before still plays when this step starts (also across
+  the loop), it plays on instead of starting again. Useful for one long clip over several steps, or a clip that
+  runs over the end of the loop. A tied step shows `⌒` in its length line;
 - **Play on**: every pass, the first, all but the first, the last, all but the last, or pass *A* of every *B* (2:4 =
   passes 2, 6, 10 …). On other passes the step sends nothing, so the clip before it keeps playing; for silence on
   some passes, use a rest with a condition, or a rest among the choices;

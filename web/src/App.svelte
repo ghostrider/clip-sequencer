@@ -77,6 +77,7 @@
     }
     if (e.key === 'Escape') {
       app.selectedStep = null;
+      app.selectedLane = null;
       app.selectedSection = null;
       app.relinking = false;
       return;
@@ -104,6 +105,10 @@
       e.preventDefault();
       app.edit({ op: 'remove_step', seq: view.sequence.id, lane: sel.lane, index: sel.index });
       app.selectedStep = null;
+    } else if (e.key.toLowerCase() === 't') {
+      // Tie the selected step to the one before, or untie it (SPEC §6 tie).
+      const step = view.sequence.lanes[sel.lane]?.steps[sel.index];
+      if (step) app.edit({ op: 'set_step_tie', seq: view.sequence.id, lane: sel.lane, index: sel.index, tie: !step.tie });
     } else if (e.key.toLowerCase() === 'r') {
       app.edit({ op: 'insert_step', seq: view.sequence.id, lane: sel.lane, index: sel.index + 1, step: { clip: null, length: 16 } });
       app.selectedStep = { lane: sel.lane, index: sel.index + 1 };

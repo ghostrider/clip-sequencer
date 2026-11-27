@@ -11,7 +11,9 @@ How to publish a new version of Clip Sequencer for Resolume (M11 Phase I3). Rele
 
 ## 2. Set the version and the changelog
 
-1. `Cargo.toml` → `[workspace.package]` → `version = "x.y.z"`.
+1. `Cargo.toml` → `[workspace.package]` → `version = "x.y.z"`. Between releases it carries the next version with
+   `-dev` (`0.5.0-dev`, so test builds can't pass for the release); the release drops the suffix, and after it
+   the next `-dev` version goes in (all three places, step 2.2).
 2. `web/package.json` → `"version": "x.y.z"`, and the two `"version"` fields at the top of `web/package-lock.json`.
 3. Check: `node scripts/check-version.mjs` → "x.y.z everywhere".
 4. `CHANGELOG.md`: rename `## [Unreleased]` entries into a new section `## [x.y.z] - YYYY-MM-DD` (today's date),

@@ -2225,7 +2225,8 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     let first = appearance(&mut a, |_| true).await;
     assert_eq!(
         first,
-        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false})
+        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false,
+            "record_quantize": 1, "record_latency_ms": 0})
     );
 
     let theme = json!({
@@ -2383,5 +2384,683 @@ async fn switching_the_clock_source_stops_the_resolume_ticks() {
     h.mock.tempo_controller("resync", serde_json::Value::Null);
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(!h.runtime(|_| true).await.clock.synced);
+    h.app.shutdown().await;
+}
+
+// ---- transitions (SPEC §7.7, M21) ----
+
+impl Harness {
+    /// Ticks stamped `bpm` apart (see [`Harness::ticks_at_128`]).
+    fn ticks_at(&self, bpm: f64, n: u64) {
+        let dt = Duration::from_secs_f64(60.0 / bpm / 24.0);
+        for _ in 0..n {
+            let at = self.virtual_clock.get() + dt;
+            self.virtual_clock.set(at);
+            self.clock
+                .send(ClockEvent::Msg {
+                    msg: ClockMsg::Tick,
+                    at,
+                })
+                .unwrap();
+        }
+    }
+
+    /// Waits until layer `layer`'s transition in the mock is `(seconds, blend)`.
+    async fn fade_is(&self, layer: usize, seconds: f64, blend: &str) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let (s, b) = self.mock.layer_transition_value(layer);
+            if (s - seconds).abs() < 1e-6 && b == blend {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "layer {layer}: transition {s} s, {b:?}; expected {seconds} s, {blend:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// Lane `lane` of SEQ_A gets `transition`, its step `own` (if any) a cut of its own.
+    async fn fade_sequence_a(&self, length: u32, blend: Option<&str>, own: Option<usize>) {
+        use seq_core::edit::EditOp;
+        use seq_core::model::Transition;
+        self.cmd(EngineCommand::Edit {
+            op: EditOp::SetLaneTransition {
+                seq: SEQ_A,
+                lane: 0,
+                transition: Some(Transition {
+                    length,
+                    blend: blend.map(Into::into),
+                }),
+            },
+        });
+        if let Some(index) = own {
+            self.cmd(EngineCommand::Edit {
+                op: EditOp::SetStepTransition {
+                    seq: SEQ_A,
+                    lane: 0,
+                    index,
+                    transition: Some(Transition {
+                        length: 0,
+                        blend: None,
+                    }),
+                },
+            });
+        }
+        self.structure(|s| {
+            s.decks.iter().flat_map(|d| &d.sequences).any(|v| {
+                v.sequence.id == SEQ_A
+                    && v.sequence.lanes[0].transition.is_some()
+                    && own.is_none_or(|i| v.sequence.lanes[0].steps[i].transition.is_some())
+            })
+        })
+        .await;
+    }
+
+    fn pending_file(&self) -> Option<serde_json::Value> {
+        let text =
+            std::fs::read_to_string(self.dir.path().join("transitions-pending.json")).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+
+    async fn pending_file_is(&self, want: Option<serde_json::Value>) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while self.pending_file() != want {
+            assert!(
+                Instant::now() < deadline,
+                "pending file {:?}, expected {want:?}",
+                self.pending_file()
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+}
+
+/// SPEC §7.7: SEQ_A's lane L2 fades 1/2 bar with Dissolve (step 2 cuts); L1 has no transitions.
+/// At 128 BPM 8 sixteenths are 0.9375 s. The value goes out with the start, the next one a
+/// sixteenth ahead of step 2 (tick 90), and the original comes back when the sequence finishes.
+#[tokio::test]
+async fn transitions_are_set_ahead_and_the_original_comes_back() {
+    let h = harness().await;
+    let l2_id = h.mock.read(|v| v["layers"][1]["id"].as_u64().unwrap());
+    // The user's own setting on L2, the original.
+    h.mock.layer_transition(2, "duration", json!(0.25));
+    h.fade_sequence_a(8, Some("Dissolve"), Some(1)).await;
+    h.ticks_at_128(24); // the tempo is known before the start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.9375, "Dissolve").await;
+    assert_eq!(h.mock.layer_transition_value(1), (0.0, "Alpha".into()));
+    h.pending_file_is(Some(json!({"compositions": {"dev": [
+        {"layer_id": l2_id, "seconds": 0.25, "blend": "Alpha"}
+    ]}})))
+    .await;
+
+    h.ticks_at_128(89);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(
+        h.mock.layer_transition_value(2),
+        (0.9375, "Dissolve".into())
+    );
+    h.ticks_at_128(1);
+    // Step 2's own cut, with the original's blend mode.
+    h.fade_is(2, 0.0, "Alpha").await;
+
+    h.ticks_at_128(102); // the pass ends at 192: finished
+    h.runtime(|r| r.running.is_empty()).await;
+    h.fade_is(2, 0.25, "Alpha").await;
+    h.pending_file_is(None).await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.7: a tempo change resends the duration; a change made in Resolume wins (nothing is
+/// restored); a crash while holding a layer is undone at the next start.
+#[tokio::test]
+async fn tempo_changes_resend_user_changes_win_and_a_crash_is_undone() {
+    let h = harness().await;
+    let l2_id = h.mock.read(|v| v["layers"][1]["id"].as_u64().unwrap());
+    h.fade_sequence_a(8, None, None).await;
+    h.ticks_at_128(24);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.9375, "Alpha").await;
+
+    // 64 BPM: 8 sixteenths are 1.875 s (the check runs every 500 ms).
+    h.ticks_at(64.0, 48);
+    h.fade_is(2, 1.875, "Alpha").await;
+
+    // The user sets 3 s in Resolume: kept after Stop all, the file holds nothing any more.
+    h.mock.layer_transition(2, "duration", json!(3.0));
+    h.pending_file_is(None).await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(h.mock.layer_transition_value(2), (3.0, "Alpha".into()));
+    h.app.shutdown().await;
+
+    // A run that ended without restoring (crash) left this file: the next start restores L2.
+    std::fs::write(
+        h.dir.path().join("transitions-pending.json"),
+        json!({"compositions": {
+            "dev": [{"layer_id": l2_id, "seconds": 1.5, "blend": "Dissolve"},
+                    {"layer_id": 1, "seconds": 2.0, "blend": "Alpha"}],
+            "other show": [{"layer_id": 7, "seconds": 2.0, "blend": "Alpha"}]
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let (app, _clock) = start_app(&h.mock, h.dir.path());
+    let h = Harness { app, ..h };
+    h.fade_is(2, 1.5, "Dissolve").await;
+    // Layer 1 doesn't exist (dropped); the other composition's entry waits for it.
+    h.pending_file_is(Some(json!({"compositions": {
+        "other show": [{"layer_id": 7, "seconds": 2.0, "blend": "Alpha"}]
+    }})))
+    .await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.7: starting a sequence without transitions on a layer that one with transitions holds
+/// gives the layer its original back; handing it from one with transitions to another keeps the
+/// first original.
+#[tokio::test]
+async fn takeovers_hand_over_or_restore_the_original() {
+    use seq_core::edit::EditOp;
+    use seq_core::model::Transition;
+    let h = harness().await;
+    h.fade_sequence_a(4, Some("Dissolve"), None).await;
+    h.ticks_at_128(24);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.46875, "Dissolve").await;
+
+    // SEQ_B (L2, no transitions) takes L2 over: the original is back.
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.fade_is(2, 0.0, "Alpha").await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+
+    // SEQ_B with a transition of its own takes L2 from SEQ_A: its value, and when it stops the
+    // original from before SEQ_A.
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetLaneTransition {
+            seq: SEQ_B,
+            lane: 0,
+            transition: Some(Transition {
+                length: 16,
+                blend: Some("Add".into()),
+            }),
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_B && v.sequence.lanes[0].transition.is_some())
+    })
+    .await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.46875, "Dissolve").await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.fade_is(2, 1.875, "Add").await;
+    h.cmd(EngineCommand::Stop { seq: SEQ_B });
+    h.fade_is(2, 0.0, "Alpha").await;
+    h.app.shutdown().await;
+}
+
+// ---- recording from Resolume (SPEC §7.9, M25) ----
+
+impl Harness {
+    /// SEQ_A's lanes as (layer, [(clip name or "-", length)]).
+    async fn lanes_of_a(
+        &self,
+        pred: impl Fn(&[(String, Vec<(String, u32)>)]) -> bool,
+    ) -> Vec<(String, Vec<(String, u32)>)> {
+        let shape = |s: &StructureState| -> Vec<(String, Vec<(String, u32)>)> {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .find(|v| v.sequence.id == SEQ_A)
+                .map(|v| {
+                    v.sequence
+                        .lanes
+                        .iter()
+                        .map(|l| {
+                            let steps = l
+                                .steps
+                                .iter()
+                                .map(|s| {
+                                    let n = s
+                                        .clip
+                                        .as_ref()
+                                        .and_then(|c| c.name.clone())
+                                        .unwrap_or_else(|| "-".into());
+                                    (n, s.length)
+                                })
+                                .collect();
+                            (l.layer.clone(), steps)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let s = self.structure(|s| pred(&shape(s))).await;
+        shape(&s)
+    }
+}
+
+fn lanes(v: &[(&str, &[(&str, u32)])]) -> Vec<(String, Vec<(String, u32)>)> {
+    v.iter()
+        .map(|(l, steps)| {
+            (
+                (*l).to_owned(),
+                steps
+                    .iter()
+                    .map(|(n, len)| ((*n).to_owned(), *len))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// SPEC §7.9: armed, SEQ_A (L2 only here) loops and records, its lanes playing on. Pass 1: LIQUID
+/// clicked on L2 and "Clip 07" on L1 (no lane yet) at sixteenth 4: punched in at once (L2 up to its
+/// next step, L1 a new lane), one undo step; pass 2 plays them. A clear in pass 2 is punched in up
+/// to L2's next step; Ctrl+Z takes that pass back.
+#[tokio::test]
+async fn recording_punches_clicks_in_and_plays_them_back() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| {
+        r.record
+            .as_ref()
+            .is_some_and(|x| x.seq == SEQ_A && !x.recording)
+    })
+    .await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.osc(1).await;
+
+    h.ticks(24); // sixteenth 4
+    tokio::time::sleep(Duration::from_millis(200)).await; // clear of the app's own trigger window
+    h.mock.clear_osc_log();
+    h.mock.manual_connect(2, 3); // LIQUID on L2
+    h.mock.manual_connect(1, 2); // Clip 07 on L1
+    let take1 = lanes(&[
+        ("L2", &[(TWISTED, 4), (LIQUID, 12), (LIQUID, 16)]),
+        ("L1", &[("-", 4), ("Clip 07", 28)]),
+    ]);
+    // In the sequence at once, without waiting for the pass to end.
+    assert_eq!(
+        h.lanes_of_a(|l| l.len() == 2 && l[0].1.len() == 3).await,
+        take1
+    );
+    let r = h
+        .runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 2))
+        .await;
+    assert_eq!(r.running[0].lanes[0].state, "playing", "the lane plays on");
+
+    h.ticks(72); // tick 96: L2's own next step still plays in this pass
+    assert_eq!(h.osc(1).await, vec![connect(2, 3)]);
+    h.ticks(96); // pass 2 plays the take: TWISTED at once; Clip 07 still plays on L1 and goes on, tied
+    assert_eq!(h.osc(2).await[1..].to_vec(), vec![connect(2, 1)]);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(
+        h.mock.osc_log().len(),
+        2,
+        "no clear or retrigger of L1 at bar 1"
+    );
+    h.ticks(24); // LIQUID and Clip 07 (its recorded start) a quarter beat later
+    let log = h.osc(4).await;
+    assert!(
+        log[2..].contains(&connect(2, 3)) && log[2..].contains(&connect(1, 2)),
+        "{log:?}"
+    );
+
+    // Pass 2: clear L2 at sixteenth 8: a rest up to its next step (16).
+    h.ticks(24);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_clear(2);
+    let take2 = lanes(&[
+        ("L2", &[(TWISTED, 4), (LIQUID, 4), ("-", 8), (LIQUID, 16)]),
+        ("L1", &[("Clip 07", 4), ("Clip 07", 28)]), // Clip 07 played on over the loop, tied
+    ]);
+    assert_eq!(h.lanes_of_a(|l| l[0].1.len() == 4).await, take2);
+    h.cmd(EngineCommand::Stop { seq: SEQ_A });
+    h.runtime(|r| r.running.is_empty() && r.record.is_none())
+        .await;
+
+    // Each pass is one undo step.
+    h.cmd(EngineCommand::Undo);
+    assert_eq!(h.lanes_of_a(|l| l[0].1.len() == 3).await, take1);
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: an empty sequence records over the pattern length chosen when arming.
+#[tokio::test]
+async fn an_empty_sequence_records_over_its_pattern_length() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    for index in [1, 0] {
+        h.cmd(EngineCommand::Edit {
+            op: EditOp::RemoveStep {
+                seq: SEQ_A,
+                lane: 0,
+                index,
+            },
+        });
+    }
+    h.lanes_of_a(|l| l.len() == 1 && l[0].1.is_empty()).await;
+    // Without a length it can't record.
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    let r = h
+        .runtime(|r| r.notices.iter().any(|n| n.contains("pattern length")))
+        .await;
+    assert!(r.record.is_none());
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: Some(1),
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    let r = h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(r.running[0].pass_ticks, 96);
+    h.ticks(48);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 1);
+    assert_eq!(
+        h.lanes_of_a(|l| l[0].1.len() == 2).await,
+        lanes(&[("L2", &[("-", 8), (TWISTED, 8)])])
+    );
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: a click records the transition Resolume used (the layer's 0.46875 s at 128 BPM is
+/// 4 sixteenths, with its blend mode).
+#[tokio::test]
+async fn recording_keeps_the_transition_of_each_click() {
+    let h = harness().await;
+    h.mock.layer_transition(2, "duration", json!(0.46875));
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.ticks_at_128(24);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks_at_128(48); // sixteenth 8
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3);
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.ticks_at_128(144); // pass 2: written
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[0].length == 8)
+        })
+        .await;
+    let seq = s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap();
+    let step = &seq.sequence.lanes[0].steps[1];
+    assert_eq!(
+        step.clip.as_ref().and_then(|c| c.name.as_deref()),
+        Some(LIQUID)
+    );
+    assert_eq!(
+        step.transition,
+        Some(seq_core::model::Transition {
+            length: 4,
+            blend: Some("Alpha".into())
+        })
+    );
+    assert_eq!(seq.sequence.lanes[0].steps[0].length, 8);
+    h.cmd(EngineCommand::SetArmed {
+        seq: None,
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_none()).await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: a Piano clip held while recording overwrites what lies under it until its release; its
+/// lane is quiet while it is held and plays again from its next step.
+#[tokio::test]
+async fn a_held_piano_clip_overwrites_until_its_release() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.mock
+        .edit(|v| v["layers"][1]["clips"][2]["triggerstyle"]["value"] = "Piano".into());
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.osc(1).await;
+    h.ticks(24); // sixteenth 4: press LIQUID (Piano) and hold
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.clear_osc_log();
+    h.mock.manual_connect(2, 3);
+    h.runtime(|r| {
+        r.running
+            .first()
+            .is_some_and(|x| x.lanes[0].state == "yielded")
+    })
+    .await;
+    h.ticks(96); // tick 120 = sixteenth 20: the lane's own step at 96 is not sent
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(h.mock.osc_log().is_empty(), "quiet while held");
+    h.mock.manual_clear(2); // let go
+    h.runtime(|r| {
+        r.running
+            .first()
+            .is_some_and(|x| x.lanes[0].state != "yielded")
+    })
+    .await;
+    assert_eq!(
+        h.lanes_of_a(|l| l[0].1.len() == 3 && l[0].1[1].1 == 16)
+            .await,
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 16), ("-", 12)])])
+    );
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9, §6 `tie`: a clip clicked near the end of a pass that still plays at the loop goes on
+/// into the next pass as a tied step: it isn't triggered again at bar 1.
+#[tokio::test]
+async fn a_clip_playing_at_the_loop_continues_tied() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks(120); // sixteenth 20, after L2's last step (16)
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 1); // TWISTED (LIQUID already plays: a click on it reports nothing)
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.mock.clear_osc_log();
+    h.ticks(72); // tick 192: pass 2
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.pass == 2))
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let l2: Vec<_> = h
+        .mock
+        .osc_log()
+        .into_iter()
+        .filter(|r| r.addr.starts_with("/composition/layers/2/"))
+        .collect();
+    assert!(l2.is_empty(), "TWISTED goes on at bar 1: {l2:?}");
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[0].tie)
+        })
+        .await;
+    let steps = &s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap()
+        .sequence
+        .lanes[0]
+        .steps;
+    assert_eq!(
+        steps[0].clip.as_ref().and_then(|c| c.name.as_deref()),
+        Some(TWISTED)
+    );
+    assert_eq!(steps[0].length, 16);
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: with quantize 1/4 (Preferences → Recording) a click at sixteenth 5 lands on beat 2.
+#[tokio::test]
+async fn recording_quantizes_to_the_chosen_grid() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetRecordOptions {
+        quantize: 4,
+        latency_ms: 0,
+    });
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks(30); // sixteenth 5
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3);
+    assert_eq!(
+        h.lanes_of_a(|l| l[0].1.len() == 3).await,
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 12), (LIQUID, 16)])])
+    );
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: what a recording takes. L1's lane switched off (its click is a manual override, not
+/// recorded), no new lanes (a click on L3 is dropped), and replace mode on L2 (a click overwrites to the
+/// end of the pass and the lane goes quiet).
+#[tokio::test]
+async fn record_scope_lanes_off_no_new_lanes_and_replace() {
+    use seq_app::engine::view::RecordScope;
+    let h = harness().await;
+    h.mock.edit(|v| {
+        // A clip on L3, which has no lane in SEQ_A.
+        v["layers"][2]["clips"][0] = v["layers"][1]["clips"][0].clone();
+        v["layers"][2]["clips"][0]["id"] = 4242.into();
+        v["layers"][2]["clips"][0]["name"]["value"] = "Clip 99".into();
+        v["layers"][2]["clips"][0]["connected"]["id"] = 4243.into();
+        v["layers"][2]["clips"][0]["connected"]["value"] = "Disconnected".into();
+        // A second clip on L1 (its lane plays Clip 07).
+        v["layers"][0]["clips"][0] = v["layers"][2]["clips"][0].clone();
+        v["layers"][0]["clips"][0]["id"] = 4244.into();
+        v["layers"][0]["clips"][0]["name"]["value"] = "Clip 98".into();
+        v["layers"][0]["clips"][0]["connected"]["id"] = 4245.into();
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.cmd(EngineCommand::SetRecordScope(RecordScope {
+        off: vec!["L1".into()],
+        new_lanes: false,
+        replace: true,
+    }));
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    let r = h.runtime(|r| r.record.is_some()).await;
+    assert!(r.record.unwrap().scope.replace);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks(24); // sixteenth 4
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3); // L2: replace to the end
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.mock.manual_connect(3, 1); // L3: no lane, no new lanes
+    h.mock.manual_connect(1, 1); // L1: off
+    let r = h
+        .runtime(|r| {
+            r.running
+                .first()
+                .is_some_and(|x| x.lanes[1].state == "yielded")
+        })
+        .await;
+    assert_eq!(r.record.as_ref().unwrap().clicks, 1);
+    assert_eq!(
+        r.running[0].lanes[0].state, "yielded",
+        "replace: L2 quiet to the end"
+    );
+    let lanes_now = h.lanes_of_a(|l| l[0].1.len() == 2).await;
+    assert_eq!(
+        lanes_now[0],
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 28)])])[0]
+    );
+    assert_eq!(lanes_now.len(), 2, "no lane for L3");
     h.app.shutdown().await;
 }

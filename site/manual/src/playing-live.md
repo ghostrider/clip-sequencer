@@ -54,8 +54,8 @@ uses, the older sequence gives up **that lane** (the rest of it keeps running).
 ## Taking over by hand
 
 Clicking a clip in Resolume on a layer a running sequence uses takes that layer over: the lane becomes
-**yielded**. It stops triggering but keeps counting, so it stays in time. Click **Resume lane** in the lane head
-to hand it back: it comes back at its next step. The next start of the sequence resumes it too.
+**yielded**. It stops triggering but keeps counting, so it stays in time. Click its **yielded ↺** pill in the lane
+head (*Resume lane*) to hand it back: it comes back at its next step. The next start of the sequence resumes it too.
 
 ## Editing while it plays
 

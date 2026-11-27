@@ -293,20 +293,30 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       then build it.
 - [x] Docs: manual (Playing live), shortcuts, changelog.
 
-## M21 — Transitions per step (SPEC §7.7; A)  ⟵ next
-- [ ] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
+## M21 — Transitions per step (SPEC §7.7; A)  ✓ done 2026-11-27
+- [x] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
       `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
       covers; do the param ids survive a deck switch / reload. Adjust SPEC §7.7 to the findings.
-- [ ] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
+      Done 2026-11-27 (notes §19, Arena 7.29.0; reload not probed). Decided: the stop's clear uses the original.
+- [x] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
       condition and pick; "original" bookkeeping per layer (take over, hand over, release, user change). Tests.
-- [ ] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
+      Done 2026-11-27: `scheduler` (`Fade`, `SetTransition`, `TransitionReleased`; waits for a running fade) and
+      `seq_core::transition` (originals, seconds, own vs. user changes).
+- [x] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
       (throttled), 10 s cap, restore after clear, user-change detection, `transitions-pending.json` and restore on
       reconnect. Mock-resolume layer transition params. Integration tests: stop, finish, Stop all, deck change,
       takeover, user change, crash restore.
-- [ ] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
+      Done 2026-11-27 (`engine/fades.rs`; the restore goes before the clear, decided 2026-11-27). Deck change
+      and finish are covered by the scheduler tests and the finish test; no engine test of its own for a deck change.
+- [x] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
-- [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
+      Done 2026-11-27 (`lib/fade.ts`, `FadePicker.svelte`; the lane chip edits in a small popover so the lane
+      header keeps its height). Warnings use the clock's BPM, 120 without a clock.
+- [x] Live check with Uli; docs: manual page "Transitions", changelog, README.
+      Docs written 2026-11-27 (manual `transitions.md` with shots from the mock; `site/screenshots.mjs` doesn't
+      make them yet). Live check passed 2026-11-27: fades, set ahead, other lane untouched, restore on stop (a cut),
+      the user's value kept, restore after the app was killed.
 
 ## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)
 - [x] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
@@ -327,11 +337,28 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       `§` connecting while pending links the pending start. Tests for every order.
 - [x] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
 
-## M25 — Record from Resolume (G6)
-- [ ] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
+## M25 — Record from Resolume (SPEC §7.9; G6)  ✓ done 2026-11-27
+- [x] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
       layer without a lane does (new lane?), stop recording, undo as one step; slot lanes record columns.
-- [ ] Build: WS `connected` events while armed → steps (pure part in `seq-core`, tested); UI arm/record state.
-- [ ] Docs.
+      Done 2026-11-27 (§7.9): loops until Stop, one take per pass written at its end (one undo each) and played
+      back the next pass; overwrite from the first click to the pass end; new layers get a lane.
+      Recorded steps carry the transition Resolume used for the click (layer's or the clip's own), added the same day.
+- [x] Probe with Uli: WS messages for clip clicks and the layer Clear button made by hand (shape, timing; a clear vs.
+      switching clips), the transition values in effect when clicking (layer and clip own), notes §20.
+      Done 2026-11-27: a clear is known by its `Disconnected` (one fade late), a fade end by another clip connected.
+- [x] Pure part (`seq-core`): a take (clicks per layer, snapped) applied to a sequence (write out short lanes,
+      overwrite, new lanes, slot columns, stop position); tested. Done 2026-11-27 (`seq_core::record`).
+- [x] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
+      the first click, write the take at the pass end as one undo step and play it the next pass. Mock tests.
+      Done 2026-11-27 (`engine/record.rs`; `Scheduler::set_next_pass` swaps the spec at the boundary).
+- [x] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
+      Done 2026-11-27. The lane head keeps its height while running: M/S replace ▲▼, the yielded pill resumes the
+      lane (no extra button), a lane yielded to recording shows `rec`.
+- [x] After the first live checks (2026-11-27): punch in instead of overwrite, clicks shown at once, pattern length
+      for empty sequences, held Piano clips overwrite, ties (format v4 `tie`) and clips running on over the loop;
+      design round: lane inspector, count-in and sync chip, live take marks, ties on the grid, quantize and latency
+      (Preferences → Recording), per-lane ⏺, new lanes switch, punch in / replace.
+- [x] Docs (manual, changelog, README) and a live check with Uli. Live checks passed 2026-11-27 (design round too).
 
 ## M26 — Pre-show check (G16)
 - [ ] Probe: the clip play mode field (Loop / Play once …) and the clip duration, notes §19 or §20.
@@ -375,6 +402,11 @@ Today the UI server answers only on `127.0.0.1` (SPEC §12.2). Let another compu
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
 ## Release 0.5.0 — before tagging
+
+Drafted 2026-11-27 (version 0.5.0, changelog dated) with M14, M19–M25 and M27. **M26 (pre-show check) is not in
+0.5.0**; it moves to the next release together with M28 and M29. The open checks below were not run before the
+draft; the live checks of M21 and M25 were.
+
 - [ ] Housekeeping: M11c and the plugin docs boxes (shipped since 0.2.0; the "⟵ next" markers are already gone); dependency PRs
       (cargo/npm/actions minor bumps; TypeScript 7 only after `npm run check` passes); LUT effects in layer groups
       (optional).

@@ -127,7 +127,7 @@
       <BuildInfoHeader>$(IntDir)BuildInfo.h</BuildInfoHeader>
       <!-- Cargo.toml must not contain a single quote: it is embedded in the quoted Regex argument below. -->
       <CargoToml>$([System.IO.File]::ReadAllText('$(RepoRoot)\Cargo.toml'))</CargoToml>
-      <SeqVersion>$([System.Text.RegularExpressions.Regex]::Match('$(CargoToml)', '\[workspace\.package\][^\[]*?\nversion = "(\d+)\.(\d+)\.(\d+)"').Value)</SeqVersion>
+      <SeqVersion>$([System.Text.RegularExpressions.Regex]::Match('$(CargoToml)', '\[workspace\.package\][^\[]*?\nversion = "(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?"').Value)</SeqVersion>
     </PropertyGroup>
     <Error Condition="'$(SeqVersion)' == ''" Text="No version in [workspace.package] of $(RepoRoot)\Cargo.toml" />
     <PropertyGroup>

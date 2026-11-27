@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane, whenLabel, whenWarning } from '../lib/app.svelte';
-  import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
+  import type { DeckView, Lane, SequenceView, Step, LaneEnd, StepResolution } from '../lib/types';
+  import { fadeLabel, fadeLength, fadeWarnings, stepFade } from '../lib/fade';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
 
@@ -9,12 +10,18 @@
   let zoom = $derived(app.zoom);
 
   // Local previews while dragging; the edit is sent on release.
-  let resize = $state<{ lane: number; index: number; startX: number; startLen: number; len: number } | null>(null);
+  // `side`: the right edge changes the step's length; the left edge moves its start (`by`), taking the
+  // difference from the step before.
+  let resize = $state<{ lane: number; index: number; side: 'end' | 'start'; startX: number; startLen: number; len: number; prevLen: number; by: number } | null>(null);
   let drag = $state<{ lane: number; from: number; to: number; startX: number; active: boolean; alt: boolean } | null>(null);
   let dropAt = $state<{ lane: number; index: number } | null>(null);
 
   function len(lane: number, index: number, step: Step) {
-    return resize && resize.lane === lane && resize.index === index ? resize.len : step.length;
+    if (!resize || resize.lane !== lane) return step.length;
+    if (resize.side === 'end') return resize.index === index ? resize.len : step.length;
+    if (resize.index === index) return step.length - resize.by;
+    if (resize.index - 1 === index) return step.length + resize.by;
+    return step.length;
   }
 
   let totalSixteenths = $derived.by(() => {
@@ -136,16 +143,24 @@
     app.selectedSection = null;
   }
 
-  // ---- resize by the right edge ----
-  function resizeDown(e: PointerEvent, lane: number, index: number, step: Step) {
+  // ---- resize by the right edge (length) or the left edge (start) ----
+  function resizeDown(e: PointerEvent, lane: number, index: number, step: Step, side: 'end' | 'start' = 'end') {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resize = { lane, index, startX: e.clientX, startLen: step.length, len: step.length };
+    const prevLen = index > 0 ? seq.lanes[lane].steps[index - 1].length : 0;
+    resize = { lane, index, side, startX: e.clientX, startLen: step.length, len: step.length, prevLen, by: 0 };
   }
   // Snaps the length to eighths, or to sixteenths while Shift is held (SPEC §9.3).
   function resizeMove(e: PointerEvent) {
     if (!resize) return;
     const snap = e.shiftKey ? 1 : SNAP_SIXTEENTHS;
+    if (resize.side === 'start') {
+      // Both neighbours keep at least one grid step.
+      const raw = (e.clientX - resize.startX) / zoom;
+      const by = Math.round(raw / snap) * snap;
+      resize.by = Math.min(resize.startLen - snap, Math.max(snap - resize.prevLen, by));
+      return;
+    }
     const raw = resize.startLen + (e.clientX - resize.startX) / zoom;
     resize.len = Math.max(snap, Math.round(raw / snap) * snap);
   }
@@ -153,6 +168,10 @@
     if (!resize) return;
     const r = resize;
     resize = null;
+    if (r.side === 'start') {
+      if (r.by !== 0) app.edit({ op: 'move_step_start', seq: seq.id, lane: r.lane, index: r.index, by: r.by });
+      return;
+    }
     if (r.len !== r.startLen) app.edit({ op: 'set_step_length', seq: seq.id, lane: r.lane, index: r.index, length: r.len });
   }
 
@@ -178,6 +197,7 @@
     const d = drag;
     drag = null;
     app.selectedSection = null;
+    app.selectedLane = null;
     if (!d || !d.active) {
       app.selectedStep = { lane, index };
       return;
@@ -198,21 +218,68 @@
     app.zoom = Math.min(30, Math.max(2, Math.round(app.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
   }
 
-  function moveLane(from: number, to: number) {
-    app.edit({ op: 'move_lane', seq: seq.id, from, to });
-    // Keep the selected step on the lane it belongs to.
-    const sel = app.selectedStep;
-    if (sel?.lane === from) app.selectedStep = { lane: to, index: sel.index };
-    else if (sel?.lane === to) app.selectedStep = { lane: from, index: sel.index };
-  }
-
   function laneState(li: number): string {
     return run?.lanes[li]?.state ?? 'idle';
   }
 
-  function setMode(lane: number, mode: LaneMode) {
-    if ((seq.lanes[lane].mode ?? 'clip') !== mode) app.edit({ op: 'set_lane_mode', seq: seq.id, lane, mode });
+  /** The lane's settings in one line (`full`: spelled out, for the tooltip). */
+  function laneSummary(lane: Lane, full: boolean): string {
+    const mode = isSlotLane(lane) ? 'slot' : 'clip';
+    const end = ends.find((o) => o.value === lane.end)?.label ?? lane.end;
+    const fade = lane.transition
+      ? lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`
+      : lane.steps.some((s) => s.transition) ? (full ? "steps' own fades" : '↗ steps') : '';
+    if (full) return `${mode} lane · ${end}${fade ? ` · ${fade}` : ''} · click for the lane settings`;
+    return [mode, end.split(' ')[0].toLowerCase(), fade].filter(Boolean).join(' · ');
   }
+
+  let bpm = $derived(app.runtime?.clock.bpm ?? 120);
+  // This sequence records from Resolume (SPEC §7.9): its yielded lanes are the ones you play.
+  let recording = $derived(app.runtime?.record?.seq === seq.id && !!app.runtime?.record?.recording);
+  let rec = $derived(recording ? app.runtime?.record ?? null : null);
+  // Armed or recording: the lanes show whether they record (SPEC §7.9).
+  let armedScope = $derived(app.runtime?.record?.seq === seq.id ? app.runtime.record.scope : null);
+
+  /** Start (sixteenths) of each step of a lane. */
+  function stepStarts(lane: Lane): number[] {
+    const out: number[] = [];
+    let at = 0;
+    for (const st of lane.steps) {
+      out.push(at);
+      at += st.length;
+    }
+    return out;
+  }
+  /**
+   * Whether a tie can ever continue anything (SPEC §6 `tie`): `false` when the step before (the lane's last for
+   * the first step) surely plays another clip; unknown with choices.
+   */
+  function tieWorks(li: number, si: number): boolean {
+    const lane = seq.lanes[li];
+    const steps = lane.steps;
+    const prev = si > 0 ? si - 1 : steps.length - 1;
+    if (prev === si || steps[si].choices?.length || steps[prev].choices?.length) return true;
+    const res = view.resolution?.lanes[li]?.steps;
+    const a = res?.[prev];
+    const b = res?.[si];
+    if (isSlotLane(lane)) return steps[prev].column != null && steps[prev].column === steps[si].column;
+    if (!steps[prev].clip || !steps[si].clip) return false;
+    if (a?.clip_id != null && b?.clip_id != null) return a.clip_id === b.clip_id;
+    return true;
+  }
+
+  /** Recording (SPEC §7.9): this step was recorded in the current pass / by its newest click. */
+  function takeMark(layer: string, start: number): 'new' | 'take' | null {
+    if (!rec) return null;
+    let i = -1;
+    rec.take.forEach((m, k) => {
+      if (m.layer === layer && m.at === start) i = k;
+    });
+    if (i < 0) return null;
+    return i === rec.take.length - 1 ? 'new' : 'take';
+  }
+  /** Below this block width the fade label is just `↗ 1` (SPEC §9.3). */
+  const NARROW_PX = 120;
 
   const ends: { value: LaneEnd; label: string }[] = [
     { value: 'loop_to_end', label: 'Loop to end' },
@@ -229,9 +296,15 @@
         {@const res = view.resolution?.lanes[li]}
         {@const state = laneState(li)}
         {@const rlane = run?.lanes[li]}
-        <div class="lanehead" class:bad={res && res.layer !== 'ok'}>
+        <!-- The lane head (SPEC §9.3): layer, state, M/S while running and a summary; the rest is in the
+             lane inspector (click the head). -->
+        <div class="lanehead" class:bad={res && res.layer !== 'ok'} class:selected={app.selectedLane === li && !app.selectedStep}
+          role="button" tabindex="-1" title="Click: lane settings in the inspector"
+          onclick={() => { app.selectedLane = li; app.selectedStep = null; app.selectedSection = null; }}
+          onkeydown={(e) => e.key === 'Enter' && (app.selectedLane = li)}>
           <div class="row-between">
             <select class="layer-select mono" value={lane.layer} title={res?.layer === 'ok' ? 'layer' : `layer ${res?.layer}`}
+              onclick={(e) => e.stopPropagation()}
               onchange={(e) => app.edit({ op: 'set_lane_layer', seq: seq.id, lane: li, layer: (e.currentTarget as HTMLSelectElement).value })}>
               {#if !app.laneLayers.some((l) => l.name === lane.layer)}
                 <option value={lane.layer}>{lane.layer} (missing)</option>
@@ -242,42 +315,38 @@
                 </option>
               {/each}
             </select>
-            <span class="lane-tools">
-              <button class="x" aria-label="Move lane up" title="Move lane up" disabled={li === 0}
-                onclick={() => moveLane(li, li - 1)}>▲</button>
-              <button class="x" aria-label="Move lane down" title="Move lane down" disabled={li === seq.lanes.length - 1}
-                onclick={() => moveLane(li, li + 1)}>▼</button>
-            <button class="x" aria-label="Delete lane" title={seq.lanes.length === 1 ? 'A sequence needs at least one lane' : 'Delete lane'}
-              disabled={seq.lanes.length === 1} onclick={() => app.edit({ op: 'remove_lane', seq: seq.id, lane: li })}>✕</button>
-            </span>
-          </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            <div class="mode-switch" role="group" aria-label="Lane mode"
-              title="Clip: steps follow their clips. Slot: steps play whatever is in a column of this layer.">
-              <button aria-pressed={!isSlotLane(lane)} onclick={() => setMode(li, 'clip')}>Clip</button>
-              <button aria-pressed={isSlotLane(lane)} onclick={() => setMode(li, 'slot')}>Slot</button>
-            </div>
-            <select class="pill-select" value={lane.end}
-              onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
-              {#each ends as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-            </select>
-            {#if rlane?.silent}
-              <span class="pill muted" title={rlane.mute ? 'Muted: counts, sends nothing' : 'Another lane is soloed'}>muted</span>
-            {:else}
-              <span class="pill" class:playing={state === 'playing'} class:yielded={state === 'yielded' || state === 'resume_pending'}>
-                {state === 'resume_pending' ? 'resuming' : state === 'taken_over' ? 'taken over' : state}
-              </span>
+            {#if armedScope}
+              {@const on = !armedScope.off.includes(lane.layer)}
+              <button class="lane-rec" aria-pressed={on} aria-label="Record this lane"
+                title={on ? 'This lane records (click: off)' : 'This lane does not record (click: on)'}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  const off = on ? [...armedScope.off, lane.layer] : armedScope.off.filter((l) => l !== lane.layer);
+                  app.send({ cmd: 'set_record_scope', scope: { ...armedScope, off } });
+                }}>⏺</button>
             {/if}
             {#if run && rlane && state !== 'idle' && state !== 'taken_over'}
-              <div class="mode-switch" role="group" aria-label="Mute and solo">
+              <span class="mode-switch ms" role="group" aria-label="Mute and solo">
                 <button aria-pressed={rlane.mute} title="Mute: clear the layer, keep counting; back at the next step"
-                  onclick={() => app.send({ cmd: 'set_lane_mute', seq: seq.id, lane: li, on: !rlane.mute })}>M</button>
+                  onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'set_lane_mute', seq: seq.id, lane: li, on: !rlane.mute }); }}>M</button>
                 <button aria-pressed={rlane.solo} title="Solo: mute the other lanes of this sequence"
-                  onclick={() => app.send({ cmd: 'set_lane_solo', seq: seq.id, lane: li, on: !rlane.solo })}>S</button>
-              </div>
+                  onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'set_lane_solo', seq: seq.id, lane: li, on: !rlane.solo }); }}>S</button>
+              </span>
             {/if}
-            {#if state === 'yielded'}
-              <button class="btn ghost" onclick={() => app.send({ cmd: 'resume_lane', seq: seq.id, lane: li })}>Resume lane</button>
+          </div>
+          <span class="lane-info mono" title={laneSummary(lane, true)}>{laneSummary(lane, false)}</span>
+          <div class="lane-sum">
+            {#if rlane?.silent}
+              <span class="pill muted" title={rlane.mute ? 'Muted: counts, sends nothing' : 'Another lane is soloed'}>muted</span>
+            {:else if state === 'yielded' && recording}
+              <span class="pill rec" title="Recording: you play this layer in Resolume">rec</span>
+            {:else if state === 'yielded'}
+              <button class="pill yielded" title="Played by hand in Resolume. Click: Resume lane (plays again from its next step)"
+                onclick={(e) => { e.stopPropagation(); app.send({ cmd: 'resume_lane', seq: seq.id, lane: li }); }}>yielded ↺</button>
+            {:else}
+              <span class="pill" class:playing={state === 'playing'} class:yielded={state === 'resume_pending'}>
+                {state === 'resume_pending' ? 'resuming' : state === 'taken_over' ? 'taken over' : state}
+              </span>
             {/if}
           </div>
         </div>
@@ -308,9 +377,21 @@
             {@const notConfirmed = rl?.not_confirmed.includes(si)}
             {@const selected = app.selectedStep?.lane === li && app.selectedStep?.index === si}
             {@const dragged = drag?.active && drag.lane === li && drag.from === si}
+            {@const start = stepStarts(lane)[si]}
+            {@const mark = takeMark(lane.layer, start)}
+            {@const holding = !!rec && rec.held.includes(lane.layer) && run != null && start * TICKS_PER_SIXTEENTH <= run.pos && run.pos < (start + step.length) * TICKS_PER_SIXTEENTH}
+            {@const fade = stepFade(lane, step)}
+            {@const blockPx = len(li, si, step) * zoom}
+            {@const fadeWarns = fade ? fadeWarnings(fade.t, app.laneLayers.find((l) => l.name === lane.layer), clip, bpm) : []}
             <div class="slot" role="listitem" style:width={`${len(li, si, step) * zoom}px`}
               class:drop-before={(dropAt?.lane === li && dropAt.index === si) || (drag?.active && drag.lane === li && drag.to === si && drag.from !== si && (drag.alt || drag.to < drag.from))}
               class:drop-after={drag?.active && !drag.alt && drag.lane === li && drag.to === si && drag.to > drag.from}>
+              {#if step.tie}
+                {@const works = tieWorks(li, si)}
+                <!-- The tie spans the gap to the step before (SPEC §6 tie). -->
+                <span class="tie-arc" class:idle={!works} aria-hidden="true"
+                  title={works ? 'Tied: plays on the clip of the step before if it still plays (T toggles)' : 'Tied, but the step before plays another clip: this tie has no effect'}>⌒</span>
+              {/if}
               <div
                 class="step"
                 class:rest
@@ -321,6 +402,8 @@
                 class:not-confirmed={notConfirmed}
                 class:dragged
                 class:warn={r?.ambiguous || r?.other_layer}
+                class:tied={!!step.tie}
+                class:take={mark != null}
                 style:background-image={thumb ? `linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), color-mix(in srgb, var(--bg) 55%, transparent)), url(${thumb})` : null}
                 title={`${stepLabel(step, r)}${step.column != null && r?.state === 'empty' ? ' · plays as a rest' : ''}${r?.ambiguous ? ' · ambiguous match' : ''}${r?.other_layer ? ' · clip is on another layer' : ''}${notConfirmed ? ' · not confirmed by Resolume' : ''}`}
                 role="button"
@@ -330,10 +413,31 @@
                 onpointerup={() => stepUp(li, si)}
                 onpointercancel={() => (drag = null)}
               >
+                {#if fade && !rest && fade.t.length === 0 && fade.own}
+                  <div class="fade-cut" aria-hidden="true"></div>
+                {:else if fade && !rest && fade.t.length > 0}
+                  {@const fadePx = fade.t.length * zoom}
+                  {@const x = Math.min(fadePx, blockPx)}
+                  {@const y = 100 - (100 * x) / fadePx}
+                  <svg class="fade-wedge" class:inherited={!fade.own} viewBox={`0 0 ${blockPx} 100`} preserveAspectRatio="none" aria-hidden="true">
+                    <polygon points={`0,100 ${x},${y} ${x},100`} />
+                    <line x1="0" y1="100" x2={x} y2={y} vector-effect="non-scaling-stroke" />
+                  </svg>
+                  {#if fadePx > blockPx}<span class="fade-more" title="The fade still runs when the next step starts">›</span>{/if}
+                {/if}
+                {#if mark === 'new'}{#key rec?.clicks}<div class="take-flash" aria-hidden="true"></div>{/key}{/if}
+                {#if holding && run}
+                  <!-- Held down (Piano): what lies after the playhead is cut at the release. -->
+                  <div class="holding" aria-hidden="true" title="Held: ends where you let go"
+                    style:left={`${(run.pos / TICKS_PER_SIXTEENTH - start) * zoom}px`}></div>
+                {/if}
                 <div class="name">{stepLabel(step, r)}</div>
                 <!-- Badges share the length row (the length gives way first), so they never cover the clip name. -->
                 <div class="step-foot">
-                  <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
+                  <div class="len">{step.tie ? '⌒ ' : ''}{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}{#if fade && !rest && (fade.t.length > 0 || fade.own)}
+                      {' · '}<span class="fade-label" class:bad={fadeWarns.length > 0}
+                        title={fadeWarns.length ? fadeWarns.join(' · ') :`${fade.own ? 'Its own transition' : 'The lane default'}: fades in over ${fadeLength(fade.t.length)}${fade.t.blend ? ` with ${fade.t.blend}` : ''}`}
+                      >{fadeWarns.length ? '⚠ ' : ''}{fadeLabel(fade.t, blockPx < NARROW_PX)}</span>{/if}</div>
                   {#if step.when || step.choices?.length}
                     {@const warnWhen = whenWarning(step.when, seq.repeat)}
                     {@const n = 1 + (step.choices?.length ?? 0)}
@@ -352,6 +456,11 @@
                 </div>
                 <div class="resize" role="separator" aria-label="Resize step"
                   onpointerdown={(e) => resizeDown(e, li, si, step)} onpointermove={resizeMove} onpointerup={resizeUp}></div>
+                {#if si > 0}
+                  <div class="resize start" role="separator" aria-label="Move the step's start"
+                    title="Drag: move the start (the step before gives or takes the difference)"
+                    onpointerdown={(e) => resizeDown(e, li, si, step, 'start')} onpointermove={resizeMove} onpointerup={resizeUp}></div>
+                {/if}
               </div>
             </div>
           {/each}
@@ -383,6 +492,18 @@
           {:else}{sec.name}{/if}
         </div>
       {/each}
+      {#if resize}
+        <!-- Where the dragged edge is now (like the playhead), with the step's new length. -->
+        {@const r = resize}
+        {@const lane = seq.lanes[r.lane]}
+        {@const start = stepStarts(lane)[r.index]}
+        {@const at = r.side === 'end' ? start + r.len : start + r.by}
+        {@const newLen = r.side === 'end' ? r.len : r.startLen - r.by}
+        <div class="edge-marker" style:left={`${at * zoom}px`}></div>
+        <div class="edge-label mono" style:left={`${at * zoom}px`}>
+          {Math.floor(at / SIXTEENTHS_PER_BAR) + 1}.{Math.floor((at % SIXTEENTHS_PER_BAR) / 4) + 1}.{(at % 4) + 1} · {formatLength(newLen)}
+        </div>
+      {/if}
       {#if run}
         {@const x = (run.pos / TICKS_PER_SIXTEENTH) * zoom}
         <div class="playhead" style:left={`${x}px`}></div>
