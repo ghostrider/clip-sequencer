@@ -135,6 +135,13 @@ pub enum EditOp {
         index: usize,
         transition: Option<Transition>,
     },
+    /// Ties the step to the one before (SPEC §6 `tie`) or unties it.
+    SetStepTie {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        tie: bool,
+    },
     /// The step's pass condition; `None` = plays on every pass.
     SetStepWhen {
         seq: Uuid,
@@ -384,6 +391,12 @@ pub fn apply_with(
             index,
             transition,
         } => step_mut(&mut f, *seq, *lane, *index)?.transition = transition.clone(),
+        EditOp::SetStepTie {
+            seq,
+            lane,
+            index,
+            tie,
+        } => step_mut(&mut f, *seq, *lane, *index)?.tie = *tie,
         EditOp::SetStepWhen {
             seq,
             lane,

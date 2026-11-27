@@ -2241,3 +2241,83 @@ fn a_spec_set_for_the_next_pass_takes_over_at_the_boundary() {
     let st = s.status();
     assert!(st[0].lanes[1].mute && st[0].lanes.len() == 3);
 }
+
+// ---- ties (SPEC §6 `tie`) ----
+
+fn tied(eighths: u64, target: StepTarget) -> RunStep {
+    RunStep {
+        tie: true,
+        ..RunStep::new(eighths * E, target)
+    }
+}
+
+#[test]
+fn a_tied_step_continues_the_clip_that_still_plays() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(100),
+            end: LaneEnd::LoopToEnd,
+            // A, A tied (continues), B tied (another clip: plays), A tied over the loop.
+            steps: vec![
+                tied(8, Clip(1)),
+                tied(8, Clip(1)),
+                tied(8, Clip(2)),
+                RunStep::new(8 * E, Clip(1)),
+            ],
+        }],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 8 * BAR);
+    // Pass 1: A at 0 (nothing to continue at the start), B at 2 bars, A at 3 bars. Pass 2: step 1 is
+    // tied to A, which still plays: nothing until B.
+    assert_eq!(
+        triggers(&log),
+        vec![
+            (0, 1),
+            (2 * BAR, 2),
+            (3 * BAR, 1),
+            (6 * BAR, 2),
+            (7 * BAR, 1)
+        ]
+    );
+}
+
+#[test]
+fn a_tie_after_a_mute_or_a_rest_triggers_again() {
+    let mut s = Scheduler::new();
+    let sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(100),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![
+                RunStep::new(8 * E, Clip(1)),
+                tied(8, Clip(1)),
+                RunStep::new(8 * E, Rest),
+                tied(8, Clip(1)),
+            ],
+        }],
+    );
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 0, true)));
+    log.extend(at(10, s.set_mute(seq(1), 0, false)));
+    for t in 11..4 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    // Muted (the layer was cleared): the tied step 2 plays again; after the rest, step 4 too.
+    assert_eq!(triggers(&log), vec![(0, 1), (BAR, 1), (3 * BAR, 1)]);
+    // Pass 2: A, then a click in Resolume puts clip 9 on the layer: the tied step 2 triggers A again.
+    let mut log: Vec<(u64, Action)> = at(4 * BAR, s.on_tick()).collect();
+    s.layer_now_plays(100, Some((9, 3)));
+    for t in 4 * BAR + 1..=5 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    assert_eq!(triggers(&log), vec![(4 * BAR, 1), (5 * BAR, 1)]);
+}

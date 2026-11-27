@@ -286,7 +286,7 @@
                 : lane.steps.some((s) => s.transition) ? "Steps without their own transition get the layer's original. Click to set a lane default"
                 : "The app doesn't touch this layer's transition. Click to set a lane default"}
               onclick={(e) => { e.stopPropagation(); fadeMenu = fadeMenu?.lane === li ? null : { lane: li, x: e.clientX, y: e.clientY }; }}>
-              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? '↗ original' : '↗ none'}
+              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? '↗ orig.' : '↗ none'}
             </button>
             <select class="pill-select" value={lane.end}
               onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
@@ -349,6 +349,7 @@
                 class:not-confirmed={notConfirmed}
                 class:dragged
                 class:warn={r?.ambiguous || r?.other_layer}
+                class:tied={!!step.tie}
                 style:background-image={thumb ? `linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), color-mix(in srgb, var(--bg) 55%, transparent)), url(${thumb})` : null}
                 title={`${stepLabel(step, r)}${step.column != null && r?.state === 'empty' ? ' · plays as a rest' : ''}${r?.ambiguous ? ' · ambiguous match' : ''}${r?.other_layer ? ' · clip is on another layer' : ''}${notConfirmed ? ' · not confirmed by Resolume' : ''}`}
                 role="button"
@@ -373,7 +374,7 @@
                 <div class="name">{stepLabel(step, r)}</div>
                 <!-- Badges share the length row (the length gives way first), so they never cover the clip name. -->
                 <div class="step-foot">
-                  <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}{#if fade && !rest && (fade.t.length > 0 || fade.own)}
+                  <div class="len">{step.tie ? '⌒ ' : ''}{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}{#if fade && !rest && (fade.t.length > 0 || fade.own)}
                       {' · '}<span class="fade-label" class:bad={fadeWarns.length > 0}
                         title={fadeWarns.length ? fadeWarns.join(' · ') :`${fade.own ? 'Its own transition' : 'The lane default'}: fades in over ${fadeLength(fade.t.length)}${fade.t.blend ? ` with ${fade.t.blend}` : ''}`}
                       >{fadeWarns.length ? '⚠ ' : ''}{fadeLabel(fade.t, blockPx < NARROW_PX)}</span>{/if}</div>

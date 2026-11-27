@@ -317,6 +317,11 @@ automatically. Sequences are grouped by deck name.
   0–256 (`0` = cut); the UI shows it in beats. `blend`: a Resolume blend mode name, 1–64 characters; absent = keep
   the layer's original blend mode. A step's own `transition` wins over the lane's. Which transition a step gets
   and how it is applied: §7.7.
+- `tie` (step, version 4, optional, decided 2026-11-27): `true` ties the step to the step **directly before** it
+  in its lane (across the loop: the lane's last step of the pass before). When the step starts and its picked
+  clip (or column) is the one the lane's layer still plays, nothing is sent: the clip plays on, no restart, no
+  new transition. Otherwise (the first start, another clip, a rest or a mute in between, someone else changed the
+  layer) it triggers as usual. Only written when `true`. Versions 1–3 have no ties.
 - `when` (step, version 4, optional): plays the step only on some passes. The pass is the sequence's pass counter
   (1-based, `pass 2 / 4` on the card); all loops of a short lane within one pass count as that pass.
   - `{ "is": "first" }` / `{ "is": "not_first" }`: pass 1 / every pass but 1.
@@ -337,7 +342,7 @@ automatically. Sequences are grouped by deck name.
   - Each option is resolved by itself (§4.3); a picked unresolved option triggers nothing. Relink, the red
     unresolved mark and the pre-show check cover every option.
 - **Version 4** (release 0.5, decided 2026-11-24) changes `start` from a string to an object and adds `sections`,
-  `transition`, `when`, `choices`, `pick`. All new fields are optional, so a v4 file that uses none of them
+  `transition`, `when`, `choices`, `pick` and (2026-11-27) `tie`. All new fields are optional, so a v4 file that uses none of them
   differs from v3 only in `version` and `start`.
 - **Version 3** (M13, 2026-11-04) adds `mode` and `column`; lengths as in version 2.
 - **Version 2** (2026-11-01) counts `length` in sixteenths.
@@ -559,6 +564,10 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   its lane from its position up to the **next step that was already there**, or your next click on that layer, or
   the end of the pass. Everything else stays, so a clip clicked between two others keeps the later ones. Steps
   cut by a click keep their conditions, choices and transitions, shortened; a step replaced whole loses them.
+- **Across the loop** (decided 2026-11-27): a clip of the take that still plays when the pass ends (nothing comes
+  after it on its lane, or it is held) goes on into the next pass: it is recorded there at the start as a
+  **tied** step (§6 `tie`), up to the next step that is there (or its release), and the next pass doesn't restart
+  it.
 - **Held clips** (Piano trigger style, the clip's own or the composition's `cliptriggerstyle`; requested
   2026-11-27): a clip pressed and held records **from press to release** and overwrites what lies in between.
   While it is held its lane triggers nothing (it yields); after the release the lane plays again from its next
@@ -634,7 +643,7 @@ Single screen, everything controlled from here (no separate live view).
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `↗ none` when the lane has no transitions, Resolume's own applies; `↗ original` when only steps have one), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
+    `↗ none` when the lane has no transitions, Resolume's own applies; `↗ orig.` when only steps have one), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
     is the "Resume lane" action), **M** and **S** buttons while the sequence runs in place of the move buttons
     (§7.8; the lane head keeps its height), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
@@ -648,6 +657,7 @@ Single screen, everything controlled from here (no separate live view).
     Guide lines every 8/16/32 bars (or off) are a view setting.
   - **Step badges** (format v4): a condition as a small chip in the block's top right (`2:4`, `1st`, `!1st`,
     `last`, `!last`); choices as `1/3` with the pick (`⤨` random, `↻` cycle). The block shows option 1.
+    A **tied** step has a small arc `⌒` at its left edge and in its length line (`⌒ 1 bar`).
   - **Transition display** (§7.7; colour token `--fade` in `tokens.css`, `themes.ts` and the mockup; sketch
     `docs/images/transition-fade-sketch.png`):
     - a **fade wedge** at the left edge, rising from bottom left to top right, on the grid scale: its width is
@@ -684,8 +694,8 @@ Single screen, everything controlled from here (no separate live view).
   (ID / name in deck / file, with ✓ or ✕), `Relink to clip…` (pick from browser), length stepper
   in sixteenths with bars shown. For a slot step instead: column stepper (1 … column count) and the
   clip currently in that slot (or "empty → rest").
-  Format v4 (§6): **Transition** (inherit from lane / own: length in beats, blend mode from the layer's list,
-  warnings), **Play on** (always / first / not first / last / not last / A of B), **Choices** (the options with
+  Format v4 (§6): **Tie** to the step before (checkbox), **Transition** (inherit from lane / own: length in beats,
+  blend mode from the layer's list, warnings), **Play on** (always / first / not first / last / not last / A of B), **Choices** (the options with
   thumbnails and resolution status, add, remove, reorder, relink each; pick random / cycle).
 
 ### 9.5 Status bar

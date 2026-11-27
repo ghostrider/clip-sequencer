@@ -189,33 +189,22 @@ impl Engine {
             return;
         }
         self.log_take();
+        // Clips still playing at the loop go on into this pass, tied (SPEC §7.9); the run already
+        // plays them so (`queue_next_pass`).
+        let runs_on = self.continuations_of_take(seq);
         self.rec.pass = pass;
         self.rec.base = None;
         self.rec.clicks = std::mem::take(&mut self.rec.carry);
         self.rec.maybe_clears.retain(|m| m.pass >= pass);
         self.rec.pos = self.scheduler.position(seq);
-        // A clip still held runs on into this pass: it is recorded from its start (its lane began
-        // the pass quiet, `RunSpec::yielded_layers`).
-        let held: Vec<(u64, u64)> = self.rec.held.iter().map(|(l, c)| (*l, *c)).collect();
-        for (layer_id, clip_id) in held {
-            let clip = self
-                .index
-                .as_ref()
-                .and_then(|i| i.clip_by_id(clip_id))
-                .cloned();
-            let name = self.layer_name(layer_id);
-            if let (Some(clip), Some(name)) = (clip, name) {
-                self.rec.clicks.retain(|c| !(c.layer == name && c.at == 0));
-                self.rec.clicks.push(Click {
-                    layer: name,
-                    at: 0,
-                    hit: Hit::Clip {
-                        clip: clip_ref_for(&clip),
-                        column: clip.column as u32,
-                        held: true,
-                    },
-                    transition: None,
-                });
+        for c in runs_on {
+            if !self
+                .rec
+                .clicks
+                .iter()
+                .any(|o| o.layer == c.layer && o.at == 0)
+            {
+                self.rec.clicks.push(c);
             }
         }
         if !self.rec.clicks.is_empty() {
@@ -295,6 +284,9 @@ impl Engine {
             column: clip.column as u32,
             held,
         };
+        // The layer plays this now (not what the lane sent): a tied step continues only this clip.
+        self.scheduler
+            .layer_now_plays(layer_id, Some((clip.id, clip.column as u32)));
         if held {
             // While it is held, the lane must not trigger its own steps over it.
             self.rec.held.insert(layer_id, clip.id);
@@ -393,6 +385,7 @@ impl Engine {
             let Some(name) = self.layer_name(m.layer_id) else {
                 continue;
             };
+            self.scheduler.layer_now_plays(m.layer_id, None);
             self.add_click(seq, &name, m.ticks, Hit::Rest, None);
         }
     }
@@ -499,6 +492,7 @@ impl Engine {
             at: at16,
             hit: hit.clone(),
             transition: transition.clone(),
+            tied: false,
         };
         match snap(ticks, pass_ticks) {
             Some(s) => {
@@ -565,9 +559,49 @@ impl Engine {
         self.queue_next_pass(seq);
     }
 
-    /// The run plays the model's sequence from its next pass on, looping.
+    /// Clips of this pass's take that still play at its end and go on into the next pass (only
+    /// those still connected now).
+    fn continuations_of_take(&self, seq: Uuid) -> Vec<Click> {
+        let Some((_, pass_ticks)) = self.rec.pos else {
+            return Vec::new();
+        };
+        let Some(base) = self.rec.base.clone().or_else(|| {
+            self.model
+                .as_ref()
+                .and_then(|m| m.find_sequence(seq))
+                .map(|(_, s)| s.clone())
+        }) else {
+            return Vec::new();
+        };
+        let take = Take {
+            clicks: self.rec.clicks.clone(),
+            end: (pass_ticks / u64::from(TICKS_PER_SIXTEENTH)) as u32,
+        };
+        let playing = |c: &Click| {
+            let Hit::Clip { clip, .. } = &c.hit else {
+                return false;
+            };
+            let Some(index) = &self.index else {
+                return false;
+            };
+            index
+                .clips()
+                .iter()
+                .filter(|i| {
+                    i.id == clip.id.unwrap_or_default() || Some(&i.name) == clip.name.as_ref()
+                })
+                .any(|i| self.states.get(&i.id).is_some_and(|s| s.is_connected()))
+        };
+        seq_core::record::continuations(&base, &take)
+            .into_iter()
+            .filter(playing)
+            .collect()
+    }
+
+    /// The run plays the model's sequence from its next pass on, looping; clips that would still
+    /// play at the loop go on there, tied (SPEC §7.9).
     fn queue_next_pass(&mut self, seq: Uuid) {
-        let Some(sequence) = self
+        let Some(mut sequence) = self
             .model
             .as_ref()
             .and_then(|m| m.find_sequence(seq))
@@ -575,6 +609,21 @@ impl Engine {
         else {
             return;
         };
+        if let Some((_, pass_ticks)) = self.rec.pos {
+            let base = self.rec.base.clone().unwrap_or_else(|| sequence.clone());
+            let take = Take {
+                clicks: self.rec.clicks.clone(),
+                end: (pass_ticks / u64::from(TICKS_PER_SIXTEENTH)) as u32,
+            };
+            let runs_on = seq_core::record::continuations(&base, &take);
+            if !runs_on.is_empty() {
+                let next = Take {
+                    clicks: runs_on,
+                    end: take.end,
+                };
+                sequence = apply_take(&sequence, &next, |_| true).sequence;
+            }
+        }
         let Some(index) = self.index.clone() else {
             return;
         };

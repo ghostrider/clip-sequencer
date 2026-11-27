@@ -3,7 +3,7 @@
 //! Version handling: the file is read once for its `version` field only, then parsed typed.
 //!
 //! - Version 4 (current, release 0.5): `start` is an object (`immediate` / `beat` / `bar` + `bars`);
-//!   optional `sections`, lane and step `transition`, step `when`, `choices`, `pick` (SPEC §6).
+//!   optional `sections`, lane and step `transition`, step `when`, `choices`, `pick`, `tie` (SPEC §6).
 //! - Version 3 (M13): lane `mode` (`"clip"` | `"slot"`) and slot steps with `column` (SPEC §4.5).
 //!   Lengths in sixteenths as in v2.
 //! - Version 2: step lengths in sixteenths (6 ticks), no slot lanes.
@@ -166,6 +166,9 @@ impl LegacyFile {
                         }
                         if step.transition.is_some() {
                             return found("transition", path);
+                        }
+                        if step.tie {
+                            return found("tie", path);
                         }
                     }
                 }
@@ -357,7 +360,29 @@ mod tests {
                 r#"{"clip":null,"length":8,"transition":{"length":0}}"#,
                 "transition",
             ),
+            (
+                r#"{"clip":null,"length":8}"#,
+                r#"{"clip":null,"length":8,"tie":true}"#,
+                "tie",
+            ),
         ];
+        // v4 reads and writes a tie, and leaves it out when false.
+        let v4 = V1
+            .replace(r#""version":1"#, r#""version":4"#)
+            .replace(r#""start":"immediate""#, r#""start":{"mode":"immediate"}"#)
+            .replace(
+                r#"{"clip":null,"length":8}"#,
+                r#"{"clip":null,"length":8,"tie":true}"#,
+            );
+        let file = from_json(&v4).unwrap();
+        let steps = &file.decks.values().next().unwrap().sequences[0].lanes[0].steps;
+        assert!(steps.iter().any(|s| s.tie));
+        let text = to_json(&file);
+        assert_eq!(
+            text.matches(r#""tie": true"#).count() + text.matches(r#""tie":true"#).count(),
+            1
+        );
+        assert!(!text.contains(r#""tie": false"#) && !text.contains(r#""tie":false"#));
         for (from, to, field) in cases {
             let text = v3.replace(from, to);
             let err = from_json(&text).unwrap_err();

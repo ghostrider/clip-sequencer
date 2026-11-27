@@ -138,6 +138,11 @@
     {@const fade = stepFade(lane, step)}
     {@const fadeWarns = fade ? fadeWarnings(fade.t, layer, clip, app.runtime?.clock.bpm ?? 120) : []}
     {@const anyFade = !!lane.transition || lane.steps.some((s) => s.transition)}
+    <label class="meta tie-toggle" title="If the clip of the step before still plays (also across the loop), this step lets it play on instead of starting it again">
+      <input type="checkbox" checked={!!step.tie}
+        onchange={(e) => view && sel && app.edit({ op: 'set_step_tie', seq: view.sequence.id, lane: sel.lane, index: sel.index, tie: (e.currentTarget as HTMLInputElement).checked })} />
+      ⌒ Tie to the step before: continue its clip, don't restart it
+    </label>
     <div style="display:flex;flex-direction:column;gap:4px">
       <span class="meta">Transition · how the clip comes in</span>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">

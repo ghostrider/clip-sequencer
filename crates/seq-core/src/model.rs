@@ -407,6 +407,8 @@ struct StepRepr {
     pick: Option<Pick>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     transition: Option<Transition>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    tie: bool,
 }
 
 /// The format v4 step fields, shared by the lane form ([`StepRepr`]) and the flat form
@@ -523,11 +525,13 @@ impl TryFrom<LaneRepr> for Lane {
                     .map_err(|e| format!("lane \"{layer}\" step {n}: {e}"))?;
                 check_choice_kinds(r.mode, &choices)
                     .map_err(|e| format!("lane \"{layer}\" step {n}: {e}"))?;
+                let tie = s.tie;
                 let with = |step: Step| Step {
                     when,
                     choices,
                     pick,
                     transition,
+                    tie,
                     ..step
                 };
                 match (r.mode, s.clip, s.column) {
@@ -588,6 +592,7 @@ impl From<Lane> for LaneRepr {
                         choices,
                         pick,
                         transition,
+                        tie: s.tie,
                     }
                 })
                 .collect(),
@@ -633,6 +638,13 @@ pub struct Step {
     pub pick: Option<Pick>,
     /// How the clip comes in (format v4); wins over the lane's (SPEC §7.7).
     pub transition: Option<Transition>,
+    /// Tied to the step before (format v4, SPEC §6): if the clip that step played still plays on
+    /// the layer, this one continues it instead of triggering it again.
+    pub tie: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !b
 }
 
 #[derive(Serialize, Deserialize)]
@@ -651,6 +663,8 @@ struct StepFlat {
     pick: Option<Pick>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     transition: Option<Transition>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    tie: bool,
 }
 
 impl TryFrom<StepFlat> for Step {
@@ -667,6 +681,7 @@ impl TryFrom<StepFlat> for Step {
             choices,
             pick,
             transition,
+            tie: f.tie,
         })
     }
 }
@@ -687,6 +702,7 @@ impl From<Step> for StepFlat {
             choices,
             pick,
             transition,
+            tie: s.tie,
         }
     }
 }

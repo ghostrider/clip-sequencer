@@ -40,6 +40,8 @@
 //! [`Action::TransitionReleased`] says that no running lane with transitions holds a layer any more;
 //! it comes before any clear of that layer, so the clear uses the original.
 
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
 use crate::model::{
@@ -108,6 +110,8 @@ pub struct RunStep {
     pub pick: Pick,
     /// Its transition; `None` in a lane without transitions (rule 4: the layer's is left alone).
     pub fade: Option<Fade>,
+    /// Tied to the step before (SPEC §6): sends nothing if its target is what the lane sent last.
+    pub tie: bool,
 }
 
 impl RunStep {
@@ -120,6 +124,7 @@ impl RunStep {
             choices: Vec::new(),
             pick: Pick::Random,
             fade: None,
+            tie: false,
         }
     }
 
@@ -252,6 +257,7 @@ impl RunSpec {
                                     .or(lane.transition.as_ref())
                                     .map_or(Fade::Original, |t| Fade::Set(t.clone()))
                             }),
+                            tie: step.tie,
                         })
                         .collect(),
                 }
@@ -524,6 +530,8 @@ struct LaneRt {
     /// Run tick ([`Run::elapsed`]) the lane last sent a step, and when that step's fade ends.
     step_sent_at: u64,
     fade_end: u64,
+    /// What the lane sent last (its layer plays that); `None` when unknown (start, yield, mute).
+    last: Option<StepTarget>,
 }
 
 impl LaneRt {
@@ -550,6 +558,7 @@ impl LaneRt {
             fade_sent: false,
             step_sent_at: 0,
             fade_end: 0,
+            last: None,
         }
     }
 
@@ -583,6 +592,9 @@ struct Run {
     elapsed: u64,
     /// Takes effect at the next pass boundary ([`Scheduler::set_next_pass`]).
     next_spec: Option<RunSpec>,
+    /// What clicks put on layers without a lane of this run ([`Scheduler::layer_now_plays`]), for
+    /// lanes that a new spec adds there.
+    outside: HashMap<u64, Option<(u64, u32)>>,
 }
 
 impl Run {
@@ -602,9 +614,13 @@ impl Run {
                     rt.mute = old.mute;
                     rt.solo = old.solo;
                     rt.silent = old.silent;
+                    rt.last = old.last;
                     if old.state == LaneState::TakenOver {
                         rt.state = LaneState::TakenOver;
                     }
+                }
+                if let Some(clip) = l.layer_id.and_then(|id| self.outside.get(&id)) {
+                    rt.last = Some(playing_target(l, *clip));
                 }
                 if rt.state == LaneState::Playing
                     && l.layer_id
@@ -620,6 +636,7 @@ impl Run {
         self.pass_ticks = spec.pass_ticks().max(1);
         self.spec = spec;
         self.lanes = lanes;
+        self.outside.clear();
     }
 
     /// The step of `lane` that starts exactly `k` ticks from now (≥ 1) and the pass it is in,
@@ -685,7 +702,9 @@ impl Run {
                 continue;
             };
             let rs = &self.spec.lanes[lane].steps[step];
-            if rs.option(option) == StepTarget::Unresolved {
+            if rs.option(option) == StepTarget::Unresolved
+                || (rs.tie && self.lanes[lane].last == Some(rs.option(option)))
+            {
                 continue;
             }
             let (Some(fade), Some(layer_id)) = (rs.fade.clone(), self.spec.lanes[lane].layer_id)
@@ -1056,6 +1075,7 @@ impl Scheduler {
                 continue;
             }
             rt.silent = silent;
+            rt.last = if silent { Some(StepTarget::Rest) } else { None };
             out.push(Action::LaneMuteChanged { seq, lane, silent });
             if silent && rt.state.owns_layer() {
                 out.push(Action::Clear {
@@ -1150,6 +1170,7 @@ impl Scheduler {
             pass_ticks,
             lanes,
             next_spec: None,
+            outside: HashMap::new(),
             elapsed: 0,
         };
         out.push(Action::Started { seq, origin });
@@ -1204,6 +1225,7 @@ impl Scheduler {
         for run in &mut self.runs {
             for (i, rt) in run.lanes.iter_mut().enumerate() {
                 if rt.state == LaneState::Playing && run.spec.lanes[i].layer_id == Some(layer_id) {
+                    rt.last = None;
                     rt.state = LaneState::Yielded {
                         resume_pending: false,
                     };
@@ -1288,6 +1310,23 @@ impl Scheduler {
         }
     }
 
+    /// Something else changed what plays on this layer (a click in Resolume while recording):
+    /// `Some((clip id, column))` a clip, `None` nothing. A tied step there continues only that.
+    pub fn layer_now_plays(&mut self, layer_id: u64, clip: Option<(u64, u32)>) {
+        for run in &mut self.runs {
+            let mut found = false;
+            for (rt, l) in run.lanes.iter_mut().zip(&run.spec.lanes) {
+                if l.layer_id == Some(layer_id) {
+                    rt.last = Some(playing_target(l, clip));
+                    found = true;
+                }
+            }
+            if !found {
+                run.outside.insert(layer_id, clip);
+            }
+        }
+    }
+
     /// Ticks into the current pass of a running sequence, and the pass length.
     pub fn position(&self, seq: Uuid) -> Option<(u64, u64)> {
         self.runs
@@ -1369,6 +1408,7 @@ impl Scheduler {
                         let layer_id = run.spec.lanes[lane]
                             .layer_id
                             .expect("active lane has a layer");
+                        run.lanes[lane].last = Some(StepTarget::Rest);
                         if run.spec.lanes[lane].fades() {
                             let rt = &mut run.lanes[lane];
                             rt.step_sent_at = run.elapsed;
@@ -1447,6 +1487,19 @@ impl Scheduler {
     }
 }
 
+/// What a lane's layer plays, as one of its targets: a slot lane counts the column.
+fn playing_target(lane: &RunLane, clip: Option<(u64, u32)>) -> StepTarget {
+    let slot = lane
+        .steps
+        .iter()
+        .any(|s| matches!(s.target, StepTarget::Slot(_)));
+    match clip {
+        Some((_, column)) if slot => StepTarget::Slot(column),
+        Some((id, _)) => StepTarget::Clip(id),
+        None => StepTarget::Rest,
+    }
+}
+
 /// Step boundary on a lane: resumes a pending yielded lane, then emits the step.
 fn boundary(run: &mut Run, lane: usize, step: Option<usize>) -> Vec<Action> {
     let Some(step) = step else { return Vec::new() };
@@ -1496,6 +1549,13 @@ fn step_actions(run: &mut Run, lane: usize, step: usize) -> Vec<Action> {
     let layer_id = run.spec.lanes[lane]
         .layer_id
         .expect("playing lane has a layer");
+    // Tied (SPEC §6): its clip still plays on the layer, so it goes on (no retrigger, no fade).
+    if rs.tie && rt.last == Some(target) {
+        return out;
+    }
+    if target != StepTarget::Unresolved {
+        rt.last = Some(target);
+    }
     if let (Some(fade), false) = (&rs.fade, target == StepTarget::Unresolved) {
         // Not sent ahead (first step, a fade that ran until now, a lane just back): now, before
         // the trigger (a set in the same instant counts, notes §19).

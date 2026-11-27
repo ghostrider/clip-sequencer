@@ -29,7 +29,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   clear) in Resolume, snapped to sixteenths and punched in up to the next step (the rest stays). They show at once,
   each pass is one undo step, and the next pass plays them, with the transition Resolume used for each click.
   Clicks on layers without a lane add one; a sequence without steps records over a pattern length chosen when
-  arming. A Piano clip held down overwrites what lies under it until you let go.
+  arming. A Piano clip held down overwrites what lies under it until you let go, and a clip still playing at the
+  loop goes on into the next pass, tied.
+- **Ties:** a step can be tied to the step before (⌒ in the step inspector): if that clip still plays, it goes on
+  instead of starting again, also across the loop (sequence file format v4, field `tie`).
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up

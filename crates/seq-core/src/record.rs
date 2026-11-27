@@ -38,6 +38,9 @@ pub struct Click {
     /// The transition Resolume used, in sixteenths (`length: 0` = a cut); `None` when unknown or
     /// for a rest.
     pub transition: Option<Transition>,
+    /// The clip goes on from the pass before (a clip still playing at the loop, [`continuations`]):
+    /// the step is tied (SPEC §6), so it continues instead of starting again.
+    pub tied: bool,
 }
 
 /// The clicks of one pass, in the order they arrived, up to `end` (the pass length, or where Stop was).
@@ -83,28 +86,7 @@ pub fn apply_take(seq: &Sequence, take: &Take, can_add: impl Fn(&str) -> bool) -
         steps: 0,
         new_lanes: Vec::new(),
     };
-    // Layers in the order of their first click; per layer the clicks by position, the later of
-    // two on one sixteenth winning. A rest on the sixteenth of a clip (a tap shorter than a
-    // sixteenth: Piano trigger style, notes §20) moves one sixteenth on, so the tap stays.
-    let mut layers: Vec<(String, Vec<Click>)> = Vec::new();
-    for c in take.clicks.iter().filter(|c| c.at < take.end) {
-        let mut c = c.clone();
-        match layers.iter_mut().find(|(l, _)| *l == c.layer) {
-            Some((_, v)) => {
-                let tapped = v
-                    .iter()
-                    .any(|o| o.at == c.at && matches!(o.hit, Hit::Clip { .. }));
-                if c.hit == Hit::Rest && tapped && c.at + 1 < take.end {
-                    c.at += 1;
-                }
-                v.retain(|o| o.at != c.at);
-                v.push(c);
-            }
-            None => layers.push((c.layer.clone(), vec![c])),
-        }
-    }
-    for (layer, mut clicks) in layers {
-        clicks.sort_by_key(|c| c.at);
+    for (layer, clicks) in by_layer(take) {
         let lane_index = match out.sequence.lanes.iter().position(|l| l.layer == layer) {
             Some(i) => i,
             None if can_add(&layer) => {
@@ -128,6 +110,66 @@ pub fn apply_take(seq: &Sequence, take: &Take, can_add: impl Fn(&str) -> bool) -
         overwrite(lane, &clicks, take.end);
     }
     out
+}
+
+/// Layers in the order of their first click; per layer the clicks by position, the later of two on
+/// one sixteenth winning. A rest on the sixteenth of a clip (a tap shorter than a sixteenth: Piano
+/// trigger style, notes §20) moves one sixteenth on, so the tap stays.
+fn by_layer(take: &Take) -> Vec<(String, Vec<Click>)> {
+    let mut layers: Vec<(String, Vec<Click>)> = Vec::new();
+    for c in take.clicks.iter().filter(|c| c.at < take.end) {
+        let mut c = c.clone();
+        match layers.iter_mut().find(|(l, _)| *l == c.layer) {
+            Some((_, v)) => {
+                let tapped = v
+                    .iter()
+                    .any(|o| o.at == c.at && matches!(o.hit, Hit::Clip { .. }));
+                if c.hit == Hit::Rest && tapped && c.at + 1 < take.end {
+                    c.at += 1;
+                }
+                v.retain(|o| o.at != c.at);
+                v.push(c);
+            }
+            None => layers.push((c.layer.clone(), vec![c])),
+        }
+    }
+    for (_, v) in &mut layers {
+        v.sort_by_key(|c| c.at);
+    }
+    layers
+}
+
+/// Clips of `take` that still play when the pass ends (nothing after them on their lane in `seq`,
+/// the sequence before the take): each goes on into the next pass as a tied click at its start
+/// (SPEC §7.9), up to the next step there or its release.
+pub fn continuations(seq: &Sequence, take: &Take) -> Vec<Click> {
+    by_layer(take)
+        .into_iter()
+        .filter_map(|(layer, clicks)| {
+            let last = clicks.last()?.clone();
+            let Hit::Clip { held, .. } = last.hit else {
+                return None;
+            };
+            let lane = seq.lanes.iter().find(|l| l.layer == layer);
+            let runs_on = held
+                || lane.is_none_or(|l| {
+                    let mut l = l.clone();
+                    write_out(&mut l, take.end);
+                    let mut at = 0;
+                    !l.steps.iter().any(|s| {
+                        let start = at;
+                        at += s.length;
+                        start > last.at && start < take.end
+                    })
+                });
+            runs_on.then_some(Click {
+                at: 0,
+                transition: None,
+                tied: true,
+                ..last
+            })
+        })
+        .collect()
 }
 
 /// Makes `lane` cover at least `end` sixteenths, as it plays in a pass.
@@ -200,6 +242,7 @@ fn overwrite(lane: &mut Lane, clicks: &[&Click], end: u32) {
         if matches!(c.hit, Hit::Clip { .. }) && !cut {
             step.transition = c.transition.clone();
         }
+        step.tie = c.tied;
         replace(&mut lane.steps, c.at, step);
         if cut {
             cuts.push(c.at);
@@ -319,6 +362,7 @@ mod tests {
                 length,
                 blend: None,
             }),
+            tied: false,
         }
     }
 
@@ -496,6 +540,56 @@ mod tests {
             shape(&r.sequence.lanes[0]),
             sh(&[("a", 4), ("h", 16), ("-", 12)])
         );
+    }
+
+    #[test]
+    fn clips_playing_at_the_end_go_on_tied_into_the_next_pass() {
+        let s = seq(vec![
+            lane(
+                "BG",
+                LaneEnd::Hold,
+                vec![step(Some("a"), 16), step(Some("b"), 16)],
+            ),
+            lane("FG", LaneEnd::Hold, vec![step(Some("x"), 32)]),
+        ]);
+        let mut held = click("MID", 4, Some("h"), 1, None);
+        if let Hit::Clip { held: h, .. } = &mut held.hit {
+            *h = true;
+        }
+        let take = Take {
+            clicks: vec![
+                click("BG", 20, Some("late"), 1, None), // nothing after it on BG: runs on
+                click("FG", 4, Some("early"), 1, None), // nothing after it either (x is one step)
+                held,                                   // a new layer, held: runs on
+            ],
+            end: 32,
+        };
+        let c = continuations(&s, &take);
+        let names: Vec<(&str, u32, bool)> = c
+            .iter()
+            .map(|c| match &c.hit {
+                Hit::Clip { .. } => (c.layer.as_str(), c.at, c.tied),
+                Hit::Rest => ("rest", 0, false),
+            })
+            .collect();
+        assert_eq!(
+            names,
+            vec![("BG", 0, true), ("FG", 0, true), ("MID", 0, true)]
+        );
+        // Written into the next pass: tied, up to the next step there.
+        let r = apply_take(&s, &Take { clicks: c, end: 32 }, |_| true);
+        let bg = &r.sequence.lanes[0].steps;
+        assert_eq!((bg[0].length, bg[0].tie), (16, true));
+        assert_eq!(bg[0].clip.as_ref().unwrap().name.as_deref(), Some("late"));
+        // A click with a step after it doesn't run on; nor does a rest.
+        let take = Take {
+            clicks: vec![
+                click("BG", 4, Some("c"), 1, None),
+                click("FG", 8, None, 0, None),
+            ],
+            end: 32,
+        };
+        assert!(continuations(&s, &take).is_empty());
     }
 
     #[test]

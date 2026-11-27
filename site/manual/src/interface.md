@@ -123,6 +123,9 @@ The **step inspector** shows the selected step:
 - **Relink to clip…**: then click a clip in the browser to use it for this step (Esc cancels);
 - **Make rest**;
 - **Length** in sixteenths, with − / +, and the length in bars;
+- **⌒ Tie to the step before**: if the clip of the step before still plays when this step starts (also across
+  the loop), it plays on instead of starting again. Useful for one long clip over several steps, or a clip that
+  runs over the end of the loop. A tied step shows `⌒` in its length line;
 - **Play on**: every pass, the first, all but the first, the last, all but the last, or pass *A* of every *B* (2:4 =
   passes 2, 6, 10 …). On other passes the step sends nothing, so the clip before it keeps playing; for silence on
   some passes, use a rest with a condition, or a rest among the choices;

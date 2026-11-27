@@ -40,6 +40,8 @@ export interface Step {
   choices?: Choice[];
   pick?: Pick;
   transition?: Transition;
+  /** Tied to the step before: continues its clip if it still plays (SPEC §6). */
+  tie?: boolean;
 }
 
 export type LaneMode = 'clip' | 'slot';
@@ -357,6 +359,7 @@ export type EditOp =
   | { op: 'set_start'; seq: Uuid; start: Start }
   | { op: 'set_lane_transition'; seq: Uuid; lane: number; transition: Transition | null }
   | { op: 'set_step_transition'; seq: Uuid; lane: number; index: number; transition: Transition | null }
+  | { op: 'set_step_tie'; seq: Uuid; lane: number; index: number; tie: boolean }
   | { op: 'set_step_when'; seq: Uuid; lane: number; index: number; when: When | null }
   | { op: 'add_choice'; seq: Uuid; lane: number; index: number; choice: Choice }
   | { op: 'remove_choice'; seq: Uuid; lane: number; index: number; option: number }

@@ -38,6 +38,12 @@ mode rather than *now*. The app shows a notice when a recording starts without t
   transition in Resolume while you record to play fades ([Transitions](transitions.md)). A lane you play without
   fades stays a lane without transitions.
 
+## Across the loop
+
+A clip you start near the end of a pass that is still playing when the pass ends goes on into the next pass: it is
+recorded at the start of the next pass as a **tied** step (`⌒`), up to the next step there, so it isn't
+restarted at bar 1. The same goes for a Piano clip you hold over the end of the pass.
+
 ## Limits
 
 - Clips in **Piano** trigger style record as you play them: the clip from press to release, then a rest. While

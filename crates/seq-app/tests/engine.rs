@@ -2715,17 +2715,18 @@ async fn recording_punches_clicks_in_and_plays_them_back() {
 
     h.ticks(72); // tick 96: L2's own next step still plays in this pass
     assert_eq!(h.osc(1).await, vec![connect(2, 3)]);
-    h.ticks(96); // pass 2 plays the take: TWISTED and the new lane's rest (clears L1) at once
-    let mut first = h.osc(4).await[1..].to_vec();
-    first.sort();
-    let mut want_first = vec![connect(2, 1)];
-    want_first.extend(clear(1));
-    want_first.sort();
-    assert_eq!(first, want_first);
-    h.ticks(24); // LIQUID and Clip 07 a quarter beat later
-    let log = h.osc(6).await;
+    h.ticks(96); // pass 2 plays the take: TWISTED at once; Clip 07 still plays on L1 and goes on, tied
+    assert_eq!(h.osc(2).await[1..].to_vec(), vec![connect(2, 1)]);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(
+        h.mock.osc_log().len(),
+        2,
+        "no clear or retrigger of L1 at bar 1"
+    );
+    h.ticks(24); // LIQUID and Clip 07 (its recorded start) a quarter beat later
+    let log = h.osc(4).await;
     assert!(
-        log[4..].contains(&connect(2, 3)) && log[4..].contains(&connect(1, 2)),
+        log[2..].contains(&connect(2, 3)) && log[2..].contains(&connect(1, 2)),
         "{log:?}"
     );
 
@@ -2735,7 +2736,7 @@ async fn recording_punches_clicks_in_and_plays_them_back() {
     h.mock.manual_clear(2);
     let take2 = lanes(&[
         ("L2", &[(TWISTED, 4), (LIQUID, 4), ("-", 8), (LIQUID, 16)]),
-        ("L1", &[("-", 4), ("Clip 07", 28)]),
+        ("L1", &[("Clip 07", 4), ("Clip 07", 28)]), // Clip 07 played on over the loop, tied
     ]);
     assert_eq!(h.lanes_of_a(|l| l[0].1.len() == 4).await, take2);
     h.cmd(EngineCommand::Stop { seq: SEQ_A });
@@ -2901,5 +2902,68 @@ async fn a_held_piano_clip_overwrites_until_its_release() {
             .await,
         lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 16), ("-", 12)])])
     );
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9, §6 `tie`: a clip clicked near the end of a pass that still plays at the loop goes on
+/// into the next pass as a tied step: it isn't triggered again at bar 1.
+#[tokio::test]
+async fn a_clip_playing_at_the_loop_continues_tied() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.runtime(|r| r.record.is_some()).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks(120); // sixteenth 20, after L2's last step (16)
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 1); // TWISTED (LIQUID already plays: a click on it reports nothing)
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.mock.clear_osc_log();
+    h.ticks(72); // tick 192: pass 2
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.pass == 2))
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let l2: Vec<_> = h
+        .mock
+        .osc_log()
+        .into_iter()
+        .filter(|r| r.addr.starts_with("/composition/layers/2/"))
+        .collect();
+    assert!(l2.is_empty(), "TWISTED goes on at bar 1: {l2:?}");
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[0].tie)
+        })
+        .await;
+    let steps = &s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap()
+        .sequence
+        .lanes[0]
+        .steps;
+    assert_eq!(
+        steps[0].clip.as_ref().and_then(|c| c.name.as_deref()),
+        Some(TWISTED)
+    );
+    assert_eq!(steps[0].length, 16);
     h.app.shutdown().await;
 }
