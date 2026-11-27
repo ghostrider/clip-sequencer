@@ -360,6 +360,7 @@ export type EditOp =
   | { op: 'set_lane_transition'; seq: Uuid; lane: number; transition: Transition | null }
   | { op: 'set_step_transition'; seq: Uuid; lane: number; index: number; transition: Transition | null }
   | { op: 'set_step_tie'; seq: Uuid; lane: number; index: number; tie: boolean }
+  | { op: 'move_step_start'; seq: Uuid; lane: number; index: number; by: number }
   | { op: 'set_step_when'; seq: Uuid; lane: number; index: number; when: When | null }
   | { op: 'add_choice'; seq: Uuid; lane: number; index: number; choice: Choice }
   | { op: 'remove_choice'; seq: Uuid; lane: number; index: number; option: number }

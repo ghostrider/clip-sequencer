@@ -34,6 +34,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   per lane ⏺, a switch for new lanes, and punch in or replace.
 - **Ties:** a step can be tied to the step before (⌒ in the step inspector): if that clip still plays, it goes on
   instead of starting again, also across the loop (sequence file format v4, field `tie`).
+- **Resizing steps:** the left edge of a step can be dragged too (it moves the boundary with the step before), and
+  while an edge is dragged a marker through the grid shows where it is and the new length.
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up

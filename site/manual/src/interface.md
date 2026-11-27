@@ -110,7 +110,8 @@ deletes sections. They are only marks for you: they don't change what plays.
 | `1/3 ⤨` or `1/3 ↻` badge | the step has choices, picked at random or in turn; while it plays, the first number is the option playing; red: a choice is unresolved |
 
 Editing: drag clips from the browser onto a lane; drag a step's **right edge** to resize (1/8 grid, **Shift** for
-1/16); drag a step to move it within the lane, **Alt+drag** to copy it; **Del** removes the selected step, **R**
+1/16), or its **left edge** to move its start (the step before gives or takes the difference); while you drag, a
+marker through the grid shows where the edge is (`bar.beat.sixteenth`) and the new length; drag a step to move it within the lane, **Alt+drag** to copy it; **Del** removes the selected step, **R**
 inserts a one-bar rest after it; **Ctrl+Z** / **Ctrl+Shift+Z** undo and redo. All changes are saved automatically.
 
 ## Clip browser and step inspector

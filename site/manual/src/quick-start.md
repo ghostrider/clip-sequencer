@@ -25,7 +25,7 @@ Double-click its name in the list (or right-click → **Rename**) to give it a r
 3. Drag a second clip behind it. Clips you drop between two steps are inserted there.
 
 To change a step's length, drag its right edge: it snaps to eighths of a bar, or to sixteenths while you hold
-**Shift**. The step inspector (bottom right) shows the length and has − / + buttons.
+**Shift**. A marker shows where the edge is and the new length. The step inspector (bottom right) shows the length and has − / + buttons.
 
 ## 3. Add a second lane
 

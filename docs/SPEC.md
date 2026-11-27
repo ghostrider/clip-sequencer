@@ -685,7 +685,10 @@ Single screen, everything controlled from here (no separate live view).
 - Interactions:
   - Drag a clip from the browser onto a lane → appends or inserts a step (default length 16 = one bar).
   - Drag a block's right edge → resize, snapping to eighths (min 1/8); hold Shift to snap to
-    sixteenths (min 1/16).
+    sixteenths (min 1/16). Drag its **left edge** (not the first step's) → move its start: the step before gets
+    longer or shorter by as much, nothing after it moves (edit `move_step_start`, one undo step). While an edge is
+    dragged, a marker like the playhead runs through the grid at the edge, labelled `bar.beat.sixteenth` and the
+    step's new length (added 2026-11-27).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
   - Space → start/stop selected sequence; Shift+Space → cue it (§3.3). Esc → deselect.

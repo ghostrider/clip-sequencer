@@ -96,6 +96,14 @@ pub enum EditOp {
         index: usize,
         length: u32,
     },
+    /// Moves the start of a step by `by` sixteenths (its left edge in the editor): the step before
+    /// gets longer or shorter by as much, so nothing after it moves. Not for the first step.
+    MoveStepStart {
+        seq: Uuid,
+        lane: usize,
+        index: usize,
+        by: i32,
+    },
     /// Moves a step so that it ends up at position `to`.
     MoveStep {
         seq: Uuid,
@@ -351,6 +359,21 @@ pub fn apply_with(
             index,
             length,
         } => step_mut(&mut f, *seq, *lane, *index)?.length = *length,
+        EditOp::MoveStepStart {
+            seq,
+            lane,
+            index,
+            by,
+        } => {
+            let steps = &mut lane_mut(&mut f, *seq, *lane)?.steps;
+            if *index == 0 || *index >= steps.len() {
+                return Err(EditError::NoSuchStep(*index));
+            }
+            // A length below 1 becomes 0, which validation refuses.
+            let grow = |len: u32, d: i64| u32::try_from((i64::from(len) + d).max(0)).unwrap_or(0);
+            steps[*index - 1].length = grow(steps[*index - 1].length, i64::from(*by));
+            steps[*index].length = grow(steps[*index].length, -i64::from(*by));
+        }
         EditOp::MoveStep {
             seq,
             lane,
@@ -661,6 +684,57 @@ mod tests {
         )
         .unwrap();
         assert_eq!(names(&f), ["-", "c"]);
+    }
+
+    #[test]
+    fn moving_a_step_start_moves_the_boundary_with_the_step_before() {
+        let f = base();
+        let lens = |f: &SeqFile| -> Vec<u32> {
+            f.find_sequence(A).unwrap().1.lanes[0]
+                .steps
+                .iter()
+                .map(|s| s.length)
+                .collect()
+        };
+        let before = lens(&f);
+        let g = ok(
+            &f,
+            EditOp::MoveStepStart {
+                seq: A,
+                lane: 0,
+                index: 1,
+                by: -2,
+            },
+        );
+        let after = lens(&g);
+        assert_eq!(after[0], before[0] - 2);
+        assert_eq!(after[1], before[1] + 2);
+        assert_eq!(after.iter().sum::<u32>(), before.iter().sum::<u32>());
+        // Not the first step; nothing may shrink below one sixteenth.
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::MoveStepStart {
+                    seq: A,
+                    lane: 0,
+                    index: 0,
+                    by: 1
+                }
+            ),
+            Err(EditError::NoSuchStep(0))
+        ));
+        assert!(matches!(
+            apply(
+                &f,
+                &EditOp::MoveStepStart {
+                    seq: A,
+                    lane: 0,
+                    index: 1,
+                    by: -1000
+                }
+            ),
+            Err(EditError::Invalid(_))
+        ));
     }
 
     #[test]

@@ -162,7 +162,7 @@
     <LaneGrid {view} {deck} />
 
     <div class="hint">
-      Drag clips from the browser onto a lane · drag a block's right edge to resize in 1/8 steps (hold Shift for 1/16) · drag to reorder, Alt-drag to
+      Drag clips from the browser onto a lane · drag a block's right edge to resize (left edge: move its start) in 1/8 steps (hold Shift for 1/16) · drag to reorder, Alt-drag to
       duplicate · Del removes a step · R inserts a rest · Space starts/stops · Ctrl+wheel zooms · Ctrl+Z / Ctrl+Shift+Z undo/redo
     </div>
   {:else}

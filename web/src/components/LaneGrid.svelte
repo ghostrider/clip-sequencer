@@ -10,12 +10,18 @@
   let zoom = $derived(app.zoom);
 
   // Local previews while dragging; the edit is sent on release.
-  let resize = $state<{ lane: number; index: number; startX: number; startLen: number; len: number } | null>(null);
+  // `side`: the right edge changes the step's length; the left edge moves its start (`by`), taking the
+  // difference from the step before.
+  let resize = $state<{ lane: number; index: number; side: 'end' | 'start'; startX: number; startLen: number; len: number; prevLen: number; by: number } | null>(null);
   let drag = $state<{ lane: number; from: number; to: number; startX: number; active: boolean; alt: boolean } | null>(null);
   let dropAt = $state<{ lane: number; index: number } | null>(null);
 
   function len(lane: number, index: number, step: Step) {
-    return resize && resize.lane === lane && resize.index === index ? resize.len : step.length;
+    if (!resize || resize.lane !== lane) return step.length;
+    if (resize.side === 'end') return resize.index === index ? resize.len : step.length;
+    if (resize.index === index) return step.length - resize.by;
+    if (resize.index - 1 === index) return step.length + resize.by;
+    return step.length;
   }
 
   let totalSixteenths = $derived.by(() => {
@@ -137,16 +143,24 @@
     app.selectedSection = null;
   }
 
-  // ---- resize by the right edge ----
-  function resizeDown(e: PointerEvent, lane: number, index: number, step: Step) {
+  // ---- resize by the right edge (length) or the left edge (start) ----
+  function resizeDown(e: PointerEvent, lane: number, index: number, step: Step, side: 'end' | 'start' = 'end') {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resize = { lane, index, startX: e.clientX, startLen: step.length, len: step.length };
+    const prevLen = index > 0 ? seq.lanes[lane].steps[index - 1].length : 0;
+    resize = { lane, index, side, startX: e.clientX, startLen: step.length, len: step.length, prevLen, by: 0 };
   }
   // Snaps the length to eighths, or to sixteenths while Shift is held (SPEC §9.3).
   function resizeMove(e: PointerEvent) {
     if (!resize) return;
     const snap = e.shiftKey ? 1 : SNAP_SIXTEENTHS;
+    if (resize.side === 'start') {
+      // Both neighbours keep at least one grid step.
+      const raw = (e.clientX - resize.startX) / zoom;
+      const by = Math.round(raw / snap) * snap;
+      resize.by = Math.min(resize.startLen - snap, Math.max(snap - resize.prevLen, by));
+      return;
+    }
     const raw = resize.startLen + (e.clientX - resize.startX) / zoom;
     resize.len = Math.max(snap, Math.round(raw / snap) * snap);
   }
@@ -154,6 +168,10 @@
     if (!resize) return;
     const r = resize;
     resize = null;
+    if (r.side === 'start') {
+      if (r.by !== 0) app.edit({ op: 'move_step_start', seq: seq.id, lane: r.lane, index: r.index, by: r.by });
+      return;
+    }
     if (r.len !== r.startLen) app.edit({ op: 'set_step_length', seq: seq.id, lane: r.lane, index: r.index, length: r.len });
   }
 
@@ -438,6 +456,11 @@
                 </div>
                 <div class="resize" role="separator" aria-label="Resize step"
                   onpointerdown={(e) => resizeDown(e, li, si, step)} onpointermove={resizeMove} onpointerup={resizeUp}></div>
+                {#if si > 0}
+                  <div class="resize start" role="separator" aria-label="Move the step's start"
+                    title="Drag: move the start (the step before gives or takes the difference)"
+                    onpointerdown={(e) => resizeDown(e, li, si, step, 'start')} onpointermove={resizeMove} onpointerup={resizeUp}></div>
+                {/if}
               </div>
             </div>
           {/each}
@@ -469,6 +492,18 @@
           {:else}{sec.name}{/if}
         </div>
       {/each}
+      {#if resize}
+        <!-- Where the dragged edge is now (like the playhead), with the step's new length. -->
+        {@const r = resize}
+        {@const lane = seq.lanes[r.lane]}
+        {@const start = stepStarts(lane)[r.index]}
+        {@const at = r.side === 'end' ? start + r.len : start + r.by}
+        {@const newLen = r.side === 'end' ? r.len : r.startLen - r.by}
+        <div class="edge-marker" style:left={`${at * zoom}px`}></div>
+        <div class="edge-label mono" style:left={`${at * zoom}px`}>
+          {Math.floor(at / SIXTEENTHS_PER_BAR) + 1}.{Math.floor((at % SIXTEENTHS_PER_BAR) / 4) + 1}.{(at % 4) + 1} · {formatLength(newLen)}
+        </div>
+      {/if}
       {#if run}
         {@const x = (run.pos / TICKS_PER_SIXTEENTH) * zoom}
         <div class="playhead" style:left={`${x}px`}></div>
