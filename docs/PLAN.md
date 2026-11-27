@@ -314,6 +314,8 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       Done 2026-11-27 (`lib/fade.ts`, `FadePicker.svelte`; the lane chip edits in a small popover so the lane
       header keeps its height). Warnings use the clock's BPM, 120 without a clock.
 - [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
+      Docs written 2026-11-27 (manual `transitions.md` with shots from the mock; `site/screenshots.mjs` doesn't
+      make them yet). Live check open.
 
 ## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)
 - [x] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,

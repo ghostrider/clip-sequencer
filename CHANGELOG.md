@@ -21,6 +21,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Section markers** in the editor ("Intro", "Drop"): add with M or from the ruler, drag, rename, delete. View →
   Guide lines draws a line every 8, 16 or 32 bars.
 - **LUT test photos:** the 24 images of the Kodak test suite in the LUT tab's preview.
+- **Transitions:** a step can fade in over some beats, optionally with a blend mode; a lane can have a default.
+  The app sets the layer's transition in Resolume just before the step and gives the layer its own back when the
+  sequence lets go of it (also after a crash, at the next start). The editor draws the fade on each step and
+  warns about fades over Resolume's 10 s, unknown blend modes and clips with their own transition.
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up
