@@ -354,7 +354,11 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
 - [x] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
       Done 2026-11-27. The lane head keeps its height while running: M/S replace ▲▼, the yielded pill resumes the
       lane (no extra button), a lane yielded to recording shows `rec`.
-- [ ] Docs (manual, changelog, README) and a live check with Uli.
+- [x] After the first live checks (2026-11-27): punch in instead of overwrite, clicks shown at once, pattern length
+      for empty sequences, held Piano clips overwrite, ties (format v4 `tie`) and clips running on over the loop;
+      design round: lane inspector, count-in and sync chip, live take marks, ties on the grid, quantize and latency
+      (Preferences → Recording), per-lane ⏺, new lanes switch, punch in / replace.
+- [ ] Docs (manual, changelog, README) and a live check with Uli. Docs written; live check of the design round open.
 
 ## M26 — Pre-show check (G16)
 - [ ] Probe: the clip play mode field (Loop / Play once …) and the clip duration, notes §19 or §20.

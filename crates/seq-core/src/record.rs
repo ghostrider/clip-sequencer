@@ -41,6 +41,9 @@ pub struct Click {
     /// The clip goes on from the pass before (a clip still playing at the loop, [`continuations`]):
     /// the step is tied (SPEC §6), so it continues instead of starting again.
     pub tied: bool,
+    /// Recorded in "replace" mode (SPEC §7.9): it runs to the next click on its layer or the end of
+    /// the pass, over the steps that are there.
+    pub replace: bool,
 }
 
 /// The clicks of one pass, in the order they arrived, up to `end` (the pass length, or where Stop was).
@@ -154,6 +157,7 @@ pub fn continuations(seq: &Sequence, take: &Take) -> Vec<Click> {
             };
             let lane = seq.lanes.iter().find(|l| l.layer == layer);
             let runs_on = held
+                || last.replace
                 || lane.is_none_or(|l| {
                     let mut l = l.clone();
                     write_out(&mut l, take.end);
@@ -221,8 +225,9 @@ fn overwrite(lane: &mut Lane, clicks: &[&Click], end: u32) {
     for (i, c) in clicks.iter().enumerate() {
         let next_click = clicks.get(i + 1).map_or(end, |n| n.at);
         let held = matches!(c.hit, Hit::Clip { held: true, .. });
-        // A held clip runs until it is let go; a click until the next step that is there.
-        let next_step = if held {
+        // A held clip runs until it is let go, a click in replace mode to its next click or the end; a
+        // click (punch in) until the next step that is there.
+        let next_step = if held || c.replace {
             end
         } else {
             starts.iter().copied().find(|&s| s > c.at).unwrap_or(end)
@@ -365,6 +370,7 @@ mod tests {
                 blend: None,
             }),
             tied: false,
+            replace: false,
         }
     }
 
@@ -522,6 +528,28 @@ mod tests {
         assert_eq!(
             shape(&r.sequence.lanes[0]),
             sh(&[("-", 4), ("x", 8), ("-", 4), ("z", 4), ("y", 12)])
+        );
+    }
+
+    #[test]
+    fn replace_mode_overwrites_to_the_next_click_or_the_end() {
+        let s = seq(vec![lane(
+            "BG",
+            LaneEnd::Hold,
+            vec![step(Some("a"), 8), step(Some("b"), 8), step(Some("c"), 16)],
+        )]);
+        let mut first = click("BG", 4, Some("x"), 1, None);
+        first.replace = true;
+        let take = Take {
+            clicks: vec![first],
+            end: 32,
+        };
+        let r = apply_take(&s, &take, |_| true);
+        assert_eq!(shape(&r.sequence.lanes[0]), sh(&[("a", 4), ("x", 28)]));
+        assert_eq!(
+            continuations(&s, &take).len(),
+            1,
+            "it runs on over the loop"
         );
     }
 

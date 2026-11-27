@@ -371,6 +371,10 @@ enum ClientMsg {
         at: crate::engine::CuePoint,
     },
     CancelCue,
+    /// SPEC §7.9: what a recording takes.
+    SetRecordScope {
+        scope: crate::engine::view::RecordScope,
+    },
     /// SPEC §7.9: arm a sequence for recording (`null` disarms).
     SetArmed {
         seq: Option<Uuid>,
@@ -699,6 +703,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::Cue { seq, at } => EngineCommand::Cue { seq, at },
         ClientMsg::CancelCue => EngineCommand::CancelCue,
         ClientMsg::SetArmed { seq, bars } => EngineCommand::SetArmed { seq, bars },
+        ClientMsg::SetRecordScope { scope } => EngineCommand::SetRecordScope(scope),
         ClientMsg::SetLaneMute { seq, lane, on } => EngineCommand::SetLaneMute { seq, lane, on },
         ClientMsg::SetLaneSolo { seq, lane, on } => EngineCommand::SetLaneSolo { seq, lane, on },
         ClientMsg::Stop { seq } => EngineCommand::Stop { seq },

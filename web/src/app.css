@@ -257,3 +257,8 @@ button.pill { cursor: pointer; font: inherit; }
 .step .take-flash { position: absolute; inset: 0; background: var(--err); opacity: 0; pointer-events: none; animation: take-flash 700ms ease-out; }
 @keyframes take-flash { from { opacity: .45; } to { opacity: 0; } }
 .step .holding { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--err) 30%, transparent) 0 4px, transparent 4px 9px); border-left: 2px solid var(--err); }
+.lane-rec { flex: none; font-size: 10px; padding: 1px 4px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: none; color: var(--faint); cursor: pointer; }
+.lane-rec[aria-pressed='true'] { color: var(--err); border-color: var(--err-line); background: var(--err-bg); }
+.btn.rec-new { font-size: 11px; padding: 2px 8px; }
+.btn.rec-new[aria-pressed='false'] { color: var(--faint); text-decoration: line-through; }
+.rec-bar { flex: 1 0 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

@@ -76,29 +76,6 @@
       </span>
       {#if run?.edited}<span class="tag pending">● edited · applies at next start</span>{/if}
       {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{waitLabel(waiting)}</span>{/if}
-      {#if rec?.recording}<span class="tag rec mono" title="Click clips in Resolume in time: they show at once and play from the next pass">● REC · pass {rec.pass}{rec.clicks ? ` · ${rec.clicks} click${rec.clicks === 1 ? '' : 's'}` : ''}</span>
-      {:else if rec && waiting}<span class="tag rec mono" title="Count-in: recording starts with the sequence">● REC in {Math.ceil(waiting.wait_ticks / 24)}</span>
-      {:else if rec}<span class="tag rec armed mono" title="Records from its next start">● armed</span>{/if}
-      {#if rec}
-        <select class="pill-select mono" title="Quantize: recorded clicks snap to this grid (Preferences → Recording)"
-          aria-label="Quantize" value={app.appearance.record_quantize}
-          onchange={(e) => app.send({ cmd: 'set_record_options', quantize: Number((e.currentTarget as HTMLSelectElement).value), latency_ms: app.appearance.record_latency_ms })}>
-          <option value={1}>q 1/16</option>
-          <option value={2}>q 1/8</option>
-          <option value={4}>q 1/4</option>
-        </select>
-        <!-- Clicks snap to the sequence's grid: it must be lined up with the music (SPEC §7.9). -->
-        {@const clock = app.runtime?.clock}
-        {#if !clock?.bar_synced}
-          <span class="tag bad mono" title={clock?.source === 'resolume'
-            ? "The grid is not lined up with Resolume's beat: press Resync in Resolume on the first beat of a bar, or clicks land a sixteenth early or late"
-            : 'The grid is not lined up with the beat yet (no MIDI Start): clicks may land a sixteenth early or late'}>⚠ not synced</span>
-        {:else if s.start.mode === 'immediate'}
-          <span class="tag bad mono" title="This sequence starts &quot;now&quot;, off the beat: give it a bar start so its grid lines up with the music">⚠ starts now</span>
-        {:else}
-          <span class="tag ok mono" title="The grid is lined up with the beat">in sync</span>
-        {/if}
-      {/if}
       <div class="spacer"></div>
       <div class="repeat startmode" role="group" aria-label="Start mode">
         <span>Start</span>
@@ -134,6 +111,43 @@
           if (!rec && view.pass_sixteenths === 0) armMenu = armMenu ? null : { x: e.clientX, y: e.clientY };
           else app.send({ cmd: 'set_armed', seq: rec ? null : s.id });
         }}>⏺</button>
+      {#if rec}
+        <!-- Recording (SPEC §7.9): its controls in one row. -->
+        <div class="rec-bar">
+        {#if rec?.recording}<span class="tag rec mono" title="Click clips in Resolume in time: they show at once and play from the next pass">● REC · pass {rec.pass}{rec.clicks ? ` · ${rec.clicks} click${rec.clicks === 1 ? '' : 's'}` : ''}</span>
+        {:else if rec && waiting}<span class="tag rec mono" title="Count-in: recording starts with the sequence">● REC in {Math.ceil(waiting.wait_ticks / 24)}</span>
+        {:else if rec}<span class="tag rec armed mono" title="Records from its next start">● armed</span>{/if}
+        {#if rec}
+          <select class="pill-select mono" title="Quantize: recorded clicks snap to this grid (Preferences → Recording)"
+            aria-label="Quantize" value={app.appearance.record_quantize}
+            onchange={(e) => app.send({ cmd: 'set_record_options', quantize: Number((e.currentTarget as HTMLSelectElement).value), latency_ms: app.appearance.record_latency_ms })}>
+            <option value={1}>q 1/16</option>
+            <option value={2}>q 1/8</option>
+            <option value={4}>q 1/4</option>
+          </select>
+          <select class="pill-select mono" aria-label="Record mode" value={rec.scope.replace ? 'replace' : 'punch'}
+            title="Punch in: a click replaces up to the next step that is there. Replace: up to your next click or the end of the pass (the lane goes quiet from your click)"
+            onchange={(e) => app.send({ cmd: 'set_record_scope', scope: { ...rec.scope, replace: (e.currentTarget as HTMLSelectElement).value === 'replace' } })}>
+            <option value="punch">punch in</option>
+            <option value="replace">replace</option>
+          </select>
+          <button class="btn mono rec-new" aria-pressed={rec.scope.new_lanes}
+            title={rec.scope.new_lanes ? 'A click on a layer without a lane adds one (click: off)' : 'Clicks on layers without a lane are not recorded (click: on)'}
+            onclick={() => rec && app.send({ cmd: 'set_record_scope', scope: { ...rec.scope, new_lanes: !rec.scope.new_lanes } })}>+ lanes</button>
+          <!-- Clicks snap to the sequence's grid: it must be lined up with the music (SPEC §7.9). -->
+          {@const clock = app.runtime?.clock}
+          {#if !clock?.bar_synced}
+            <span class="tag bad mono" title={clock?.source === 'resolume'
+              ? "The grid is not lined up with Resolume's beat: press Resync in Resolume on the first beat of a bar, or clicks land a sixteenth early or late"
+              : 'The grid is not lined up with the beat yet (no MIDI Start): clicks may land a sixteenth early or late'}>⚠ not synced</span>
+          {:else if s.start.mode === 'immediate'}
+            <span class="tag bad mono" title="This sequence starts &quot;now&quot;, off the beat: give it a bar start so its grid lines up with the music">⚠ starts now</span>
+          {:else}
+            <span class="tag ok mono" title="The grid is lined up with the beat">in sync</span>
+          {/if}
+        {/if}
+          </div>
+      {/if}
     </div>
     {#if armMenu}
       <div class="menu" role="menu" aria-label="Pattern length" style:left={`${armMenu.x - 160}px`} style:top={`${armMenu.y + 12}px`}>

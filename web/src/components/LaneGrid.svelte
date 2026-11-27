@@ -219,6 +219,8 @@
   // This sequence records from Resolume (SPEC §7.9): its yielded lanes are the ones you play.
   let recording = $derived(app.runtime?.record?.seq === seq.id && !!app.runtime?.record?.recording);
   let rec = $derived(recording ? app.runtime?.record ?? null : null);
+  // Armed or recording: the lanes show whether they record (SPEC §7.9).
+  let armedScope = $derived(app.runtime?.record?.seq === seq.id ? app.runtime.record.scope : null);
 
   /** Start (sixteenths) of each step of a lane. */
   function stepStarts(lane: Lane): number[] {
@@ -295,6 +297,16 @@
                 </option>
               {/each}
             </select>
+            {#if armedScope}
+              {@const on = !armedScope.off.includes(lane.layer)}
+              <button class="lane-rec" aria-pressed={on} aria-label="Record this lane"
+                title={on ? 'This lane records (click: off)' : 'This lane does not record (click: on)'}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  const off = on ? [...armedScope.off, lane.layer] : armedScope.off.filter((l) => l !== lane.layer);
+                  app.send({ cmd: 'set_record_scope', scope: { ...armedScope, off } });
+                }}>⏺</button>
+            {/if}
             {#if run && rlane && state !== 'idle' && state !== 'taken_over'}
               <span class="mode-switch ms" role="group" aria-label="Mute and solo">
                 <button aria-pressed={rlane.mute} title="Mute: clear the layer, keep counting; back at the next step"

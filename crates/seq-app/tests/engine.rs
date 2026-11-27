@@ -2225,7 +2225,8 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     let first = appearance(&mut a, |_| true).await;
     assert_eq!(
         first,
-        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false})
+        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false,
+            "record_quantize": 1, "record_latency_ms": 0})
     );
 
     let theme = json!({
@@ -2974,7 +2975,10 @@ async fn recording_quantizes_to_the_chosen_grid() {
     use seq_core::edit::EditOp;
     let h = harness().await;
     h.cmd(EngineCommand::Edit {
-        op: EditOp::RemoveLane { seq: SEQ_A, lane: 1 },
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
     });
     h.lanes_of_a(|l| l.len() == 1).await;
     h.cmd(EngineCommand::SetRecordOptions {
@@ -2986,7 +2990,8 @@ async fn recording_quantizes_to_the_chosen_grid() {
         bars: None,
     });
     h.cmd(EngineCommand::Start { seq: SEQ_A });
-    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording)).await;
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
     h.ticks(30); // sixteenth 5
     tokio::time::sleep(Duration::from_millis(200)).await;
     h.mock.manual_connect(2, 3);
@@ -2994,5 +2999,68 @@ async fn recording_quantizes_to_the_chosen_grid() {
         h.lanes_of_a(|l| l[0].1.len() == 3).await,
         lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 12), (LIQUID, 16)])])
     );
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: what a recording takes. L1's lane switched off (its click is a manual override, not
+/// recorded), no new lanes (a click on L3 is dropped), and replace mode on L2 (a click overwrites to the
+/// end of the pass and the lane goes quiet).
+#[tokio::test]
+async fn record_scope_lanes_off_no_new_lanes_and_replace() {
+    use seq_app::engine::view::RecordScope;
+    let h = harness().await;
+    h.mock.edit(|v| {
+        // A clip on L3, which has no lane in SEQ_A.
+        v["layers"][2]["clips"][0] = v["layers"][1]["clips"][0].clone();
+        v["layers"][2]["clips"][0]["id"] = 4242.into();
+        v["layers"][2]["clips"][0]["name"]["value"] = "Clip 99".into();
+        v["layers"][2]["clips"][0]["connected"]["id"] = 4243.into();
+        v["layers"][2]["clips"][0]["connected"]["value"] = "Disconnected".into();
+        // A second clip on L1 (its lane plays Clip 07).
+        v["layers"][0]["clips"][0] = v["layers"][2]["clips"][0].clone();
+        v["layers"][0]["clips"][0]["id"] = 4244.into();
+        v["layers"][0]["clips"][0]["name"]["value"] = "Clip 98".into();
+        v["layers"][0]["clips"][0]["connected"]["id"] = 4245.into();
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.cmd(EngineCommand::SetRecordScope(RecordScope {
+        off: vec!["L1".into()],
+        new_lanes: false,
+        replace: true,
+    }));
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    let r = h.runtime(|r| r.record.is_some()).await;
+    assert!(r.record.unwrap().scope.replace);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks(24); // sixteenth 4
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3); // L2: replace to the end
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.mock.manual_connect(3, 1); // L3: no lane, no new lanes
+    h.mock.manual_connect(1, 1); // L1: off
+    let r = h
+        .runtime(|r| {
+            r.running
+                .first()
+                .is_some_and(|x| x.lanes[1].state == "yielded")
+        })
+        .await;
+    assert_eq!(r.record.as_ref().unwrap().clicks, 1);
+    assert_eq!(
+        r.running[0].lanes[0].state, "yielded",
+        "replace: L2 quiet to the end"
+    );
+    let lanes_now = h.lanes_of_a(|l| l[0].1.len() == 2).await;
+    assert_eq!(
+        lanes_now[0],
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 28)])])[0]
+    );
+    assert_eq!(lanes_now.len(), 2, "no lane for L3");
     h.app.shutdown().await;
 }

@@ -315,6 +315,35 @@ pub struct RecordView {
     pub take: Vec<TakeMark>,
     /// Layers with a clip held down (Piano trigger style).
     pub held: Vec<String>,
+    /// What is recorded (SPEC §7.9).
+    pub scope: RecordScope,
+}
+
+/// What a recording takes (SPEC §7.9): lanes switched off, whether clicks on layers without a lane add
+/// one, and punch in or replace to the end of the pass. Kept for the session.
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+pub struct RecordScope {
+    /// Layers whose lanes don't record.
+    #[serde(default)]
+    pub off: Vec<String>,
+    #[serde(default = "yes")]
+    pub new_lanes: bool,
+    #[serde(default)]
+    pub replace: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for RecordScope {
+    fn default() -> Self {
+        RecordScope {
+            off: Vec::new(),
+            new_lanes: true,
+            replace: false,
+        }
+    }
 }
 
 /// One click of the current take: layer name and sixteenth in the pass.

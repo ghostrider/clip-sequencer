@@ -43,6 +43,20 @@ when it isn't. While the start waits for its bar, the tag counts the beats down:
   transition in Resolume while you record to play fades ([Transitions](transitions.md)). A lane you play without
   fades stays a lane without transitions.
 
+## Choosing what gets recorded
+
+While a sequence is armed, the editor shows a row with the recording controls:
+
+- **q 1/16 · 1/8 · 1/4**: the grid clicks snap to.
+- **punch in** or **replace**: *punch in* (the default) adds a click up to the next step already there; *replace*
+  runs it to your next click on that layer, or to the end of the pass, over what is there. In *replace* the lane
+  goes quiet from your click until the pass ends, so you hear what you record.
+- **+ lanes**: whether a click on a layer without a lane adds a lane (crossed out: off).
+- Each lane head has a **⏺**: red, the lane records; grey, it doesn't, and a click on its layer is an ordinary
+  manual take-over ([Playing live](playing-live.md)).
+
+These choices stay until you quit the app.
+
 ## Across the loop
 
 A clip you start near the end of a pass that is still playing when the pass ends goes on into the next pass: it is

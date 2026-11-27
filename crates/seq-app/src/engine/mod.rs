@@ -111,6 +111,8 @@ pub enum EngineCommand {
         quantize: u32,
         latency_ms: i32,
     },
+    /// What a recording takes (SPEC §7.9): lanes off, new lanes, punch in or replace.
+    SetRecordScope(RecordScope),
     /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9). `bars`: the pattern
     /// length of a sequence without steps.
     SetArmed {
@@ -294,6 +296,7 @@ pub struct Engine {
     /// Recording from Resolume (SPEC §7.9).
     rec: record::Recorder,
     rec_options: record::RecordOptions,
+    rec_scope: RecordScope,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
@@ -391,6 +394,7 @@ impl Engine {
             fades,
             rec: record::Recorder::default(),
             rec_options,
+            rec_scope: RecordScope::default(),
             phase_synced: false,
             bar_synced: false,
             last_resync: None,
@@ -1157,6 +1161,20 @@ impl Engine {
                 self.execute(acts);
             }
             EngineCommand::SetArmed { seq, bars } => self.set_armed(seq, bars),
+            EngineCommand::SetRecordScope(scope) => {
+                log::info!(
+                    "recording: {}{}{}",
+                    if scope.replace { "replace" } else { "punch in" },
+                    if scope.new_lanes { ", new lanes" } else { "" },
+                    if scope.off.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", not {}", scope.off.join(", "))
+                    }
+                );
+                self.rec_scope = scope;
+                self.runtime_dirty = true;
+            }
             EngineCommand::SetRecordOptions {
                 quantize,
                 latency_ms,
@@ -2308,7 +2326,7 @@ impl Engine {
             saved: self.saved,
             save_error: self.save_error.clone(),
             seq_sync_busy: self.seq_sync_busy,
-            record: self.rec.view(|id| {
+            record: self.rec.view(&self.rec_scope, |id| {
                 self.index
                     .as_ref()?
                     .layers

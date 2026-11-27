@@ -378,6 +378,7 @@ export type Command =
   | { cmd: 'set_guide_lines'; every: number | null }
   | { cmd: 'set_debug_log'; on: boolean }
   | { cmd: 'set_record_options'; quantize: number; latency_ms: number }
+  | { cmd: 'set_record_scope'; scope: RecordScope }
   | { cmd: 'check_update' }
   | { cmd: 'update_answer'; skip: boolean }
   | { cmd: 'install_update' }
@@ -565,4 +566,12 @@ export interface RecordView {
   take: { layer: string; at: number; rest: boolean }[];
   /** Layers with a clip held down (Piano). */
   held: string[];
+  /** What is recorded: lanes off, new lanes, replace instead of punch in. */
+  scope: RecordScope;
+}
+
+export interface RecordScope {
+  off: string[];
+  new_lanes: boolean;
+  replace: boolean;
 }

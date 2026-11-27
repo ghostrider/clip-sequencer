@@ -30,7 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   each pass is one undo step, and the next pass plays them, with the transition Resolume used for each click.
   Clicks on layers without a lane add one; a sequence without steps records over a pattern length chosen when
   arming. A Piano clip held down overwrites what lies under it until you let go, and a clip still playing at the
-  loop goes on into the next pass, tied. Quantize (1/16, 1/8, 1/4) and a latency offset in Preferences → Recording.
+  loop goes on into the next pass, tied. Quantize (1/16, 1/8, 1/4) and a latency offset in Preferences → Recording;
+  per lane ⏺, a switch for new lanes, and punch in or replace.
 - **Ties:** a step can be tied to the step before (⌒ in the step inspector): if that clip still plays, it goes on
   instead of starting again, also across the loop (sequence file format v4, field `tie`).
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it

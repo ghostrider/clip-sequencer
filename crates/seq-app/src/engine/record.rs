@@ -74,7 +74,11 @@ pub(super) struct Recorder {
 }
 
 impl Recorder {
-    pub(super) fn view(&self, layer_name: impl Fn(u64) -> Option<String>) -> Option<RecordView> {
+    pub(super) fn view(
+        &self,
+        scope: &RecordScope,
+        layer_name: impl Fn(u64) -> Option<String>,
+    ) -> Option<RecordView> {
         self.armed.map(|seq| RecordView {
             seq,
             recording: self.recording,
@@ -90,6 +94,7 @@ impl Recorder {
                 })
                 .collect(),
             held: self.held.keys().filter_map(|l| layer_name(*l)).collect(),
+            scope: scope.clone(),
         })
     }
 
@@ -302,6 +307,9 @@ impl Engine {
         {
             return false; // another sequence's layer: its manual override, not ours
         }
+        if self.rec_scope.off.iter().any(|l| l == layer_name) {
+            return false; // a lane that doesn't record: as without recording
+        }
         let Some(ticks) = self.ticks_at(at, 0.0) else {
             return true;
         };
@@ -316,8 +324,13 @@ impl Engine {
         self.scheduler
             .layer_now_plays(layer_id, Some((clip.id, clip.column as u32)));
         if held {
-            // While it is held, the lane must not trigger its own steps over it.
             self.rec.held.insert(layer_id, clip.id);
+        } else {
+            self.rec.held.remove(&layer_id);
+        }
+        if held || self.rec_scope.replace {
+            // While it is held (or in replace mode, to the end of the pass), the lane must not trigger
+            // its own steps over it.
             if self
                 .scheduler
                 .owner_of(layer_id)
@@ -326,8 +339,6 @@ impl Engine {
                 let acts = self.scheduler.yield_layer(layer_id);
                 self.execute(acts);
             }
-        } else {
-            self.rec.held.remove(&layer_id);
         }
         self.add_click(seq, layer_name, ticks, hit, fade);
         true
@@ -413,7 +424,20 @@ impl Engine {
             let Some(name) = self.layer_name(m.layer_id) else {
                 continue;
             };
+            if self.rec_scope.off.contains(&name) {
+                continue;
+            }
             self.scheduler.layer_now_plays(m.layer_id, None);
+            // Replace mode: the rest runs to the next click or the end; the lane stays quiet.
+            if self.rec_scope.replace
+                && self
+                    .scheduler
+                    .owner_of(m.layer_id)
+                    .is_some_and(|(s, _)| s == seq)
+            {
+                let acts = self.scheduler.yield_layer(m.layer_id);
+                self.execute(acts);
+            }
             self.add_click(seq, &name, m.ticks, Hit::Rest, None);
         }
     }
@@ -506,6 +530,9 @@ impl Engine {
             .as_ref()
             .and_then(|m| m.find_sequence(seq))
             .is_some_and(|(_, s)| s.lanes.iter().any(|l| l.layer == layer_name));
+        if !has_lane && !self.rec_scope.new_lanes {
+            return; // new lanes are off
+        }
         if !unique && !has_lane {
             if !self.rec.warned.iter().any(|w| w == layer_name) {
                 self.rec.warned.push(layer_name.to_owned());
@@ -521,6 +548,7 @@ impl Engine {
             hit: hit.clone(),
             transition: transition.clone(),
             tied: false,
+            replace: self.rec_scope.replace,
         };
         match snap(ticks, pass_ticks, self.rec_options.quantize) {
             Some(s) => {

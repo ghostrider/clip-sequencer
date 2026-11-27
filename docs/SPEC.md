@@ -570,6 +570,12 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   after it on its lane, or it is held) goes on into the next pass: it is recorded there at the start as a
   **tied** step (§6 `tie`), up to the next step that is there (or its release), and the next pass doesn't restart
   it.
+- **What is recorded** (decided 2026-11-27, kept for the session, not in the file): while armed each lane head
+  has a ⏺ toggle: a lane switched off doesn't record, and a click on its layer is a manual override (§7.3) as
+  without recording. **+ lanes** on/off: whether a click on a layer without a lane adds one. Mode **punch in**
+  (the default, above) or **replace**: a click runs to the next click on its layer or the end of the pass over
+  the steps there, and the lane is quiet from that click until the pass ends (a clear too). The controls sit in
+  one row of the editor header while armed (REC tag, quantize, mode, + lanes, sync chip).
 - **Held clips** (Piano trigger style, the clip's own or the composition's `cliptriggerstyle`; requested
   2026-11-27): a clip pressed and held records **from press to release** and overwrites what lies in between.
   While it is held its lane triggers nothing (it yields); after the release the lane plays again from its next
