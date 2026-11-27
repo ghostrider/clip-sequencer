@@ -62,6 +62,12 @@ parameter to match.
 The UI listens on `127.0.0.1` only: it can be opened on this computer, not from other devices. It has no
 password; any program on the computer can use it, like Resolume's own webserver.
 
+## Recording
+
+**Preferences → Recording**: **Quantize** (recorded clicks snap to sixteenths, eighths or beats) and **Latency**
+(ms; a click counts that much earlier, negative values later). Both apply at once, also to a recording that runs.
+[Recording from Resolume](recording.md).
+
 ## Logging
 
 Logs go to the Console tab and to daily files in `logs\` in the data folder (kept for 7 days). For more detail,

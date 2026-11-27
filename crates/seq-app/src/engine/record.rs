@@ -20,6 +20,24 @@ const OWN_CLEAR_SLACK: Duration = Duration::from_millis(300);
 /// Pattern lengths an empty sequence may record (bars).
 pub(super) const MAX_PATTERN_BARS: u32 = 64;
 
+/// Quantize and latency of recorded clicks (Preferences → Recording, SPEC §7.9).
+#[derive(Debug, Clone, Copy)]
+pub(super) struct RecordOptions {
+    /// Sixteenths: 1, 2 or 4.
+    quantize: u32,
+    /// Clicks count as this much earlier (negative: later).
+    latency_s: f64,
+}
+
+impl RecordOptions {
+    pub(super) fn new(quantize: u32, latency_ms: i32) -> Self {
+        RecordOptions {
+            quantize: quantize.clamp(1, 4),
+            latency_s: f64::from(latency_ms) / 1000.0,
+        }
+    }
+}
+
 /// A `Disconnected` that may be a clear, with where in the run it happened.
 struct MaybeClear {
     layer_id: u64,
@@ -461,7 +479,7 @@ impl Engine {
             Some(t) if at > t => (at.duration_since(t).as_secs_f64() / tick).min(1.0),
             _ => 0.0,
         };
-        Some(pos as f64 + since - back_seconds / tick)
+        Some(pos as f64 + since - (back_seconds + self.rec_options.latency_s) / tick)
     }
 
     /// Places a click (or clear) at `ticks` into this pass or the start of the next.
@@ -504,7 +522,7 @@ impl Engine {
             transition: transition.clone(),
             tied: false,
         };
-        match snap(ticks, pass_ticks) {
+        match snap(ticks, pass_ticks, self.rec_options.quantize) {
             Some(s) => {
                 self.rec.clicks.push(click(s));
                 self.punch_in(seq);

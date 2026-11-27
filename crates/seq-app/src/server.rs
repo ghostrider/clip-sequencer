@@ -71,6 +71,9 @@ pub struct Appearance {
     pub guide_lines: Option<u32>,
     /// Preferences → Log debug messages.
     pub debug_log: bool,
+    /// Recording (SPEC §7.9): quantize in sixteenths and the latency offset in ms.
+    pub record_quantize: u32,
+    pub record_latency_ms: i32,
 }
 
 impl From<&Settings> for Appearance {
@@ -80,6 +83,8 @@ impl From<&Settings> for Appearance {
             custom_themes: s.custom_themes.clone(),
             guide_lines: s.guide_lines,
             debug_log: s.debug_log,
+            record_quantize: s.record_quantize.unwrap_or(1),
+            record_latency_ms: s.record_latency_ms,
         }
     }
 }
@@ -454,6 +459,11 @@ enum ClientMsg {
         every: Option<u32>,
     },
     /// Preferences → Log debug messages (applies at once).
+    /// Recording quantize (1, 2 or 4 sixteenths) and latency offset (ms), SPEC §7.9.
+    SetRecordOptions {
+        quantize: u32,
+        latency_ms: i32,
+    },
     SetDebugLog {
         on: bool,
     },
@@ -569,6 +579,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                         | ClientMsg::SaveTheme { .. }
                         | ClientMsg::DeleteTheme { .. }
                         | ClientMsg::SetGuideLines { .. }
+                        | ClientMsg::SetRecordOptions { .. }
                         | ClientMsg::SetDebugLog { .. }),
                     ) => {
                         theme_command(&ctx, cmd).await;
@@ -762,6 +773,7 @@ fn handle(ctx: &ServerCtx, text: &str) {
         | ClientMsg::SaveTheme { .. }
         | ClientMsg::DeleteTheme { .. }
         | ClientMsg::SetGuideLines { .. }
+        | ClientMsg::SetRecordOptions { .. }
         | ClientMsg::SetDebugLog { .. }
         | ClientMsg::LutCreate { .. }
         | ClientMsg::LutRename { .. }
@@ -938,6 +950,30 @@ async fn theme_command(ctx: &ServerCtx, cmd: ClientMsg) {
                     );
                 }
                 s.guide_lines = every;
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SetRecordOptions {
+            quantize,
+            latency_ms,
+        } => {
+            if !crate::settings::RECORD_QUANTIZE.contains(&quantize)
+                || latency_ms.abs() > crate::settings::MAX_RECORD_LATENCY_MS
+            {
+                let _ = ctx.commands.send(EngineCommand::Notice(format!(
+                    "Recording: quantize 1, 2 or 4 sixteenths and a latency within ±{} ms",
+                    crate::settings::MAX_RECORD_LATENCY_MS
+                )));
+                return;
+            }
+            let _ = ctx.commands.send(EngineCommand::SetRecordOptions {
+                quantize,
+                latency_ms,
+            });
+            update_appearance(ctx, move |s| {
+                s.record_quantize = (quantize != 1).then_some(quantize);
+                s.record_latency_ms = latency_ms;
                 Ok(())
             })
             .await;

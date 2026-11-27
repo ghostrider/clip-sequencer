@@ -86,6 +86,8 @@
           onclick={() => (app.prefsTab = 'appearance')}>Appearance</button>
         <button class="tab" role="tab" aria-selected={app.prefsTab === 'updates'} aria-controls="prefs-updates"
           onclick={() => (app.prefsTab = 'updates')}>Updates</button>
+        <button class="tab" role="tab" aria-selected={app.prefsTab === 'recording'} aria-controls="prefs-recording"
+          onclick={() => (app.prefsTab = 'recording')}>Recording</button>
         <button class="tab" role="tab" aria-selected={app.prefsTab === 'log'} aria-controls="prefs-log"
           onclick={() => (app.prefsTab = 'log')}>Log</button>
       </div>
@@ -165,6 +167,23 @@
           downloading anything. This setting applies at once, without Save.</p>
         <div><button class="btn" onclick={() => app.checkForUpdates()}>Check now</button>
           <span class="meta">This is version {app.update?.current ?? app.version?.version ?? '?'}.</span></div>
+      </div>
+      <div class="prefs-group" id="prefs-recording" role="tabpanel" aria-label="Recording" hidden={app.prefsTab !== 'recording'}>
+        <label class="meta" style="display:flex;flex-direction:column;gap:4px">Quantize: clicks snap to
+          <select class="pill-select" style="max-width:none;align-self:flex-start" value={app.appearance.record_quantize}
+            onchange={(e) => app.send({ cmd: 'set_record_options', quantize: Number((e.currentTarget as HTMLSelectElement).value), latency_ms: app.appearance.record_latency_ms })}>
+            <option value={1}>1/16 (a sixteenth)</option>
+            <option value={2}>1/8 (an eighth)</option>
+            <option value={4}>1/4 (a beat)</option>
+          </select>
+        </label>
+        <label class="meta" style="display:flex;flex-direction:column;gap:4px">Latency (ms)
+          <input class="num-input mono" type="number" min="-500" max="500" step="5" value={app.appearance.record_latency_ms}
+            onchange={(e) => app.send({ cmd: 'set_record_options', quantize: app.appearance.record_quantize, latency_ms: Math.max(-500, Math.min(500, Math.round(Number((e.currentTarget as HTMLInputElement).value) || 0))) })} />
+        </label>
+        <p class="meta">If your clicks land late on the grid every time, raise the latency: a click then counts that
+          many milliseconds earlier (negative values: later). Clicks with the mouse in Resolume's interface are rarely
+          tight; 1/8 or 1/4 helps. Both apply at once, without Save, also to a recording that runs.</p>
       </div>
       <div class="prefs-group" id="prefs-log" role="tabpanel" aria-label="Log" hidden={app.prefsTab !== 'log'}>
         <label class="radio">

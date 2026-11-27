@@ -2967,3 +2967,32 @@ async fn a_clip_playing_at_the_loop_continues_tied() {
     assert_eq!(steps[0].length, 16);
     h.app.shutdown().await;
 }
+
+/// SPEC §7.9: with quantize 1/4 (Preferences → Recording) a click at sixteenth 5 lands on beat 2.
+#[tokio::test]
+async fn recording_quantizes_to_the_chosen_grid() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane { seq: SEQ_A, lane: 1 },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetRecordOptions {
+        quantize: 4,
+        latency_ms: 0,
+    });
+    h.cmd(EngineCommand::SetArmed {
+        seq: Some(SEQ_A),
+        bars: None,
+    });
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording)).await;
+    h.ticks(30); // sixteenth 5
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3);
+    assert_eq!(
+        h.lanes_of_a(|l| l[0].1.len() == 3).await,
+        lanes(&[("L2", &[(TWISTED, 4), (LIQUID, 12), (LIQUID, 16)])])
+    );
+    h.app.shutdown().await;
+}

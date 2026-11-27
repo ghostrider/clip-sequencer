@@ -119,7 +119,21 @@ pub struct Settings {
     /// A version the user chose to skip at the start-up question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_skipped: Option<String>,
+    /// Recording (SPEC §7.9): clicks snap to this many sixteenths (1, 2 or 4); `None` = 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record_quantize: Option<u32>,
+    /// Recording: clicks are taken as this many ms earlier (positive: they arrive late).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub record_latency_ms: i32,
 }
+
+fn is_zero(v: &i32) -> bool {
+    *v == 0
+}
+
+/// Recording quantize steps (sixteenths) and the latency range (ms), SPEC §7.9.
+pub const RECORD_QUANTIZE: [u32; 3] = [1, 2, 4];
+pub const MAX_RECORD_LATENCY_MS: i32 = 500;
 
 /// Bar counts the editor's guide lines can use (SPEC §9.3).
 pub const GUIDE_LINES: [u32; 3] = [8, 16, 32];
@@ -185,6 +199,8 @@ mod tests {
             update_check: Some(false),
             debug_log: true,
             update_skipped: Some("0.5.1".into()),
+            record_quantize: Some(2),
+            record_latency_ms: -40,
         };
         s.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), s);

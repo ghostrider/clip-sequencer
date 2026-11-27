@@ -80,6 +80,13 @@
       {:else if rec && waiting}<span class="tag rec mono" title="Count-in: recording starts with the sequence">● REC in {Math.ceil(waiting.wait_ticks / 24)}</span>
       {:else if rec}<span class="tag rec armed mono" title="Records from its next start">● armed</span>{/if}
       {#if rec}
+        <select class="pill-select mono" title="Quantize: recorded clicks snap to this grid (Preferences → Recording)"
+          aria-label="Quantize" value={app.appearance.record_quantize}
+          onchange={(e) => app.send({ cmd: 'set_record_options', quantize: Number((e.currentTarget as HTMLSelectElement).value), latency_ms: app.appearance.record_latency_ms })}>
+          <option value={1}>q 1/16</option>
+          <option value={2}>q 1/8</option>
+          <option value={4}>q 1/4</option>
+        </select>
         <!-- Clicks snap to the sequence's grid: it must be lined up with the music (SPEC §7.9). -->
         {@const clock = app.runtime?.clock}
         {#if !clock?.bar_synced}

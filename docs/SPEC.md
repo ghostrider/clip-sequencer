@@ -557,9 +557,11 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   so a held clip records as the clip until the release and a rest from there. A tap shorter than a sixteenth
   still records a sixteenth: a rest that snaps onto the sixteenth of the clip before it moves one sixteenth on.
   *Toggle* works the same way (the second click disconnects: a rest).
-- **Snap:** each click goes to the nearest sixteenth of the pass, from its arrival time and the tempo. A click in
-  the last half sixteenth of a pass belongs to the start of the next one. Two clicks on one layer that snap to the
-  same sixteenth: the later one counts.
+- **Snap:** each click goes to the nearest sixteenth of the pass (or eighth, or beat: **quantize**), from its
+  arrival time minus a **latency** offset (ms, ±500, positive = clicks arrive late) and the tempo. Both are set in
+  Preferences → Recording (saved in `settings.json` as `record_quantize`, `record_latency_ms`); quantize also
+  next to the REC tag; changes apply at once. A click in the last half grid step of a pass belongs to the start of
+  the next one. Two clicks on one layer that snap to the same place: the later one counts.
 - **Punch in** (changed 2026-11-27 after the live check, was "overwrite to the end of the pass"): a click replaces
   its lane from its position up to the **next step that was already there**, or your next click on that layer, or
   the end of the pass. Everything else stays, so a clip clicked between two others keeps the later ones. Steps

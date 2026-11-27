@@ -50,10 +50,12 @@ pub struct Take {
     pub end: u32,
 }
 
-/// The sixteenth nearest to `ticks` into a pass of `pass_ticks`; `None` when it rounds to the end
-/// of the pass (it belongs to the start of the next one).
-pub fn snap(ticks: f64, pass_ticks: u64) -> Option<u32> {
-    let s = (ticks.max(0.0) / f64::from(TICKS_PER_SIXTEENTH)).round() as u64;
+/// The sixteenth nearest to `ticks` into a pass of `pass_ticks` on a grid of `every` sixteenths
+/// (1, 2 or 4: quantize, SPEC §7.9); `None` when it rounds to the end of the pass (it belongs to
+/// the start of the next one).
+pub fn snap(ticks: f64, pass_ticks: u64, every: u32) -> Option<u32> {
+    let grid = f64::from(TICKS_PER_SIXTEENTH * every.max(1));
+    let s = (ticks.max(0.0) / grid).round() as u64 * u64::from(every.max(1));
     (s * u64::from(TICKS_PER_SIXTEENTH) < pass_ticks).then_some(s as u32)
 }
 
@@ -387,13 +389,17 @@ mod tests {
 
     #[test]
     fn snapping_to_the_nearest_sixteenth() {
-        assert_eq!(snap(0.0, 96), Some(0));
-        assert_eq!(snap(2.9, 96), Some(0));
-        assert_eq!(snap(3.0, 96), Some(1));
-        assert_eq!(snap(50.0, 96), Some(8));
-        assert_eq!(snap(92.9, 96), Some(15));
-        assert_eq!(snap(93.0, 96), None, "the next pass's start");
-        assert_eq!(snap(-2.0, 96), Some(0));
+        assert_eq!(snap(0.0, 96, 1), Some(0));
+        assert_eq!(snap(2.9, 96, 1), Some(0));
+        assert_eq!(snap(3.0, 96, 1), Some(1));
+        assert_eq!(snap(50.0, 96, 1), Some(8));
+        assert_eq!(snap(92.9, 96, 1), Some(15));
+        assert_eq!(snap(93.0, 96, 1), None, "the next pass's start");
+        assert_eq!(snap(-2.0, 96, 1), Some(0));
+        // Quantize to eighths and quarters.
+        assert_eq!(snap(7.0, 96, 2), Some(2));
+        assert_eq!(snap(17.0, 96, 4), Some(4));
+        assert_eq!(snap(84.0, 96, 4), None, "rounds to the next pass");
     }
 
     #[test]

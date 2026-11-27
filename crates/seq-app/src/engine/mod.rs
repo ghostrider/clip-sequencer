@@ -106,6 +106,11 @@ pub enum EngineCommand {
     SyncSeqLayer {
         remove_orphans: bool,
     },
+    /// Recording quantize (sixteenths) and latency offset (ms), SPEC §7.9 (Preferences → Recording).
+    SetRecordOptions {
+        quantize: u32,
+        latency_ms: i32,
+    },
     /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9). `bars`: the pattern
     /// length of a sequence without steps.
     SetArmed {
@@ -288,6 +293,7 @@ pub struct Engine {
     fades: fades::Fades,
     /// Recording from Resolume (SPEC §7.9).
     rec: record::Recorder,
+    rec_options: record::RecordOptions,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
@@ -336,6 +342,10 @@ impl Engine {
         let (structure_tx, structure) = watch::channel(StructureState::default());
         let (runtime_tx, runtime) = watch::channel(RuntimeState::default());
         let fades = fades::Fades::load(storage.dir());
+        let rec_options = {
+            let s = crate::settings::Settings::load(storage.dir());
+            record::RecordOptions::new(s.record_quantize.unwrap_or(1), s.record_latency_ms)
+        };
         let engine = Self {
             cfg,
             osc,
@@ -380,6 +390,7 @@ impl Engine {
             lut_effects: Vec::new(),
             fades,
             rec: record::Recorder::default(),
+            rec_options,
             phase_synced: false,
             bar_synced: false,
             last_resync: None,
@@ -1146,6 +1157,13 @@ impl Engine {
                 self.execute(acts);
             }
             EngineCommand::SetArmed { seq, bars } => self.set_armed(seq, bars),
+            EngineCommand::SetRecordOptions {
+                quantize,
+                latency_ms,
+            } => {
+                self.rec_options = record::RecordOptions::new(quantize, latency_ms);
+                log::info!("recording: quantize {quantize}/16, latency {latency_ms} ms");
+            }
             EngineCommand::SetLaneMute { seq, lane, on } => {
                 let acts = self.scheduler.set_mute(seq, lane, on);
                 self.execute(acts);

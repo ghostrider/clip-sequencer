@@ -26,8 +26,11 @@ when it isn't. While the start waits for its bar, the tag counts the beats down:
 
 ## What gets recorded
 
-- Every click lands on the **nearest sixteenth**. A click just before the end of a pass belongs to the start of
-  the next one.
+- Every click lands on the **nearest sixteenth**, or eighth or beat: choose **q 1/16**, **q 1/8** or **q 1/4** next to
+  the REC tag or in **Preferences → Recording**. A click just before the end of a pass belongs to the start of the
+  next one.
+- If your clicks land late (or early) on the grid every time, set a **latency** in Preferences → Recording: a
+  click then counts that many milliseconds earlier (or later).
 - A click is **punched in**: it replaces its lane from where you clicked up to the next step that was already
   there (or your next click on that layer). Everything else stays: a clip clicked between two others keeps the
   later ones.

@@ -377,6 +377,7 @@ export type Command =
   | { cmd: 'cancel_cue' }
   | { cmd: 'set_guide_lines'; every: number | null }
   | { cmd: 'set_debug_log'; on: boolean }
+  | { cmd: 'set_record_options'; quantize: number; latency_ms: number }
   | { cmd: 'check_update' }
   | { cmd: 'update_answer'; skip: boolean }
   | { cmd: 'install_update' }
@@ -449,6 +450,9 @@ export interface Appearance {
   guide_lines: number | null;
   /** Preferences → Log debug messages. */
   debug_log: boolean;
+  /** Recording: quantize in sixteenths (1, 2, 4) and latency offset in ms (SPEC §7.9). */
+  record_quantize: number;
+  record_latency_ms: number;
   /** Selected theme id; `null` = the default. */
   theme: string | null;
   custom_themes: CustomTheme[];
