@@ -337,11 +337,19 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       `§` connecting while pending links the pending start. Tests for every order.
 - [x] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
 
-## M25 — Record from Resolume (G6)
-- [ ] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
+## M25 — Record from Resolume (SPEC §7.9; G6)  ⟵ next
+- [x] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
       layer without a lane does (new lane?), stop recording, undo as one step; slot lanes record columns.
-- [ ] Build: WS `connected` events while armed → steps (pure part in `seq-core`, tested); UI arm/record state.
-- [ ] Docs.
+      Done 2026-11-27 (§7.9): loops until Stop, one take per pass written at its end (one undo each) and played
+      back the next pass; overwrite from the first click to the pass end; new layers get a lane.
+- [ ] Probe with Uli: WS messages for clip clicks and the layer Clear button made by hand (shape, timing; a clear vs.
+      switching clips), notes §20.
+- [ ] Pure part (`seq-core`): a take (clicks per layer, snapped) applied to a sequence (write out short lanes,
+      overwrite, new lanes, slot columns, stop position); tested.
+- [ ] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
+      the first click, write the take at the pass end as one undo step and play it the next pass. Mock tests.
+- [ ] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
+- [ ] Docs (manual, changelog, README) and a live check with Uli.
 
 ## M26 — Pre-show check (G16)
 - [ ] Probe: the clip play mode field (Loop / Play once …) and the clip duration, notes §19 or §20.

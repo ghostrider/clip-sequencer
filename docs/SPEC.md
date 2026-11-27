@@ -526,6 +526,43 @@ with every lane unmuted.
 - Stopping and finishing apply as usual; a muted lane's layer is already dark.
 - The log says `BG muted at 3.2` / `BG unmuted at 3.4 (plays from its next step)`.
 
+### 7.9 Record from Resolume (release 0.5, decided 2026-11-27)
+
+Build a pattern by playing it (G6): arm a sequence, start it, and click clips (or clear layers) in Resolume in
+time. What you click lands on the grid, and the next pass plays it back, so a pattern can be built up pass by pass.
+
+- **Arm:** the ⏺ button in the editor header arms the selected sequence of the **live** deck (one at a time). Armed,
+  it records from its next start; the start waits for its start mode as usual (a bar start is the count-in).
+  Arming a running sequence records from its next pass. Disarm or Stop ends the recording.
+- **Takes:** each pass is one **take**. While recording, the sequence loops pass after pass, whatever its repeat
+  setting. At the end of a pass its take is written into the sequence as **one undoable edit** (Ctrl+Z removes
+  that pass's take), and the next pass already plays the result. A pass without a click writes nothing.
+- **What counts as a click:** a clip that becomes connected on a layer (WebSocket `connected`, §7.5) that the app
+  did not trigger itself (the window of §7.3), and a layer that is cleared (all its clips disconnected) without
+  the app clearing it (records a rest). Clicks on the SEQ layer are not recorded (they start sequences as usual).
+  Clicking the clip that already plays reports nothing in Resolume (notes §13), so it can't be recorded: the step
+  just goes on.
+- **Snap:** each click goes to the nearest sixteenth of the pass, from its arrival time and the tempo. A click in
+  the last half sixteenth of a pass belongs to the start of the next one. Two clicks on one layer that snap to the
+  same sixteenth: the later one counts.
+- **Overwrite:** in a take, a lane you click on is overwritten from your first click on its layer to the end of
+  the pass; before that click it keeps its steps. Each recorded step lasts until the next click on that layer in
+  the take, or the end of the pass. Lanes without a click keep their steps. The overwritten part loses its steps'
+  conditions, choices and transitions; a step cut by the first click keeps them, shortened.
+- A lane shorter than the pass is first written out to the pass length as it plays (*Loop to end*: its steps
+  repeated; *Hold*: the last step longer; *Clear*: a rest), then overwritten. Its end mode stays.
+- **While recording:** the other lanes play as usual. A lane stops playing its own steps from your first click on
+  its layer in the pass (it yields to you, without a notice), and plays the new take from the next pass on.
+  Manual override (§7.3) doesn't apply to the recorded sequence while it records.
+- **New layers:** a click on a layer without a lane in the sequence adds a lane for it (Clip mode, *Loop to end*,
+  a rest up to the first click). Layers whose name is not unique can't get a lane: notice, not recorded.
+- **Slot lanes** (§4.5) record the **column** that was clicked; Clip lanes record the clip (by id, name and file,
+  as a drop from the clip browser does).
+- **Stop** while recording writes the take so far: the lanes clicked in that pass are overwritten from the first
+  click to the Stop position; what comes after stays.
+- The UI shows `REC` on the sequence and the editor while it records, `armed` while it waits; the log says
+  `recorded pass 3 of Drop: BG, FG (2 steps)`.
+
 ## 8. Thumbnails
 
 - **Clip thumbnails** are fetched via REST for the active deck and cached on disk, keyed by clip
