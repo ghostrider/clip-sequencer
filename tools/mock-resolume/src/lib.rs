@@ -8,6 +8,9 @@
 //!   `connected` is `.../connect`); `parameter_set` echoes the old value; `parameter_update` only
 //!   for subscribed params; a composition push ~55 ms after connect changes, clip open/clear and
 //!   deck switches (coalesced), never after renames; `thumbnail_update` messages.
+//! - Layer transitions (notes §19): `transition.duration` and `.blend_mode` by id only (paths
+//!   `…/transition/duration`, `…/video/transition/mixer/blendmode`), ranges clamped, unknown
+//!   choice names refused. A fade is not simulated: a connect still replaces the clip at once.
 //! - OSC (UDP): `/composition/layers/{L}/clips/{C}/connect` int 1 (int 0 is ignored, Normal
 //!   trigger style), `/composition/layers/{L}/clear` edge-triggered (1 then 0; a held button
 //!   ignores further presses; no-arg = press), `/composition/decks/{n}/select` int 1. 1-based.
@@ -204,6 +207,30 @@ impl Mock {
         for _ in 0..presses {
             self.shared.apply(|s| s.set_param(id, value.clone()));
         }
+    }
+
+    /// A change of a layer's transition made in Resolume (1-based layer; `"duration"` in seconds
+    /// or `"blend_mode"` by name): subscribers get a `parameter_update`, a push follows.
+    pub fn layer_transition(&self, layer: usize, key: &str, value: Value) {
+        let id = self.shared.state.lock().unwrap().comp["layers"][layer - 1]["transition"][key]
+            ["id"]
+            .as_u64()
+            .expect("layer transition parameter");
+        self.shared.apply(|s| s.set_param(id, value));
+    }
+
+    /// A layer's transition as the mock has it: (seconds, blend mode).
+    pub fn layer_transition_value(&self, layer: usize) -> (f64, String) {
+        self.read(|v| {
+            let t = &v["layers"][layer - 1]["transition"];
+            (
+                t["duration"]["value"].as_f64().unwrap_or_default(),
+                t["blend_mode"]["value"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
+        })
     }
 
     /// Reads the composition JSON as the mock holds it now.
@@ -558,6 +585,10 @@ fn handle_ws_request(
                 }
                 "get" => message(sh, id, "parameter_get"),
                 _ => {
+                    let refused = sh.state.lock().unwrap().check_set(id, &req["value"]);
+                    if let Some(error) = refused {
+                        return vec![json!({"path": param, "error": error})];
+                    }
                     // Resolume echoes the old value, then notifies subscribers.
                     let reply = message(sh, id, "parameter_set");
                     sh.apply(|s| s.set_param(id, req["value"].clone()));

@@ -4,6 +4,7 @@
 //! directly, and publishes UI state on watch channels. It never awaits HTTP or disk: those run
 //! in worker tasks that report back through [`Aux`] messages.
 
+mod fades;
 pub mod view;
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -183,6 +184,9 @@ enum ParamTarget {
     TempoResync,
     /// The `LUT 3D` file of one of Resolume's LUT effects (SPEC §14), by effect id.
     LutFile(u64),
+    /// A layer's transition duration and blend mode (SPEC §7.7), by layer id.
+    LayerFadeDuration(u64),
+    LayerFadeBlend(u64),
 }
 
 /// Resolume sends two `resync` updates per press (press and release, ~100 ms apart, no value;
@@ -273,6 +277,8 @@ pub struct Engine {
     tempo_ctl: Option<TempoController>,
     /// Resolume's LUT effects from the last composition push (SPEC §14): shown in the LUT tab.
     lut_effects: Vec<LutEffect>,
+    /// Layer transitions: originals, values, the pending file (SPEC §7.7).
+    fades: fades::Fades,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
@@ -320,6 +326,7 @@ impl Engine {
     ) -> (Self, Outputs) {
         let (structure_tx, structure) = watch::channel(StructureState::default());
         let (runtime_tx, runtime) = watch::channel(RuntimeState::default());
+        let fades = fades::Fades::load(storage.dir());
         let engine = Self {
             cfg,
             osc,
@@ -362,6 +369,7 @@ impl Engine {
             resolume_clock: None,
             tempo_ctl: None,
             lut_effects: Vec::new(),
+            fades,
             phase_synced: false,
             bar_synced: false,
             last_resync: None,
@@ -571,6 +579,7 @@ impl Engine {
                 self.ws_connected = false;
                 // Without the WebSocket nothing can be confirmed: the OSC verdict starts over.
                 self.unanswered_triggers = 0;
+                self.transitions_connection_lost();
                 // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
                 self.phase_synced = false;
                 if self.follows_resolume() {
@@ -643,6 +652,7 @@ impl Engine {
             states,
             tempo,
             lut_effects,
+            transitions,
         } = snap;
         let old_live = self.index.as_ref().and_then(|i| i.live_deck.clone());
         let new_live = index.live_deck.clone();
@@ -677,6 +687,7 @@ impl Engine {
             self.rebuild_params(&index);
             self.structure_dirty = true;
         }
+        self.transitions_on_composition(transitions, &index);
         self.index = Some(index);
 
         if old_live.is_some() && old_live != new_live {
@@ -737,6 +748,8 @@ impl Engine {
 
     fn change_composition(&mut self, name: String) {
         log::info!("composition {name:?}");
+        let old = self.composition.clone();
+        self.transitions_composition_changed(old.as_deref());
         let acts = self.scheduler.stop_all(StopMode::Release);
         self.execute(acts);
         self.composition = Some(name.clone());
@@ -785,6 +798,12 @@ impl Engine {
         for l in &index.layers {
             self.params
                 .insert(l.name_param, ParamTarget::LayerName(l.id));
+            if let Some(t) = &l.transition {
+                self.params
+                    .insert(t.duration_param, ParamTarget::LayerFadeDuration(l.id));
+                self.params
+                    .insert(t.blend_param, ParamTarget::LayerFadeBlend(l.id));
+            }
         }
         // Always followed (cheap: Resolume only sends changes), so switching the clock source
         // needs no new subscriptions.
@@ -920,6 +939,12 @@ impl Engine {
                         clock.resync(at);
                     }
                 }
+            }
+            ParamTarget::LayerFadeDuration(layer) => {
+                self.transition_param(layer, false, kind, value);
+            }
+            ParamTarget::LayerFadeBlend(layer) => {
+                self.transition_param(layer, true, kind, value);
             }
             ParamTarget::LutFile(effect_id) => {
                 let Some(path) = value.as_str() else { return };
@@ -1449,6 +1474,7 @@ impl Engine {
                     origin,
                 } => {
                     self.snapshots.remove(&seq);
+                    self.transitions_run_ended(seq);
                     self.pending.retain(|p| p.seq != seq);
                     self.lane_last_clip.retain(|(s, _), _| *s != seq);
                     if let (EndReason::Finished, Origin::SeqClip { clip_id }) = (reason, origin) {
@@ -1503,8 +1529,14 @@ impl Engine {
                 Action::PassStarted { .. }
                 | Action::StepStarted { .. }
                 | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
-                // Sent from M21's engine step on.
-                Action::SetTransition { .. } | Action::TransitionReleased { .. } => {}
+                Action::SetTransition {
+                    seq,
+                    lane,
+                    step,
+                    layer_id,
+                    fade,
+                } => self.set_transition(seq, lane, step, layer_id, &fade),
+                Action::TransitionReleased { layer_id } => self.release_transition(layer_id),
             }
         }
     }
@@ -1828,6 +1860,7 @@ impl Engine {
     // ---- timer ----
 
     pub fn on_timer(&mut self, now: Instant) {
+        self.retime_transitions(now);
         // Subscriptions sent while Resolume loads a composition can be refused ("Invalid parameter
         // path", without saying which) or go unanswered: ask again for the ones still missing.
         if self.ws_connected

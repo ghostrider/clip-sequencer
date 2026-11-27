@@ -299,12 +299,16 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
       covers; do the param ids survive a deck switch / reload. Adjust SPEC §7.7 to the findings.
       Done 2026-11-27 (notes §19, Arena 7.29.0; reload not probed). Decided: the stop's clear uses the original.
-- [ ] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
+- [x] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
       condition and pick; "original" bookkeeping per layer (take over, hand over, release, user change). Tests.
-- [ ] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
+      Done 2026-11-27: `scheduler` (`Fade`, `SetTransition`, `TransitionReleased`; waits for a running fade) and
+      `seq_core::transition` (originals, seconds, own vs. user changes).
+- [x] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
       (throttled), 10 s cap, restore after clear, user-change detection, `transitions-pending.json` and restore on
       reconnect. Mock-resolume layer transition params. Integration tests: stop, finish, Stop all, deck change,
       takeover, user change, crash restore.
+      Done 2026-11-27 (`engine/fades.rs`; the restore goes before the clear, decided 2026-11-27). Deck change
+      and finish are covered by the scheduler tests and the finish test; no engine test of its own for a deck change.
 - [ ] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
 - [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.

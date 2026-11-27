@@ -2385,3 +2385,226 @@ async fn switching_the_clock_source_stops_the_resolume_ticks() {
     assert!(!h.runtime(|_| true).await.clock.synced);
     h.app.shutdown().await;
 }
+
+// ---- transitions (SPEC §7.7, M21) ----
+
+impl Harness {
+    /// Ticks stamped `bpm` apart (see [`Harness::ticks_at_128`]).
+    fn ticks_at(&self, bpm: f64, n: u64) {
+        let dt = Duration::from_secs_f64(60.0 / bpm / 24.0);
+        for _ in 0..n {
+            let at = self.virtual_clock.get() + dt;
+            self.virtual_clock.set(at);
+            self.clock
+                .send(ClockEvent::Msg {
+                    msg: ClockMsg::Tick,
+                    at,
+                })
+                .unwrap();
+        }
+    }
+
+    /// Waits until layer `layer`'s transition in the mock is `(seconds, blend)`.
+    async fn fade_is(&self, layer: usize, seconds: f64, blend: &str) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let (s, b) = self.mock.layer_transition_value(layer);
+            if (s - seconds).abs() < 1e-6 && b == blend {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "layer {layer}: transition {s} s, {b:?}; expected {seconds} s, {blend:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// Lane `lane` of SEQ_A gets `transition`, its step `own` (if any) a cut of its own.
+    async fn fade_sequence_a(&self, length: u32, blend: Option<&str>, own: Option<usize>) {
+        use seq_core::edit::EditOp;
+        use seq_core::model::Transition;
+        self.cmd(EngineCommand::Edit {
+            op: EditOp::SetLaneTransition {
+                seq: SEQ_A,
+                lane: 0,
+                transition: Some(Transition {
+                    length,
+                    blend: blend.map(Into::into),
+                }),
+            },
+        });
+        if let Some(index) = own {
+            self.cmd(EngineCommand::Edit {
+                op: EditOp::SetStepTransition {
+                    seq: SEQ_A,
+                    lane: 0,
+                    index,
+                    transition: Some(Transition {
+                        length: 0,
+                        blend: None,
+                    }),
+                },
+            });
+        }
+        self.structure(|s| {
+            s.decks.iter().flat_map(|d| &d.sequences).any(|v| {
+                v.sequence.id == SEQ_A
+                    && v.sequence.lanes[0].transition.is_some()
+                    && own.is_none_or(|i| v.sequence.lanes[0].steps[i].transition.is_some())
+            })
+        })
+        .await;
+    }
+
+    fn pending_file(&self) -> Option<serde_json::Value> {
+        let text =
+            std::fs::read_to_string(self.dir.path().join("transitions-pending.json")).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+
+    async fn pending_file_is(&self, want: Option<serde_json::Value>) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while self.pending_file() != want {
+            assert!(
+                Instant::now() < deadline,
+                "pending file {:?}, expected {want:?}",
+                self.pending_file()
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+}
+
+/// SPEC §7.7: SEQ_A's lane L2 fades 1/2 bar with Dissolve (step 2 cuts); L1 has no transitions.
+/// At 128 BPM 8 sixteenths are 0.9375 s. The value goes out with the start, the next one a
+/// sixteenth ahead of step 2 (tick 90), and the original comes back when the sequence finishes.
+#[tokio::test]
+async fn transitions_are_set_ahead_and_the_original_comes_back() {
+    let h = harness().await;
+    let l2_id = h.mock.read(|v| v["layers"][1]["id"].as_u64().unwrap());
+    // The user's own setting on L2, the original.
+    h.mock.layer_transition(2, "duration", json!(0.25));
+    h.fade_sequence_a(8, Some("Dissolve"), Some(1)).await;
+    h.ticks_at_128(24); // the tempo is known before the start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.9375, "Dissolve").await;
+    assert_eq!(h.mock.layer_transition_value(1), (0.0, "Alpha".into()));
+    h.pending_file_is(Some(json!({"compositions": {"dev": [
+        {"layer_id": l2_id, "seconds": 0.25, "blend": "Alpha"}
+    ]}})))
+    .await;
+
+    h.ticks_at_128(89);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(
+        h.mock.layer_transition_value(2),
+        (0.9375, "Dissolve".into())
+    );
+    h.ticks_at_128(1);
+    // Step 2's own cut, with the original's blend mode.
+    h.fade_is(2, 0.0, "Alpha").await;
+
+    h.ticks_at_128(102); // the pass ends at 192: finished
+    h.runtime(|r| r.running.is_empty()).await;
+    h.fade_is(2, 0.25, "Alpha").await;
+    h.pending_file_is(None).await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.7: a tempo change resends the duration; a change made in Resolume wins (nothing is
+/// restored); a crash while holding a layer is undone at the next start.
+#[tokio::test]
+async fn tempo_changes_resend_user_changes_win_and_a_crash_is_undone() {
+    let h = harness().await;
+    let l2_id = h.mock.read(|v| v["layers"][1]["id"].as_u64().unwrap());
+    h.fade_sequence_a(8, None, None).await;
+    h.ticks_at_128(24);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.9375, "Alpha").await;
+
+    // 64 BPM: 8 sixteenths are 1.875 s (the check runs every 500 ms).
+    h.ticks_at(64.0, 48);
+    h.fade_is(2, 1.875, "Alpha").await;
+
+    // The user sets 3 s in Resolume: kept after Stop all, the file holds nothing any more.
+    h.mock.layer_transition(2, "duration", json!(3.0));
+    h.pending_file_is(None).await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(h.mock.layer_transition_value(2), (3.0, "Alpha".into()));
+    h.app.shutdown().await;
+
+    // A run that ended without restoring (crash) left this file: the next start restores L2.
+    std::fs::write(
+        h.dir.path().join("transitions-pending.json"),
+        json!({"compositions": {
+            "dev": [{"layer_id": l2_id, "seconds": 1.5, "blend": "Dissolve"},
+                    {"layer_id": 1, "seconds": 2.0, "blend": "Alpha"}],
+            "other show": [{"layer_id": 7, "seconds": 2.0, "blend": "Alpha"}]
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let (app, _clock) = start_app(&h.mock, h.dir.path());
+    let h = Harness { app, ..h };
+    h.fade_is(2, 1.5, "Dissolve").await;
+    // Layer 1 doesn't exist (dropped); the other composition's entry waits for it.
+    h.pending_file_is(Some(json!({"compositions": {
+        "other show": [{"layer_id": 7, "seconds": 2.0, "blend": "Alpha"}]
+    }})))
+    .await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.7: starting a sequence without transitions on a layer that one with transitions holds
+/// gives the layer its original back; handing it from one with transitions to another keeps the
+/// first original.
+#[tokio::test]
+async fn takeovers_hand_over_or_restore_the_original() {
+    use seq_core::edit::EditOp;
+    use seq_core::model::Transition;
+    let h = harness().await;
+    h.fade_sequence_a(4, Some("Dissolve"), None).await;
+    h.ticks_at_128(24);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.46875, "Dissolve").await;
+
+    // SEQ_B (L2, no transitions) takes L2 over: the original is back.
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.fade_is(2, 0.0, "Alpha").await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+
+    // SEQ_B with a transition of its own takes L2 from SEQ_A: its value, and when it stops the
+    // original from before SEQ_A.
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetLaneTransition {
+            seq: SEQ_B,
+            lane: 0,
+            transition: Some(Transition {
+                length: 16,
+                blend: Some("Add".into()),
+            }),
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_B && v.sequence.lanes[0].transition.is_some())
+    })
+    .await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.fade_is(2, 0.46875, "Dissolve").await;
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.fade_is(2, 1.875, "Add").await;
+    h.cmd(EngineCommand::Stop { seq: SEQ_B });
+    h.fade_is(2, 0.0, "Alpha").await;
+    h.app.shutdown().await;
+}

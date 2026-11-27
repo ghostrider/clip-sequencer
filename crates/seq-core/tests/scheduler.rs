@@ -674,6 +674,7 @@ fn run_spec_from_sequence_and_resolution() {
         connected_param: 0,
         name_param: 0,
         sequence_param: None,
+        layer_determined: true,
     };
     let idx = CompositionIndex::new(
         "Show".into(),
@@ -684,6 +685,7 @@ fn run_spec_from_sequence_and_resolution() {
             index: 1,
             name: "BG".into(),
             name_param: 0,
+            transition: None,
         }],
         vec![ColumnInfo {
             id: 1,

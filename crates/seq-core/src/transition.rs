@@ -235,6 +235,15 @@ impl TransitionBook {
         out
     }
 
+    /// The WebSocket dropped: echoes still owed will never come. Originals and holds stay; the
+    /// next composition reports the current values.
+    pub fn connection_lost(&mut self) {
+        for l in self.layers.values_mut() {
+            l.sent_seconds.clear();
+            l.sent_blend.clear();
+        }
+    }
+
     /// The connection or composition changed: nothing known is true any more. Returns the
     /// originals of the layers that were held (to restore once connected again).
     pub fn reset(&mut self) -> Vec<(u64, LayerTransition)> {

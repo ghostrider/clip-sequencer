@@ -460,6 +460,7 @@ impl State {
     fn param_locations(&self) -> Vec<(u64, String, String)> {
         let mut out = Vec::new();
         let mut plugin_params = Vec::new();
+        let mut fade_params = Vec::new();
         let mut scan = |obj: &Value, ptr: String, path: String, deck: bool| {
             if let Some(map) = obj.as_object() {
                 for (k, v) in map {
@@ -508,6 +509,24 @@ impl State {
         {
             let lp = format!("/composition/layers/{}", li + 1);
             scan(l, format!("/layers/{li}"), lp.clone(), false);
+            // The layer transition (notes §19): the blend mode's path is not its JSON key.
+            if let Some(t) = l["transition"].as_object() {
+                for (k, api) in [
+                    ("duration", format!("{lp}/transition/duration")),
+                    (
+                        "blend_mode",
+                        format!("{lp}/video/transition/mixer/blendmode"),
+                    ),
+                ] {
+                    if let Some(v) = t.get(k).filter(|v| is_param(v)) {
+                        fade_params.push((
+                            v["id"].as_u64().unwrap(),
+                            format!("/layers/{li}/transition/{k}"),
+                            api,
+                        ));
+                    }
+                }
+            }
             scan(
                 &l["video"],
                 format!("/layers/{li}/video"),
@@ -547,6 +566,7 @@ impl State {
             }
         }
         out.extend(plugin_params);
+        out.extend(fade_params);
         // Effect parameters (notes §13, §18) of the composition, the layers and the clips. Only set by id in the
         // app; the logical path here follows the one recorded for an FFGL effect (notes §13).
         let effect_params =
@@ -616,6 +636,10 @@ impl State {
             let id: u64 = id.parse().ok()?;
             return locs.iter().any(|l| l.0 == id).then_some(id);
         }
+        // Layer transition parameters answer by id only (notes §19).
+        if param.contains("/transition/") {
+            return None;
+        }
         let normalized = param
             .strip_suffix("/connected")
             .map(|p| format!("{p}/connect"))
@@ -639,10 +663,43 @@ impl State {
         Some(v)
     }
 
+    /// Resolume's refusal of a set, if it would refuse it (notes §19): a choice name that is not
+    /// one of the options.
+    pub fn check_set(&self, id: u64, value: &Value) -> Option<&'static str> {
+        let (_, ptr, _) = self.param_locations().into_iter().find(|l| l.0 == id)?;
+        let p = self.comp.pointer(&ptr)?;
+        if p["valuetype"] != "ParamChoice" {
+            return None;
+        }
+        let ok = p["options"]
+            .as_array()
+            .is_some_and(|o| o.iter().any(|x| x == value));
+        (!ok).then_some("Invalid choice name for param")
+    }
+
     pub fn set_param(&mut self, id: u64, value: Value) -> Changes {
         let Some((_, ptr, path)) = self.param_locations().into_iter().find(|l| l.0 == id) else {
             return Changes::not_found();
         };
+        let mut value = value;
+        if let Some(p) = self.comp.pointer_mut(&ptr) {
+            // Ranges are clamped (a duration of 12 is 10, notes §19); a choice keeps its index.
+            if p["valuetype"] == "ParamRange" {
+                if let (Some(v), Some(lo), Some(hi)) =
+                    (value.as_f64(), p["min"].as_f64(), p["max"].as_f64())
+                {
+                    value = json!(v.clamp(lo, hi));
+                }
+            }
+            if p["valuetype"] == "ParamChoice" {
+                let index = p["options"]
+                    .as_array()
+                    .and_then(|o| o.iter().position(|x| *x == value));
+                if let Some(i) = index {
+                    p["index"] = json!(i);
+                }
+            }
+        }
         if let Some(slot) = self.comp.pointer_mut(&format!("{ptr}/value")) {
             *slot = value;
         }

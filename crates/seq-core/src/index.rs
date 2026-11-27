@@ -36,6 +36,20 @@ pub struct LayerInfo {
     /// Raw name as the API returns it (unnamed layers are all `"Layer #"`).
     pub name: String,
     pub name_param: u64,
+    /// The layer's transition parameters (notes §19); `None` if the JSON has none.
+    #[serde(default)]
+    pub transition: Option<TransitionParams>,
+}
+
+/// A layer's transition parameters (notes §19): set them by id over the WebSocket. Only ids and
+/// options are structure; the values live in the composition snapshot and in subscriptions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransitionParams {
+    /// `transition.duration`, seconds 0–10.
+    pub duration_param: u64,
+    /// `transition.blend_mode`, set by option name.
+    pub blend_param: u64,
+    pub blend_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +85,14 @@ pub struct ClipInfo {
     /// plugin (SPEC §12). The sequencer keeps it set to the clip's sequence name.
     #[serde(default)]
     pub sequence_param: Option<TextParam>,
+    /// The clip follows its layer's transition (`transition.layer_determined`, notes §19); when
+    /// `false` it uses its own and ignores the layer's.
+    #[serde(default = "yes")]
+    pub layer_determined: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// A text parameter of a clip's source plugin.
@@ -274,6 +296,7 @@ pub(crate) mod test_support {
                 index,
                 name: name.into(),
                 name_param: 0,
+                transition: None,
             });
             for (ci, slot) in slots.iter().enumerate() {
                 self.next_id += 1;
@@ -292,6 +315,7 @@ pub(crate) mod test_support {
                     connected_param: 0,
                     name_param: 0,
                     sequence_param: None,
+                    layer_determined: true,
                 });
             }
             self

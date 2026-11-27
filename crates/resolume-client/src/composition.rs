@@ -11,7 +11,9 @@ use std::collections::HashMap;
 
 use seq_core::index::{
     ClipInfo, ClipState, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo, TextParam, Thumbnail,
+    TransitionParams,
 };
+use seq_core::transition::LayerTransition;
 
 /// Display name of the text parameter of the "1000A Sequence" FFGL source (SPEC §12).
 pub const SEQUENCE_PARAM: &str = "Sequence";
@@ -37,6 +39,8 @@ pub struct CompositionSnapshot {
     /// Resolume's own LUT effects on the composition, the layers and the live deck's clips, in that
     /// order (notes §18). Layer groups are not read (their JSON is not probed).
     pub lut_effects: Vec<LutEffect>,
+    /// Each layer's transition at the time of the push, by layer id (notes §19).
+    pub transitions: HashMap<u64, LayerTransition>,
 }
 
 /// One instance of Resolume's LUT effect: its `LUT 3D` file parameter and where it sits.
@@ -133,6 +137,10 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         connected_param: clip.connected.id,
         name_param: clip.name.id,
         sequence_param,
+        layer_determined: clip
+            .transition
+            .and_then(|t| t.layer_determined)
+            .is_none_or(|p| p.value),
     };
     (info, state)
 }
@@ -171,6 +179,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
     let mut clips = Vec::new();
     let mut states = HashMap::new();
     let mut lut_effects: Vec<LutEffect> = Vec::new();
+    let mut transitions = HashMap::new();
     let mut add_luts = |effects: Vec<serde_json::Value>, place: &dyn Fn() -> LutPlace| {
         lut_effects.extend(effects.into_iter().filter_map(|e| lut_effect(e, place())));
     };
@@ -186,11 +195,29 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
                 name: layer_name.clone(),
             }
         });
+        let transition = layer.transition.and_then(|t| {
+            let (d, b) = (t.duration?, t.blend_mode?);
+            (d.id != 0 && b.id != 0).then(|| {
+                transitions.insert(
+                    layer.id,
+                    LayerTransition {
+                        seconds: d.value,
+                        blend: b.value.clone(),
+                    },
+                );
+                TransitionParams {
+                    duration_param: d.id,
+                    blend_param: b.id,
+                    blend_options: b.options,
+                }
+            })
+        });
         layers.push(LayerInfo {
             id: layer.id,
             index: layer_index,
             name: layer.name.value,
             name_param: layer.name.id,
+            transition,
         });
         for (ci, mut clip) in layer.clips.into_iter().enumerate() {
             let effects = clip.video.as_mut().map(|v| std::mem::take(&mut v.effects));
@@ -225,6 +252,7 @@ fn build(raw: RawComposition) -> CompositionSnapshot {
         states,
         tempo,
         lut_effects,
+        transitions,
     }
 }
 
@@ -324,6 +352,34 @@ struct RawLayer {
     clips: Vec<RawClip>,
     #[serde(default)]
     video: Option<RawEffects>,
+    #[serde(default)]
+    transition: Option<RawLayerTransition>,
+}
+
+/// A layer's `transition` (notes §19).
+#[derive(Deserialize)]
+struct RawLayerTransition {
+    #[serde(default)]
+    duration: Option<Param<f64>>,
+    #[serde(default)]
+    blend_mode: Option<RawChoice>,
+}
+
+#[derive(Deserialize)]
+struct RawChoice {
+    #[serde(default)]
+    id: u64,
+    #[serde(default)]
+    value: String,
+    #[serde(default)]
+    options: Vec<String>,
+}
+
+/// A clip's `transition`: only whether it follows the layer.
+#[derive(Deserialize)]
+struct RawClipTransition {
+    #[serde(default)]
+    layer_determined: Option<Param<bool>>,
 }
 
 #[derive(Deserialize)]
@@ -336,6 +392,8 @@ struct RawClip {
     video: Option<RawVideo>,
     #[serde(default)]
     thumbnail: Option<RawThumbnail>,
+    #[serde(default)]
+    transition: Option<RawClipTransition>,
 }
 
 #[derive(Deserialize)]
