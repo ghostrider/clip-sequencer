@@ -293,7 +293,7 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       then build it.
 - [x] Docs: manual (Playing live), shortcuts, changelog.
 
-## M21 — Transitions per step (SPEC §7.7; A)  ⟵ next
+## M21 — Transitions per step (SPEC §7.7; A)  ✓ done 2026-11-27
 - [x] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
       `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
@@ -313,9 +313,10 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
       Done 2026-11-27 (`lib/fade.ts`, `FadePicker.svelte`; the lane chip edits in a small popover so the lane
       header keeps its height). Warnings use the clock's BPM, 120 without a clock.
-- [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
+- [x] Live check with Uli; docs: manual page "Transitions", changelog, README.
       Docs written 2026-11-27 (manual `transitions.md` with shots from the mock; `site/screenshots.mjs` doesn't
-      make them yet). Live check open.
+      make them yet). Live check passed 2026-11-27: fades, set ahead, other lane untouched, restore on stop (a cut),
+      the user's value kept, restore after the app was killed.
 
 ## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)
 - [x] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
