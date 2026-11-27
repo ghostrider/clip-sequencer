@@ -2608,3 +2608,203 @@ async fn takeovers_hand_over_or_restore_the_original() {
     h.fade_is(2, 0.0, "Alpha").await;
     h.app.shutdown().await;
 }
+
+// ---- recording from Resolume (SPEC §7.9, M25) ----
+
+impl Harness {
+    /// SEQ_A's lanes as (layer, [(clip name or "-", length)]).
+    async fn lanes_of_a(
+        &self,
+        pred: impl Fn(&[(String, Vec<(String, u32)>)]) -> bool,
+    ) -> Vec<(String, Vec<(String, u32)>)> {
+        let shape = |s: &StructureState| -> Vec<(String, Vec<(String, u32)>)> {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .find(|v| v.sequence.id == SEQ_A)
+                .map(|v| {
+                    v.sequence
+                        .lanes
+                        .iter()
+                        .map(|l| {
+                            let steps = l
+                                .steps
+                                .iter()
+                                .map(|s| {
+                                    let n = s
+                                        .clip
+                                        .as_ref()
+                                        .and_then(|c| c.name.clone())
+                                        .unwrap_or_else(|| "-".into());
+                                    (n, s.length)
+                                })
+                                .collect();
+                            (l.layer.clone(), steps)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let s = self.structure(|s| pred(&shape(s))).await;
+        shape(&s)
+    }
+}
+
+fn lanes(v: &[(&str, &[(&str, u32)])]) -> Vec<(String, Vec<(String, u32)>)> {
+    v.iter()
+        .map(|(l, steps)| {
+            (
+                (*l).to_owned(),
+                steps
+                    .iter()
+                    .map(|(n, len)| ((*n).to_owned(), *len))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// SPEC §7.9: armed, SEQ_A (L2 only here) loops and records. Pass 1: LIQUID clicked on L2 and
+/// "Clip 07" on L1 (no lane yet) at sixteenth 4. The take is written at the pass boundary and pass 2
+/// plays it; a clear in pass 2 and Stop write the second take up to the Stop; Ctrl+Z undoes it.
+#[tokio::test]
+async fn recording_writes_a_take_per_pass_and_plays_it_back() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::RemoveLane {
+            seq: SEQ_A,
+            lane: 1,
+        },
+    });
+    h.lanes_of_a(|l| l.len() == 1).await;
+    h.cmd(EngineCommand::SetArmed { seq: Some(SEQ_A) });
+    h.runtime(|r| {
+        r.record
+            .as_ref()
+            .is_some_and(|x| x.seq == SEQ_A && !x.recording)
+    })
+    .await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.osc(1).await;
+
+    h.ticks(24); // sixteenth 4
+    tokio::time::sleep(Duration::from_millis(200)).await; // clear of the app's own trigger window
+    h.mock.clear_osc_log();
+    h.mock.manual_connect(2, 3); // LIQUID on L2
+    h.mock.manual_connect(1, 2); // Clip 07 on L1
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 2))
+        .await;
+    let r = h
+        .runtime(|r| {
+            r.running
+                .first()
+                .is_some_and(|x| x.lanes[0].state == "yielded")
+        })
+        .await;
+    assert!(
+        r.notices.iter().all(|n| !n.contains("yielded")),
+        "no override notice"
+    );
+
+    h.ticks(167); // to the end of pass 1: L2 yielded, nothing sent
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        h.mock.osc_log().is_empty(),
+        "the clicked lane plays nothing more in this pass"
+    );
+    h.ticks(1); // pass 2
+    let want = lanes(&[
+        ("L2", &[(TWISTED, 4), (LIQUID, 28)]),
+        ("L1", &[("-", 4), ("Clip 07", 28)]),
+    ]);
+    assert_eq!(h.lanes_of_a(|l| l.len() == 2).await, want);
+    // Pass 2 plays the take: TWISTED and the new lane's rest (clears L1) at once, LIQUID and Clip 07
+    // a quarter beat later.
+    let mut first = h.osc(3).await;
+    first.sort();
+    let mut want_first = vec![connect(2, 1)];
+    want_first.extend(clear(1));
+    want_first.sort();
+    assert_eq!(first, want_first);
+    h.ticks(24);
+    let log = h.osc(5).await;
+    assert!(
+        log[3..].contains(&connect(2, 3)) && log[3..].contains(&connect(1, 2)),
+        "{log:?}"
+    );
+
+    // Pass 2: clear L2 at sixteenth 8, Stop at sixteenth 10.
+    h.ticks(24);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_clear(2);
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.ticks(12);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    h.cmd(EngineCommand::Stop { seq: SEQ_A });
+    h.runtime(|r| r.running.is_empty() && r.record.is_none())
+        .await;
+    let want2 = lanes(&[
+        ("L2", &[(TWISTED, 4), (LIQUID, 4), ("-", 2), (LIQUID, 22)]),
+        ("L1", &[("-", 4), ("Clip 07", 28)]),
+    ]);
+    assert_eq!(h.lanes_of_a(|l| l[0].1.len() == 4).await, want2);
+
+    // Each take is one undo step.
+    h.cmd(EngineCommand::Undo);
+    assert_eq!(h.lanes_of_a(|l| l[0].1.len() == 2).await, want);
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.9: a click records the transition Resolume used (the layer's 0.46875 s at 128 BPM is
+/// 4 sixteenths, with its blend mode).
+#[tokio::test]
+async fn recording_keeps_the_transition_of_each_click() {
+    let h = harness().await;
+    h.mock.layer_transition(2, "duration", json!(0.46875));
+    h.cmd(EngineCommand::SetArmed { seq: Some(SEQ_A) });
+    h.runtime(|r| r.record.is_some()).await;
+    h.ticks_at_128(24);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.recording))
+        .await;
+    h.ticks_at_128(48); // sixteenth 8
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.mock.manual_connect(2, 3);
+    h.runtime(|r| r.record.as_ref().is_some_and(|x| x.clicks == 1))
+        .await;
+    h.ticks_at_128(144); // pass 2: written
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[0].length == 8)
+        })
+        .await;
+    let seq = s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap();
+    let step = &seq.sequence.lanes[0].steps[1];
+    assert_eq!(
+        step.clip.as_ref().and_then(|c| c.name.as_deref()),
+        Some(LIQUID)
+    );
+    assert_eq!(
+        step.transition,
+        Some(seq_core::model::Transition {
+            length: 4,
+            blend: Some("Alpha".into())
+        })
+    );
+    assert_eq!(seq.sequence.lanes[0].steps[0].length, 8);
+    h.cmd(EngineCommand::SetArmed { seq: None });
+    h.runtime(|r| r.record.is_none()).await;
+    h.app.shutdown().await;
+}

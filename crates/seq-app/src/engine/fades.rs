@@ -314,6 +314,18 @@ impl Engine {
         self.write_pending();
     }
 
+    /// The layer's transition as Resolume has it now: (seconds, blend mode).
+    pub(super) fn fades_current(&self, layer_id: u64) -> Option<(f64, String)> {
+        self.fades
+            .book
+            .current(layer_id)
+            .map(|v| (v.seconds, v.blend.clone()))
+    }
+
+    pub(super) fn fades_held(&self, layer_id: u64) -> bool {
+        self.fades.book.is_held(layer_id)
+    }
+
     pub(super) fn transitions_connection_lost(&mut self) {
         self.fades.book.connection_lost();
     }

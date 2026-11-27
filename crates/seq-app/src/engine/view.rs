@@ -297,6 +297,20 @@ pub struct RuntimeState {
     pub save_error: Option<String>,
     /// "Sync SEQ layer" is running (SPEC §7.6).
     pub seq_sync_busy: bool,
+    /// The armed sequence (SPEC §7.9), if any.
+    pub record: Option<RecordView>,
+}
+
+/// Recording from Resolume (SPEC §7.9).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RecordView {
+    pub seq: Uuid,
+    /// Its run goes and records (else armed, waiting for its start).
+    pub recording: bool,
+    /// The pass being recorded.
+    pub pass: u32,
+    /// Clicks in this pass so far.
+    pub clicks: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

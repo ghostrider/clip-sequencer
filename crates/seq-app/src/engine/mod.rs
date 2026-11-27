@@ -5,6 +5,7 @@
 //! in worker tasks that report back through [`Aux`] messages.
 
 mod fades;
+mod record;
 pub mod view;
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -104,6 +105,10 @@ pub enum EngineCommand {
     /// needed (SPEC §7.6). With `remove_orphans`, also clear `§` clips without a sequence.
     SyncSeqLayer {
         remove_orphans: bool,
+    },
+    /// Arm a sequence of the live deck for recording, or disarm (SPEC §7.9).
+    SetArmed {
+        seq: Option<Uuid>,
     },
     /// Point one of Resolume's LUT effects at a `.cube` file (LUT tab, SPEC §14): a `set` on its `LUT 3D`
     /// parameter. Shown at once in the LUT effect list; Resolume's update or next push confirms it.
@@ -279,6 +284,8 @@ pub struct Engine {
     lut_effects: Vec<LutEffect>,
     /// Layer transitions: originals, values, the pending file (SPEC §7.7).
     fades: fades::Fades,
+    /// Recording from Resolume (SPEC §7.9).
+    rec: record::Recorder,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
     /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
@@ -370,6 +377,7 @@ impl Engine {
             tempo_ctl: None,
             lut_effects: Vec::new(),
             fades,
+            rec: record::Recorder::default(),
             phase_synced: false,
             bar_synced: false,
             last_resync: None,
@@ -530,6 +538,7 @@ impl Engine {
                 self.request_upcoming_slots(at);
                 let actions = self.scheduler.on_tick();
                 self.execute(actions);
+                self.record_tick(at);
                 if !self.snapshots.is_empty() {
                     self.runtime_dirty = true;
                 }
@@ -845,6 +854,9 @@ impl Engine {
                     self.on_clip_connected(clip_id, at);
                 } else if was.is_some_and(ClipState::is_connected) {
                     self.on_clip_disconnected(clip_id);
+                    if let Some(layer_id) = self.layer_of_clip(clip_id) {
+                        self.record_disconnect(layer_id, at);
+                    }
                 }
             }
             ParamTarget::ClipName(clip_id) => {
@@ -1018,6 +1030,8 @@ impl Engine {
             };
             (clip, layer, index.live_deck.clone())
         };
+        // A cut sends the old clip's `Disconnected` just before this: no clear (SPEC §7.9).
+        self.record_connected(layer.id);
 
         // § placeholder on the SEQ layer: start that sequence of the live deck.
         if layer.name == self.cfg.seq_layer {
@@ -1067,6 +1081,10 @@ impl Engine {
             .last_layer_trigger
             .get(&layer.id)
             .is_some_and(|t| at.saturating_duration_since(*t) < self.cfg.override_window);
+        // Recording (SPEC §7.9): a click on the recording sequence's layer or a free one is recorded.
+        if !recent && self.record_click(&clip, layer.id, &layer.name, at) {
+            return;
+        }
         if !recent {
             if let Some((seq, lane)) = self.scheduler.owner_of(layer.id) {
                 let acts = self.scheduler.yield_layer(layer.id);
@@ -1125,6 +1143,7 @@ impl Engine {
                 let acts = self.scheduler.cancel_cue();
                 self.execute(acts);
             }
+            EngineCommand::SetArmed { seq } => self.set_armed(seq),
             EngineCommand::SetLaneMute { seq, lane, on } => {
                 let acts = self.scheduler.set_mute(seq, lane, on);
                 self.execute(acts);
@@ -1431,6 +1450,10 @@ impl Engine {
             self.structure_dirty = true;
         }
         let mut spec = RunSpec::new(&sequence, &resolution);
+        // An armed sequence loops while it records (SPEC §7.9).
+        if self.rec.loops(seq) {
+            spec.repeat = seq_core::Repeat::Infinite;
+        }
         // A fresh seed per start for `random` picks (SPEC §6); seq-core itself reads no clock.
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1473,6 +1496,7 @@ impl Engine {
                     reason,
                     origin,
                 } => {
+                    self.record_ended(seq);
                     self.snapshots.remove(&seq);
                     self.transitions_run_ended(seq);
                     self.pending.retain(|p| p.seq != seq);
@@ -1487,6 +1511,11 @@ impl Engine {
                         self.not_confirmed.retain(|(s, _), _| *s != seq);
                         self.snapshots.insert(seq, snapshot);
                     }
+                    self.record_started(seq);
+                    self.runtime_dirty = true;
+                }
+                Action::PassStarted { seq, pass } => {
+                    self.record_pass(seq, pass);
                     self.runtime_dirty = true;
                 }
                 Action::Pending { seq, .. } => {
@@ -1526,9 +1555,9 @@ impl Engine {
                     self.queued.remove(&seq);
                     self.runtime_dirty = true;
                 }
-                Action::PassStarted { .. }
-                | Action::StepStarted { .. }
-                | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
+                Action::StepStarted { .. } | Action::LaneStateChanged { .. } => {
+                    self.runtime_dirty = true
+                }
                 Action::SetTransition {
                     seq,
                     lane,
@@ -1656,6 +1685,7 @@ impl Engine {
             Ok(addr) => self.osc_sent(addr, t0.elapsed()),
             Err(e) => self.osc_error(e),
         }
+        self.record_own_clear(layer_id, t0);
         self.last_layer_trigger.insert(layer_id, t0);
     }
 
@@ -1861,6 +1891,7 @@ impl Engine {
 
     pub fn on_timer(&mut self, now: Instant) {
         self.retime_transitions(now);
+        self.record_settle(now);
         // Subscriptions sent while Resolume loads a composition can be refused ("Invalid parameter
         // path", without saying which) or go unanswered: ask again for the ones still missing.
         if self.ws_connected
@@ -2254,6 +2285,7 @@ impl Engine {
             saved: self.saved,
             save_error: self.save_error.clone(),
             seq_sync_busy: self.seq_sync_busy,
+            record: self.rec.view(),
         }
     }
 

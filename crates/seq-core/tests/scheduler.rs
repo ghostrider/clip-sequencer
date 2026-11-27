@@ -675,6 +675,7 @@ fn run_spec_from_sequence_and_resolution() {
         name_param: 0,
         sequence_param: None,
         layer_determined: true,
+        own_transition: None,
     };
     let idx = CompositionIndex::new(
         "Show".into(),
@@ -2199,4 +2200,41 @@ fn a_lane_back_from_mute_sets_its_value_with_the_trigger() {
         log.extend(at(t, s.on_tick()));
     }
     assert_eq!(fade_ticks(&log), vec![(0, 0), (BAR - 1, 1)]);
+}
+
+// ---- recording: the next pass plays a new spec (SPEC §7.9) ----
+
+#[test]
+fn a_spec_set_for_the_next_pass_takes_over_at_the_boundary() {
+    let mut s = Scheduler::new();
+    let once = spec(
+        1,
+        Repeat::Once,
+        AfterLastPass::Hold,
+        vec![
+            lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1))]),
+            lane(200, LaneEnd::LoopToEnd, &[(8, Clip(2))]),
+        ],
+    );
+    let start = s.start(once.clone(), Origin::Ui, Start::Immediate).unwrap();
+    let mut log = run(&mut s, start, 10);
+    log.extend(at(10, s.set_mute(seq(1), 1, true)));
+    log.extend(at(10, s.yield_layer(100)));
+    // The take: lane 100 now plays clip 3, a new lane 300 clip 4, and it loops.
+    let mut next = once.clone();
+    next.repeat = Repeat::Infinite;
+    next.lanes[0] = lane(100, LaneEnd::LoopToEnd, &[(4, Clip(3)), (4, Clip(5))]);
+    next.lanes
+        .push(lane(300, LaneEnd::LoopToEnd, &[(8, Clip(4))]));
+    assert!(s.set_next_pass(next));
+    assert_eq!(s.position(seq(1)), Some((10, BAR)));
+    for t in 11..2 * BAR {
+        log.extend(at(t, s.on_tick()));
+    }
+    let tr: Vec<(u64, u64)> = triggers(&log).into_iter().filter(|(t, _)| *t > 0).collect();
+    // At the boundary: the yielded lane plays again, the muted one stays muted, the new one plays.
+    assert_eq!(tr, vec![(BAR, 3), (BAR, 4), (BAR + 4 * E, 5)]);
+    assert!(ended(&log).is_empty(), "once, but the take loops");
+    let st = s.status();
+    assert!(st[0].lanes[1].mute && st[0].lanes.len() == 3);
 }

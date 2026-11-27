@@ -89,6 +89,16 @@ pub struct ClipInfo {
     /// `false` it uses its own and ignores the layer's.
     #[serde(default = "yes")]
     pub layer_determined: bool,
+    /// The clip's own transition when it is not layer determined (recording, SPEC §7.9).
+    #[serde(default)]
+    pub own_transition: Option<ClipTransition>,
+}
+
+/// A clip's own transition: milliseconds (the index compares exactly, so no float) and blend mode.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClipTransition {
+    pub millis: u32,
+    pub blend: String,
 }
 
 fn yes() -> bool {
@@ -316,6 +326,7 @@ pub(crate) mod test_support {
                     name_param: 0,
                     sequence_param: None,
                     layer_determined: true,
+                    own_transition: None,
                 });
             }
             self

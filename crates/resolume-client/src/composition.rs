@@ -10,8 +10,8 @@
 use std::collections::HashMap;
 
 use seq_core::index::{
-    ClipInfo, ClipState, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo, TextParam, Thumbnail,
-    TransitionParams,
+    ClipInfo, ClipState, ClipTransition, ColumnInfo, CompositionIndex, DeckInfo, LayerInfo,
+    TextParam, Thumbnail, TransitionParams,
 };
 use seq_core::transition::LayerTransition;
 
@@ -123,6 +123,19 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         None => (None, None),
     };
     let thumbnail = clip.thumbnail.unwrap_or_default();
+    let (layer_determined, own_transition) = match clip.transition {
+        Some(t) => {
+            let ld = t.layer_determined.is_none_or(|p| p.value);
+            let own = (!ld).then(|| ClipTransition {
+                millis: t
+                    .duration
+                    .map_or(0, |d| (d.value.max(0.0) * 1000.0).round() as u32),
+                blend: t.blend_mode.map(|b| b.value).unwrap_or_default(),
+            });
+            (ld, own)
+        }
+        None => (true, None),
+    };
     let info = ClipInfo {
         id: clip.id,
         layer,
@@ -137,10 +150,8 @@ fn clip_info(clip: RawClip, layer: usize, column: usize) -> (ClipInfo, Option<Cl
         connected_param: clip.connected.id,
         name_param: clip.name.id,
         sequence_param,
-        layer_determined: clip
-            .transition
-            .and_then(|t| t.layer_determined)
-            .is_none_or(|p| p.value),
+        layer_determined,
+        own_transition,
     };
     (info, state)
 }
@@ -380,6 +391,10 @@ struct RawChoice {
 struct RawClipTransition {
     #[serde(default)]
     layer_determined: Option<Param<bool>>,
+    #[serde(default)]
+    duration: Option<Param<f64>>,
+    #[serde(default)]
+    blend_mode: Option<RawChoice>,
 }
 
 #[derive(Deserialize)]

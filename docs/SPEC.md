@@ -533,7 +533,8 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
 
 - **Arm:** the ⏺ button in the editor header arms the selected sequence of the **live** deck (one at a time). Armed,
   it records from its next start; the start waits for its start mode as usual (a bar start is the count-in).
-  Arming a running sequence records from its next pass. Disarm or Stop ends the recording.
+  Arming a running sequence records from that moment, and it loops from its next pass. Disarm or Stop ends the
+  recording (Stop also disarms; a disarmed run goes on looping until stopped).
 - **Takes:** each pass is one **take**. While recording, the sequence loops pass after pass, whatever its repeat
   setting. At the end of a pass its take is written into the sequence as **one undoable edit** (Ctrl+Z removes
   that pass's take), and the next pass already plays the result. A pass without a click writes nothing.

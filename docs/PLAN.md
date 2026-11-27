@@ -348,8 +348,9 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       Done 2026-11-27: a clear is known by its `Disconnected` (one fade late), a fade end by another clip connected.
 - [x] Pure part (`seq-core`): a take (clicks per layer, snapped) applied to a sequence (write out short lanes,
       overwrite, new lanes, slot columns, stop position); tested. Done 2026-11-27 (`seq_core::record`).
-- [ ] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
+- [x] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
       the first click, write the take at the pass end as one undo step and play it the next pass. Mock tests.
+      Done 2026-11-27 (`engine/record.rs`; `Scheduler::set_next_pass` swaps the spec at the boundary).
 - [ ] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
 - [ ] Docs (manual, changelog, README) and a live check with Uli.
 

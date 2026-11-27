@@ -514,6 +514,32 @@ struct LaneRt {
 }
 
 impl LaneRt {
+    fn new(l: &RunLane) -> Self {
+        let mut starts = Vec::with_capacity(l.steps.len());
+        let mut at = 0;
+        for s in &l.steps {
+            starts.push(at);
+            at += s.ticks;
+        }
+        LaneRt {
+            state: if l.is_active() {
+                LaneState::Playing
+            } else {
+                LaneState::Inactive
+            },
+            mute: false,
+            solo: false,
+            silent: false,
+            plays: vec![0; l.steps.len()],
+            option: None,
+            starts,
+            len: at,
+            fade_sent: false,
+            step_sent_at: 0,
+            fade_end: 0,
+        }
+    }
+
     fn lane_pos(&self, end: LaneEnd, pos: u64) -> Option<u64> {
         match end {
             LaneEnd::LoopToEnd => Some(pos % self.len),
@@ -542,9 +568,39 @@ struct Run {
     lanes: Vec<LaneRt>,
     /// Ticks since the run began (not reset by a pass or a resync).
     elapsed: u64,
+    /// Takes effect at the next pass boundary ([`Scheduler::set_next_pass`]).
+    next_spec: Option<RunSpec>,
 }
 
 impl Run {
+    /// Puts `next_spec` in place at a pass boundary: lanes keep their mute and solo and play again if
+    /// they had yielded; taken-over lanes stay silent; new lanes play.
+    fn swap_spec(&mut self) {
+        let Some(spec) = self.next_spec.take() else {
+            return;
+        };
+        let lanes = spec
+            .lanes
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let mut rt = LaneRt::new(l);
+                if let Some(old) = self.lanes.get(i) {
+                    rt.mute = old.mute;
+                    rt.solo = old.solo;
+                    rt.silent = old.silent;
+                    if old.state == LaneState::TakenOver {
+                        rt.state = LaneState::TakenOver;
+                    }
+                }
+                rt
+            })
+            .collect();
+        self.pass_ticks = spec.pass_ticks().max(1);
+        self.spec = spec;
+        self.lanes = lanes;
+    }
+
     /// The step of `lane` that starts exactly `k` ticks from now (≥ 1) and the pass it is in,
     /// if the run is still going then.
     fn step_in(&self, lane: usize, k: u64) -> Option<(usize, u32)> {
@@ -1064,35 +1120,7 @@ impl Scheduler {
         }
         self.incoming.clear();
 
-        let lanes = spec
-            .lanes
-            .iter()
-            .map(|l| {
-                let mut starts = Vec::with_capacity(l.steps.len());
-                let mut at = 0;
-                for s in &l.steps {
-                    starts.push(at);
-                    at += s.ticks;
-                }
-                LaneRt {
-                    state: if l.is_active() {
-                        LaneState::Playing
-                    } else {
-                        LaneState::Inactive
-                    },
-                    mute: false,
-                    solo: false,
-                    silent: false,
-                    plays: vec![0; l.steps.len()],
-                    option: None,
-                    starts,
-                    len: at,
-                    fade_sent: false,
-                    step_sent_at: 0,
-                    fade_end: 0,
-                }
-            })
-            .collect();
+        let lanes = spec.lanes.iter().map(LaneRt::new).collect();
         let mut run = Run {
             spec,
             origin,
@@ -1100,6 +1128,7 @@ impl Scheduler {
             pos: 0,
             pass_ticks,
             lanes,
+            next_spec: None,
             elapsed: 0,
         };
         out.push(Action::Started { seq, origin });
@@ -1226,6 +1255,26 @@ impl Scheduler {
         out
     }
 
+    /// Recording (SPEC §7.9): from its next pass boundary the run plays `spec` (same sequence),
+    /// replacing one queued before. Returns whether the sequence runs.
+    pub fn set_next_pass(&mut self, spec: RunSpec) -> bool {
+        match self.runs.iter_mut().find(|r| r.spec.seq_id == spec.seq_id) {
+            Some(run) => {
+                run.next_spec = Some(spec);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Ticks into the current pass of a running sequence, and the pass length.
+    pub fn position(&self, seq: Uuid) -> Option<(u64, u64)> {
+        self.runs
+            .iter()
+            .find(|r| r.spec.seq_id == seq)
+            .map(|r| (r.pos, r.pass_ticks))
+    }
+
     /// Resync (SPEC §3.1): every running sequence jumps to the start of its current pass, now, as
     /// if it had just started: step 1 of each lane it still owns is emitted (a yielded lane with a
     /// resume pending resumes). The pass counter is kept; taken-over lanes stay silent.
@@ -1265,6 +1314,7 @@ impl Scheduler {
             run.elapsed += 1;
             let seq = run.spec.seq_id;
             if run.pos >= run.pass_ticks {
+                run.swap_spec();
                 if run.spec.passes().is_some_and(|n| run.pass >= n) {
                     finished.push(ri);
                     continue;
