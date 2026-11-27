@@ -538,8 +538,11 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   setting. At the end of a pass its take is written into the sequence as **one undoable edit** (Ctrl+Z removes
   that pass's take), and the next pass already plays the result. A pass without a click writes nothing.
 - **What counts as a click:** a clip that becomes connected on a layer (WebSocket `connected`, §7.5) that the app
-  did not trigger itself (the window of §7.3), and a layer that is cleared (all its clips disconnected) without
-  the app clearing it (records a rest). Clicks on the SEQ layer are not recorded (they start sequences as usual).
+  did not trigger itself (the window of §7.3), and a layer that is cleared without the app clearing it (records a
+  rest). A clear is the `Disconnected` of the layer's last connected clip that no `Connected` on that layer
+  follows within 20 ms (a cut sends both in the same millisecond); it arrives at the end of the clear's fade, so
+  it counts at that time minus the layer's duration. A `Disconnected` while another clip of the layer is
+  connected is the end of a fade and records nothing (notes §20). Clicks on the SEQ layer are not recorded (they start sequences as usual).
   Clicking the clip that already plays reports nothing in Resolume (notes §13), so it can't be recorded: the step
   just goes on.
 - **Snap:** each click goes to the nearest sixteenth of the pass, from its arrival time and the tempo. A click in

@@ -43,3 +43,5 @@ Sessions:
   (notes §19): set duration and blend mode by id and by path, then the scenes of
   `tools/resolume-probe/scripts/m21_transition_scenes.sh` (set ahead of a connect, change during a fade, clear,
   `layer_determined`), and the value across a deck switch.
+- `m25-clicks.jsonl`: clip clicks, a click on the playing clip and the layer Clear button made by hand in
+  Resolume, with and without a layer fade (notes §20).

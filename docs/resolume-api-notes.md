@@ -412,3 +412,27 @@ Consequences (SPEC §7.7): send a value only when it differs (every set costs a 
 same instant as the trigger is in time, so the lead time only has to keep clear of a running fade, which any
 change of duration rescales; the stop's clear fades, so the original goes back **before** the clear; while a fade
 runs, the outgoing clip's late `Disconnected` is no user action.
+
+## 20. Clicks and clears made by hand (probed for M25, 2026-11-27, Arena 7.29.0)
+
+What the WebSocket reports when the user plays clips in Resolume's own UI, for recording (SPEC §7.9). Layer 1 had
+a transition of 2.37 s (Displace), layer 2 none; every clip *Layer Determined*. The probe only listened
+(`connected` of the clips of layers 1–2 and both layers' transition parameters, subscribed by id). Log
+`docs/samples/m25-clicks.jsonl` (composition pushes left out).
+
+| Action in Resolume | WebSocket | Status |
+|---|---|---|
+| Click a clip on an empty layer | `parameter_update` `Connected` for it, same shape as for an OSC trigger (§5.3) | ✅ |
+| Click another clip, layer with a 2.37 s fade | the new clip `Connected` at once; the old one `Disconnected` **2.34 s later**, when the fade ends | ✅ |
+| Click the clip that is playing | **nothing** (as for OSC, §13) | ✅ |
+| Layer **Clear** button, layer with a 2.37 s fade | the playing clip `Disconnected` only at the **end** of the fade-out; nothing at the press | ✅ |
+| Layer Clear, layer with no fade | `Disconnected` at once | ✅ |
+| Switch clips with a cut (§19 scene 10, OSC) | old `Disconnected` and new `Connected` in the **same millisecond**, the `Disconnected` first | ✅ |
+| Preview a clip | `Connected & previewing` (still connected), `Previewing` alone (not connected) | ✅ |
+| Transition duration typed in the layer | one `parameter_update` (`2`, later `0`) | ✅ |
+
+Consequences (SPEC §7.9): a click is a `Connected` that the app didn't cause. A clear is a `Disconnected` of the
+layer's last connected clip that no `Connected` on the same layer follows within a few milliseconds (a cut
+switch sends both together); with a fade it arrives one fade later, so the press was at that time minus the
+layer's duration. A `Disconnected` while another clip of the layer is connected is the end of a fade, nothing to
+record.

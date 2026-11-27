@@ -343,8 +343,9 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       Done 2026-11-27 (§7.9): loops until Stop, one take per pass written at its end (one undo each) and played
       back the next pass; overwrite from the first click to the pass end; new layers get a lane.
       Recorded steps carry the transition Resolume used for the click (layer's or the clip's own), added the same day.
-- [ ] Probe with Uli: WS messages for clip clicks and the layer Clear button made by hand (shape, timing; a clear vs.
+- [x] Probe with Uli: WS messages for clip clicks and the layer Clear button made by hand (shape, timing; a clear vs.
       switching clips), the transition values in effect when clicking (layer and clip own), notes §20.
+      Done 2026-11-27: a clear is known by its `Disconnected` (one fade late), a fade end by another clip connected.
 - [ ] Pure part (`seq-core`): a take (clicks per layer, snapped) applied to a sequence (write out short lanes,
       overwrite, new lanes, slot columns, stop position); tested.
 - [ ] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
