@@ -1,6 +1,8 @@
 <script lang="ts">
   import { app, formatLength, layerLabel, isSlotLane, whenWarning } from '../lib/app.svelte';
-  import type { Choice, ClipView, LayerView, StepResolution, When } from '../lib/types';
+  import type { Choice, ClipView, LayerView, StepResolution, Transition, When } from '../lib/types';
+  import { fadeLength, fadeWarnings, stepFade } from '../lib/fade';
+  import FadePicker from './FadePicker.svelte';
 
   let deck = $derived(app.viewDeck);
   let view = $derived(app.selected);
@@ -116,6 +118,12 @@
     }
   }
 
+  // ---- transition (SPEC §7.7, §9.4) ----
+
+  function setTransition(transition: Transition | null) {
+    if (view && sel) app.edit({ op: 'set_step_transition', seq: view.sequence.id, lane: sel.lane, index: sel.index, transition });
+  }
+
   function mark(v: boolean | null | undefined) {
     return v == null ? '—' : v ? '✓' : '✕';
   }
@@ -125,6 +133,26 @@
   {#if view && sel && step}
     {@const when = step.when}
     {@const warn = whenWarning(when, view.sequence.repeat)}
+    {@const lane = view.sequence.lanes[sel.lane]}
+    {@const layer = app.laneLayers.find((l) => l.name === lane.layer)}
+    {@const fade = stepFade(lane, step)}
+    {@const fadeWarns = fade ? fadeWarnings(fade.t, layer, clip, app.runtime?.clock.bpm ?? 120) : []}
+    {@const anyFade = !!lane.transition || lane.steps.some((s) => s.transition)}
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <span class="meta">Transition · how the clip comes in</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="pill-select" style="max-width:none" aria-label="Transition" value={step.transition ? 'own' : 'inherit'}
+          onchange={(e) => setTransition((e.currentTarget as HTMLSelectElement).value === 'own' ? { ...(lane.transition ?? { length: 4 }) } : null)}>
+          <option value="inherit">{lane.transition ? `lane default (${fadeLength(lane.transition.length)})` : anyFade ? "the layer's original" : "Resolume's own"}</option>
+          <option value="own">its own</option>
+        </select>
+        {#if step.transition}
+          <FadePicker transition={step.transition} options={layer?.blend_options ?? []} onchange={setTransition} />
+        {/if}
+      </div>
+      {#each fadeWarns as w (w)}<span style="font-size:11px;color:var(--err-text)">⚠ {w}</span>{/each}
+    </div>
+
     <div style="display:flex;flex-direction:column;gap:4px">
       <span class="meta">Play on</span>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">

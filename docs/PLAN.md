@@ -309,8 +309,10 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       takeover, user change, crash restore.
       Done 2026-11-27 (`engine/fades.rs`; the restore goes before the clear, decided 2026-11-27). Deck change
       and finish are covered by the scheduler tests and the finish test; no engine test of its own for a deck change.
-- [ ] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
+- [x] UI: new token `--fade` (tokens.css, themes.ts, mockup); fade wedge, labels, own vs. inherited, cut, `›`,
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
+      Done 2026-11-27 (`lib/fade.ts`, `FadePicker.svelte`; the lane chip edits in a small popover so the lane
+      header keeps its height). Warnings use the clock's BPM, 120 without a clock.
 - [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
 
 ## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)

@@ -211,3 +211,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 .lane-tools { display: flex; gap: 0; flex: 0 0 auto; }
 .lane-tools .x { font-size: 10px; padding: 2px 3px; }
+
+/* Transitions (SPEC §7.7, §9.3): the fade wedge on the grid scale, own solid, inherited dashed. */
+.step .fade-wedge { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.step .fade-wedge polygon { fill: var(--fade); fill-opacity: .28; }
+.step .fade-wedge line { stroke: var(--fade); stroke-width: 1.5; }
+.step .fade-wedge.inherited polygon { fill-opacity: .14; }
+.step .fade-wedge.inherited line { stroke-dasharray: 4 3; }
+.step .fade-cut { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--fade); pointer-events: none; }
+.step .fade-more { position: absolute; right: 9px; bottom: 3px; font: 11px var(--mono); color: var(--fade); pointer-events: none; }
+.step .name, .step .step-foot { position: relative; }
+.step .fade-label { color: var(--fade); }
+.step .fade-label.bad { color: var(--err-text); }
+.fade-chip { font: 10px var(--mono); color: var(--fade); background: none; border: 1px solid var(--fade); border-radius: var(--radius-pill); padding: 1px 6px; cursor: pointer; white-space: nowrap; }
+.fade-chip.none { color: var(--faint); border: 1px dashed var(--line-strong); }
+.fade-chip.none:hover { color: var(--text-2); border-color: var(--fade); }
+.fade-pick { color: var(--fade); }
+.fade-menu { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 220px; }

@@ -121,6 +121,8 @@ export interface ClipView {
   name: string;
   file: string | null;
   thumb: string | null;
+  /** Follows its layer's transition; false: it uses its own (SPEC §7.7). */
+  layer_determined: boolean;
 }
 
 export interface LayerView {
@@ -130,6 +132,8 @@ export interface LayerView {
   ambiguous: boolean;
   is_seq_layer: boolean;
   clips: ClipView[];
+  /** The layer's transition blend modes; empty if unknown (SPEC §7.7). */
+  blend_options: string[];
 }
 
 export interface DeckView {

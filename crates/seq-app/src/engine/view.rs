@@ -72,6 +72,8 @@ pub struct LayerView {
     pub ambiguous: bool,
     pub is_seq_layer: bool,
     pub clips: Vec<ClipView>,
+    /// The layer's transition blend modes (SPEC §7.7); empty if unknown.
+    pub blend_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -82,6 +84,8 @@ pub struct ClipView {
     pub file: Option<String>,
     /// Change marker for the thumbnail URL (`/thumbs/clip/{id}.png?v=...`).
     pub thumb: Option<String>,
+    /// Follows its layer's transition; `false`: it uses its own (SPEC §7.7 warning).
+    pub layer_determined: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -253,8 +257,14 @@ pub fn layer_views(index: &CompositionIndex, seq_layer: &str) -> Vec<LayerView> 
                     name: c.name.clone(),
                     file: c.file_name().map(str::to_owned),
                     thumb: (!c.thumbnail.is_default).then(|| thumb_version(c)),
+                    layer_determined: c.layer_determined,
                 })
                 .collect(),
+            blend_options: l
+                .transition
+                .as_ref()
+                .map(|t| t.blend_options.clone())
+                .unwrap_or_default(),
         })
         .collect()
 }

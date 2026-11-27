@@ -1,6 +1,8 @@
 <script lang="ts">
   import { app, SIXTEENTHS_PER_BAR, SNAP_SIXTEENTHS, TICKS_PER_SIXTEENTH, formatLength, layerLabel, isRest, isSlotLane, whenLabel, whenWarning } from '../lib/app.svelte';
-  import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution } from '../lib/types';
+  import type { DeckView, SequenceView, Step, LaneEnd, LaneMode, StepResolution, Transition } from '../lib/types';
+  import { fadeLabel, fadeLength, fadeWarnings, stepFade } from '../lib/fade';
+  import FadePicker from './FadePicker.svelte';
 
   let { view, deck }: { view: SequenceView; deck: DeckView } = $props();
 
@@ -214,6 +216,15 @@
     if ((seq.lanes[lane].mode ?? 'clip') !== mode) app.edit({ op: 'set_lane_mode', seq: seq.id, lane, mode });
   }
 
+  function setLaneFade(lane: number, transition: Transition | null) {
+    app.edit({ op: 'set_lane_transition', seq: seq.id, lane, transition });
+  }
+
+  let bpm = $derived(app.runtime?.clock.bpm ?? 120);
+  let fadeMenu = $state<{ lane: number; x: number; y: number } | null>(null);
+  /** Below this block width the fade label is just `↗ 1` (SPEC §9.3). */
+  const NARROW_PX = 120;
+
   const ends: { value: LaneEnd; label: string }[] = [
     { value: 'loop_to_end', label: 'Loop to end' },
     { value: 'hold', label: 'Hold' },
@@ -257,6 +268,14 @@
               <button aria-pressed={!isSlotLane(lane)} onclick={() => setMode(li, 'clip')}>Clip</button>
               <button aria-pressed={isSlotLane(lane)} onclick={() => setMode(li, 'slot')}>Slot</button>
             </div>
+            <!-- The lane's default transition (SPEC §7.7, §9.3): a chip, click to edit. -->
+            <button class="fade-chip" class:none={!lane.transition}
+              title={lane.transition ? 'Lane default transition: steps without their own fade in like this. Click to edit'
+                : lane.steps.some((s) => s.transition) ? "Steps without their own transition get the layer's original. Click to set a lane default"
+                : "The app doesn't touch this layer's transition. Click to set a lane default"}
+              onclick={(e) => { e.stopPropagation(); fadeMenu = fadeMenu?.lane === li ? null : { lane: li, x: e.clientX, y: e.clientY }; }}>
+              {lane.transition ? (lane.transition.length === 0 ? 'cut' : `↗ ${fadeLength(lane.transition.length)}`) : lane.steps.some((s) => s.transition) ? 'original' : "Resolume's own"}
+            </button>
             <select class="pill-select" value={lane.end}
               onchange={(e) => app.edit({ op: 'set_lane_end', seq: seq.id, lane: li, end: (e.currentTarget as HTMLSelectElement).value as LaneEnd })}>
               {#each ends as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
@@ -308,6 +327,9 @@
             {@const notConfirmed = rl?.not_confirmed.includes(si)}
             {@const selected = app.selectedStep?.lane === li && app.selectedStep?.index === si}
             {@const dragged = drag?.active && drag.lane === li && drag.from === si}
+            {@const fade = stepFade(lane, step)}
+            {@const blockPx = len(li, si, step) * zoom}
+            {@const fadeWarns = fade ? fadeWarnings(fade.t, app.laneLayers.find((l) => l.name === lane.layer), clip, bpm) : []}
             <div class="slot" role="listitem" style:width={`${len(li, si, step) * zoom}px`}
               class:drop-before={(dropAt?.lane === li && dropAt.index === si) || (drag?.active && drag.lane === li && drag.to === si && drag.from !== si && (drag.alt || drag.to < drag.from))}
               class:drop-after={drag?.active && !drag.alt && drag.lane === li && drag.to === si && drag.to > drag.from}>
@@ -330,10 +352,25 @@
                 onpointerup={() => stepUp(li, si)}
                 onpointercancel={() => (drag = null)}
               >
+                {#if fade && !rest && fade.t.length === 0 && fade.own}
+                  <div class="fade-cut" aria-hidden="true"></div>
+                {:else if fade && !rest && fade.t.length > 0}
+                  {@const fadePx = fade.t.length * zoom}
+                  {@const x = Math.min(fadePx, blockPx)}
+                  {@const y = 100 - (100 * x) / fadePx}
+                  <svg class="fade-wedge" class:inherited={!fade.own} viewBox={`0 0 ${blockPx} 100`} preserveAspectRatio="none" aria-hidden="true">
+                    <polygon points={`0,100 ${x},${y} ${x},100`} />
+                    <line x1="0" y1="100" x2={x} y2={y} vector-effect="non-scaling-stroke" />
+                  </svg>
+                  {#if fadePx > blockPx}<span class="fade-more" title="The fade still runs when the next step starts">›</span>{/if}
+                {/if}
                 <div class="name">{stepLabel(step, r)}</div>
                 <!-- Badges share the length row (the length gives way first), so they never cover the clip name. -->
                 <div class="step-foot">
-                  <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}</div>
+                  <div class="len">{unresolved ? 'unresolved · ' : ''}{formatLength(len(li, si, step))}{#if fade && !rest && (fade.t.length > 0 || fade.own)}
+                      {' · '}<span class="fade-label" class:bad={fadeWarns.length > 0}
+                        title={fadeWarns.length ? fadeWarns.join(' · ') :`${fade.own ? 'Its own transition' : 'The lane default'}: fades in over ${fadeLength(fade.t.length)}${fade.t.blend ? ` with ${fade.t.blend}` : ''}`}
+                      >{fadeWarns.length ? '⚠ ' : ''}{fadeLabel(fade.t, blockPx < NARROW_PX)}</span>{/if}</div>
                   {#if step.when || step.choices?.length}
                     {@const warnWhen = whenWarning(step.when, seq.repeat)}
                     {@const n = 1 + (step.choices?.length ?? 0)}
@@ -392,7 +429,24 @@
   </div>
 </div>
 
-<svelte:window onclick={() => (rulerMenu = null)} />
+<svelte:window onclick={() => { rulerMenu = null; fadeMenu = null; }} />
+{#if fadeMenu && seq.lanes[fadeMenu.lane]}
+  {@const fl = fadeMenu.lane}
+  {@const lt = seq.lanes[fl].transition}
+  <div class="menu fade-menu" style:left={`${fadeMenu.x}px`} style:top={`${fadeMenu.y + 8}px`} role="dialog" aria-label="Lane default transition"
+    tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (fadeMenu = null)}>
+    <div class="meta">Lane default · steps without their own transition</div>
+    {#if lt}
+      <div style="display:flex;gap:4px;align-items:center">
+        <FadePicker transition={lt} options={app.laneLayers.find((l) => l.name === seq.lanes[fl].layer)?.blend_options ?? []}
+          onchange={(t) => setLaneFade(fl, t)} />
+      </div>
+      <button role="menuitem" class="danger" onclick={() => { setLaneFade(fl, null); fadeMenu = null; }}>No lane default</button>
+    {:else}
+      <button role="menuitem" onclick={() => setLaneFade(fl, { length: 4 })}>Set a lane default (↗ 1 beat)</button>
+    {/if}
+  </div>
+{/if}
 {#if rulerMenu}
   {@const m = rulerMenu}
   <div class="menu" style:left={`${m.x}px`} style:top={`${m.y}px`} role="menu">
