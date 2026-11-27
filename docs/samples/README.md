@@ -39,3 +39,7 @@ Sessions:
   layer and a column without a body, rename a layer and a clip, set opacity by id, remove both again.
 - `m17-01-tempo-subscribe.jsonl` … `m17-04-resync.jsonl`: the tempo controller (notes §17): subscribe by
   path (fails) and by id, then tempo changes, taps, Pause/Stop/Play, Resync made by hand in Resolume.
+- `m21-01-set.jsonl`, `m21-s1.jsonl` … `m21-s11.jsonl`, `m21-deck3.jsonl`, `m21-deck4.jsonl`: layer transitions
+  (notes §19): set duration and blend mode by id and by path, then the scenes of
+  `tools/resolume-probe/scripts/m21_transition_scenes.sh` (set ahead of a connect, change during a fade, clear,
+  `layer_determined`), and the value across a deck switch.

@@ -458,11 +458,13 @@ optional default per lane. Resolume's **layer transition** is the means: the app
 the step triggers. Clip-level transitions in the composition are never changed. Nothing is cleaned up by hand:
 when the sequence lets go of the layer, the layer gets back the transition it had before.
 
-*Resolume side (to be confirmed by the M21 probe, notes §19; until then nothing here is built):* each layer has
-`transition.duration` (ParamRange 0–10 s) and `transition.blend_mode` (ParamChoice), each with a parameter id; each
-clip has the same plus `layer_determined` (seen in `docs/samples/composition.json`). Open: setting them over the
-WebSocket, their units, whether a set that arrives just before an OSC `connect` already counts, whether a change
-disturbs a fade that is still running, whether a layer clear fades, and what `layer_determined` covers.
+*Resolume side (probed 2026-11-27, notes §19):* each layer has `transition.duration` (ParamRange, seconds, 0–10,
+clamped) and `transition.blend_mode` (ParamChoice, set by option name), each with a parameter id; they are set over
+the WebSocket **by id only**, and every change costs a full composition push. Ids and values belong to the layer and
+survive deck switches. A set sent in the same instant as the OSC `connect` (WebSocket first) already counts. A
+change of duration **during a running fade** rescales the rest of it (0 ends it at once). A layer clear fades too.
+While a fade runs, both clips of the layer are `Connected`; the outgoing one reports `Disconnected` when it ends. A
+clip with `layer_determined: false` uses its own transition and ignores the layer's.
 
 **Which transition a step gets**
 1. its own `transition`, else
@@ -472,13 +474,18 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
 4. otherwise **Resolume's own**: the app never touches this layer's transition.
 
 **Sending**
-- The value goes out **ahead of the step**, separately from the trigger: at the latest one sixteenth before the
-  step starts, and only if it differs from what the layer has. For the first step of a run it goes out with the
-  start, before the first trigger. The trigger still goes out exactly on its tick (§3). The scheduler (pure)
-  decides the next step's pass condition and pick at that moment, so the transition matches the clip that will
-  play; a step that doesn't play sets nothing. (The exact lead time follows from the probe.)
+- The value goes out **ahead of the step**, separately from the trigger, and only if it differs from what the
+  layer has. It goes out one sixteenth before the step starts, unless the layer is still fading then (the fade
+  of the step before): a new duration would rescale that fade, so the value waits until the fade has ended. If
+  the fade lasts until the step starts, the value goes out with the trigger, the WebSocket set just before the OSC
+  message. For the first step of a run it goes out with the start, before the first trigger. The trigger still
+  goes out exactly on its tick (§3). The scheduler (pure) decides the next step's pass condition and pick at that
+  moment, so the transition matches the clip that will play; a step that doesn't play sets nothing.
 - The length is converted to seconds at the current tempo and sent again (throttled) when the tempo changes while
-  the value is set. Resolume's maximum is 10 s: a longer fade is capped and the step shows a warning.
+  the value is set; a fade that is running then is rescaled with it, so it still ends on its beat. Resolume's
+  maximum is 10 s: a longer fade is capped and the step shows a warning.
+- While a fade runs, the outgoing clip's `Disconnected` at its end is no user action, and triggering the outgoing
+  clip again counts as confirmed at once (it never disconnected, §7.5).
 - `blend` is checked against the layer's option list from the composition. Unknown name: only the length is set,
   warning on the step and in the pre-show check.
 - Clips whose own transition doesn't follow the layer (`layer_determined: false`) ignore the layer value: warning
@@ -492,12 +499,16 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
   layer.
 - A layer handed from one sequence to another (§7.3) keeps the first original, not the value in between.
 - When no running lane holds the layer any more (stop, finish, Stop all, a deck change, or a takeover by a lane
-  without transitions), the original is set back. A restore after a layer clear is sent after the clear.
-- **The user wins:** if the layer's transition changes in Resolume and the change isn't one the app sent, the
+  without transitions), the original is set back. **The clear uses the original** (decided 2026-11-27): a clear
+  fades with the layer's transition, so the original goes back first and the clear follows in the same instant;
+  stopping looks as it did before transitions (usually a cut). A lane end *Clear* does the same.
+- **The user wins:** if the layer's transition changes in Resolume (a `parameter_update` with a value other than
+  the one the app sent last; updates carry no origin), the
   original is dropped and nothing is restored on that layer for this run: the user's value stays. The lane keeps
   setting its steps' transitions (as with a manual override, the log says so).
 - **Crash or quit while holding a layer:** originals are also written to `<data-dir>/transitions-pending.json`
-  (composition name, layer id, original values). On the next connection to that composition the app restores them
+  (composition name, layer id, original values; param ids are looked up again from the composition, they may
+  change when it is reloaded). On the next connection to that composition the app restores them
   and deletes the file. Entries whose layer is gone are dropped with a log line.
 - The log shows `transition on BG restored (0.0 s, Alpha)`.
 

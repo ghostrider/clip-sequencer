@@ -294,10 +294,11 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
 - [x] Docs: manual (Playing live), shortcuts, changelog.
 
 ## M21 — Transitions per step (SPEC §7.7; A)  ⟵ next
-- [ ] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
+- [x] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
       `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
       covers; do the param ids survive a deck switch / reload. Adjust SPEC §7.7 to the findings.
+      Done 2026-11-27 (notes §19, Arena 7.29.0; reload not probed). Decided: the stop's clear uses the original.
 - [ ] Scheduler (pure): the transition each step gets (rules 1–4), decided one sixteenth ahead together with the
       condition and pick; "original" bookkeeping per layer (take over, hand over, release, user change). Tests.
 - [ ] Engine + `resolume-client`: subscribe layer transition params by id, send ahead, tempo-change resend
