@@ -623,8 +623,9 @@ Single screen, everything controlled from here (no separate live view).
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted`; yielded has a
-    "Resume lane" action), **M** and **S** buttons while the sequence runs (§7.8), delete lane.
+    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted` / `rec`; the yielded pill
+    is the "Resume lane" action), **M** and **S** buttons while the sequence runs in place of the move buttons
+    (§7.8; the lane head keeps its height), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),

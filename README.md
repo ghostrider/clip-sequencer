@@ -18,6 +18,8 @@ getting started and for building from source.*
 - Lanes per Resolume layer with clips and rests on a 1/8 or 1/16-bar grid; repeat once, ×N or endlessly.
 - Slot lanes: a lane can play whatever clip sits in a column of its layer, so clips can be swapped in Resolume
   while the sequence runs.
+- Record from Resolume: arm a sequence and click clips in time; each pass is written to the grid and plays back
+  the next pass, so a pattern can be built up pass by pass (fades included).
 - Transitions per step (or a lane default): a fade in beats with a blend mode, set on the layer just before the
   step and put back when the sequence stops.
 - Locked to an incoming MIDI clock, or without MIDI to Resolume's own tempo (Resync lines it up with Resolume's

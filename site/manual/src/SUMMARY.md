@@ -16,6 +16,7 @@
 - [Slot lanes](slot-lanes.md)
 - [Transitions](transitions.md)
 - [Playing live](playing-live.md)
+- [Recording from Resolume](recording.md)
 - [Files and data](files.md)
 - [Thumbnails](thumbnails.md)
 - [Installing the FFGL plugin](ffgl-plugin.md)

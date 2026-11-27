@@ -25,6 +25,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   The app sets the layer's transition in Resolume just before the step and gives the layer its own back when the
   sequence lets go of it (also after a crash, at the next start). The editor draws the fade on each step and
   warns about fades over Resolume's 10 s, unknown blend modes and clips with their own transition.
+- **Record from Resolume:** ⏺ arms a sequence; started, it loops and records the clips you click (and layers you
+  clear) in Resolume, snapped to sixteenths. Each pass is written at its end as one undo step and plays back in the
+  next pass, with the transition Resolume used for each click. Clicks on layers without a lane add one.
 - **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
   (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
   program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up
@@ -34,6 +37,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **New logo**: in the top bar, on the splash screen, as the app and window icon, in the About dialog and on the
   website, replacing the "§ SEQ" mark. The Unbounded font (used only by the old mark) is no longer bundled.
+- While a sequence runs, the lane head shows **M** and **S** in place of the move buttons, and the yielded pill
+  itself resumes the lane (no separate *Resume lane* button), so the lane head keeps its height.
 - **Starting a running sequence** works from either side: ▶ in the app restarts it and keeps its link to the `§`
   clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
   at a time").

@@ -41,8 +41,8 @@ With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
 - **Steps get a red top edge ("not confirmed"):** Resolume didn't report the clip as playing within a quarter
   second. Usually Resolume was busy or the connection dropped; check the WS chip and the log.
 - **Clips start late or on the next beat:** Beat Snap is on. Set **Composition → Clip Beat Snap: None**.
-- **A lane stopped triggering:** it's **yielded** because a clip was clicked on its layer by hand. Click
-  **Resume lane**.
+- **A lane stopped triggering:** it's **yielded** because a clip was clicked on its layer by hand. Click its
+  **yielded ↺** pill (Resume lane).
 
 ## Starting from Resolume doesn't work
 
