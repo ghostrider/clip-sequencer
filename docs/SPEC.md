@@ -556,6 +556,15 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   Manual override (§7.3) doesn't apply to the recorded sequence while it records.
 - **New layers:** a click on a layer without a lane in the sequence adds a lane for it (Clip mode, *Loop to end*,
   a rest up to the first click). Layers whose name is not unique can't get a lane: notice, not recorded.
+- **Transitions** (§7.7, requested 2026-11-27): each recorded step gets the transition Resolume used for that
+  click: the layer's (`transition.duration` / `blend_mode` at that moment, as the app follows it) for a clip that
+  is *Layer Determined*, else the clip's own. The duration becomes sixteenths at the current tempo (nearest
+  sixteenth, at most 256), the blend mode its name. A cut (0 s) is recorded as `{ "length": 0 }` only if another
+  step of the lane has a transition; otherwise the step gets none, so a lane played without fades stays a lane
+  without transitions (§7.7 rule 4). A recorded rest (layer clear) gets no transition. From the first click on a
+  layer the app no longer sets that layer's transition in this pass (the lane yields to you) and gives it back
+  its original, so later clicks use the layer's own setting or what you set in Resolume while recording; the
+  first click uses whatever the layer had at that instant.
 - **Slot lanes** (§4.5) record the **column** that was clicked; Clip lanes record the clip (by id, name and file,
   as a drop from the clip browser does).
 - **Stop** while recording writes the take so far: the lanes clicked in that pass are overwritten from the first
