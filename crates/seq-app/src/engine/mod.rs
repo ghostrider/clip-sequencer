@@ -17,9 +17,9 @@ use seq_core::edit::EditOp;
 use seq_core::index::{ClipInfo, ClipState, CompositionIndex, LayerLookup};
 use seq_core::resolve::{refresh_ids, resolve_sequence, SequenceResolution};
 use seq_core::scheduler::{
-    bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode,
+    bar_beat, Action, EndReason, LaneState, Origin, RunSpec, Scheduler, StopMode, Wait,
 };
-use seq_core::{SeqFile, Sequence};
+use seq_core::{SeqFile, Sequence, Start};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
@@ -28,11 +28,43 @@ use crate::settings::ClockSourceKind;
 use crate::storage::{Storage, StorageError};
 use view::*;
 
+/// Where a cue starts (SPEC §3.3). JSON: `"at": "start_mode" | "bars_8" | "bars_16"`, or
+/// `"at": "end_of_pass", "of": <running sequence id>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "at", rename_all = "snake_case")]
+pub enum CuePoint {
+    StartMode,
+    EndOfPass {
+        of: Uuid,
+    },
+    #[serde(rename = "bars_8")]
+    Bars8,
+    #[serde(rename = "bars_16")]
+    Bars16,
+}
+
 /// Commands from the UI (and the CLI).
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
     Start {
         seq: Uuid,
+    },
+    /// Cue a sequence of the live deck (SPEC §3.3).
+    Cue {
+        seq: Uuid,
+        at: CuePoint,
+    },
+    CancelCue,
+    /// Mute or solo a lane of a running sequence (SPEC §7.8).
+    SetLaneMute {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
+    SetLaneSolo {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
     },
     /// Start a sequence of the live deck by name (CLI `--start`). Waits until Resolume and the
     /// sequence file are loaded.
@@ -207,6 +239,9 @@ pub struct Engine {
     model_error: Option<String>,
     /// Snapshots of running sequences (for "edited · applies at next start") and their deck.
     snapshots: HashMap<Uuid, (String, Sequence)>,
+    /// Snapshots of starts waiting for their boundary (SPEC §3.2); moved to `snapshots` when the
+    /// scheduler reports them started.
+    queued: HashMap<Uuid, (String, Sequence)>,
     undo: Vec<SeqFile>,
     redo: Vec<SeqFile>,
 
@@ -240,10 +275,14 @@ pub struct Engine {
     lut_effects: Vec<LutEffect>,
     /// True after a resync: the tick grid is in phase with Resolume's beat.
     phase_synced: bool,
+    /// The scheduler's bar phase comes from a MIDI Start or a Resync, not the first tick (SPEC §3.2).
+    bar_synced: bool,
     last_resync: Option<Instant>,
     ws_connected: bool,
     rest_ok: bool,
     osc_ok: bool,
+    /// Triggers timed out in a row while Resolume could have confirmed them; reset by any confirmation.
+    unanswered_triggers: u32,
     last_osc: Option<OscView>,
     last_confirm: Option<String>,
     confirmations: u64,
@@ -266,6 +305,9 @@ const RESUBSCRIBE_AFTER: Duration = Duration::from_secs(1);
 /// How long a timed-out trigger's late `connected` still counts as ours (seen live: ~700 ms while
 /// Resolume was busy).
 const LATE_LIMIT: Duration = Duration::from_secs(5);
+/// Triggers in a row that time out, with the WebSocket up and subscribed, before the OSC indicator turns red:
+/// OSC is UDP, so a send that works says nothing about Resolume hearing it (OSC input off, wrong port).
+const OSC_UNANSWERED_AFTER: u32 = 3;
 
 impl Engine {
     pub fn new(
@@ -300,6 +342,7 @@ impl Engine {
             model: None,
             model_error: None,
             snapshots: HashMap::new(),
+            queued: HashMap::new(),
             undo: Vec::new(),
             redo: Vec::new(),
             last_layer_trigger: HashMap::new(),
@@ -320,10 +363,12 @@ impl Engine {
             tempo_ctl: None,
             lut_effects: Vec::new(),
             phase_synced: false,
+            bar_synced: false,
             last_resync: None,
             ws_connected: false,
             rest_ok: false,
             osc_ok: true,
+            unanswered_triggers: 0,
             last_osc: None,
             last_confirm: None,
             confirmations: 0,
@@ -381,11 +426,23 @@ impl Engine {
     /// Resync (SPEC §3.1): `at` is beat 1; every running sequence jumps to its start.
     fn on_resync(&mut self, at: Instant) {
         self.phase_synced = true;
+        self.bar_synced = true;
         let running = self.scheduler.running().count();
         log::info!("resync from Resolume: {running} running sequence(s) back to bar 1");
         self.request_upcoming_slots(at);
         let actions = self.scheduler.rewind_all();
         self.execute(actions);
+        // This moment is bar 0 (SPEC §3.2): waiting starts begin together with the rewind.
+        let actions = self.scheduler.phase_reset_now();
+        self.execute(actions);
+        self.runtime_dirty = true;
+    }
+
+    /// The bar phase is unknown again (clock (re)connected, source switched, Resolume lost): it
+    /// counts from the next tick until a MIDI Start or Resync (SPEC §3.2).
+    fn bar_phase_unknown(&mut self) {
+        self.scheduler.phase_reset_next_tick();
+        self.bar_synced = false;
         self.runtime_dirty = true;
     }
 
@@ -469,12 +526,22 @@ impl Engine {
                     self.runtime_dirty = true;
                 }
             }
+            ClockEvent::Msg {
+                msg: ClockMsg::Start,
+                ..
+            } => {
+                // Sets the bar phase only; never restarts running sequences (SPEC §3).
+                log::info!("MIDI Start: the next tick is bar 1 for quantized starts");
+                self.scheduler.phase_reset_next_tick();
+                self.bar_synced = true;
+                self.runtime_dirty = true;
+            }
             ClockEvent::Msg { msg, .. } => log::info!("MIDI {msg:?} (ignored by sequences)"),
             ClockEvent::Resync { at } => self.on_resync(at),
             ClockEvent::Connected { port } => {
                 self.clock_connected = true;
                 self.clock_port = Some(port);
-                self.runtime_dirty = true;
+                self.bar_phase_unknown();
             }
             ClockEvent::Disconnected { reason } => {
                 if self.clock_connected {
@@ -502,8 +569,13 @@ impl Engine {
                     self.notice("Resolume WebSocket disconnected");
                 }
                 self.ws_connected = false;
+                // Without the WebSocket nothing can be confirmed: the OSC verdict starts over.
+                self.unanswered_triggers = 0;
                 // Resolume tempo clock: no ticks without Resolume, and its beat is unknown after.
                 self.phase_synced = false;
+                if self.follows_resolume() {
+                    self.bar_phase_unknown();
+                }
                 self.feed_resolume_state();
                 self.runtime_dirty = true;
             }
@@ -890,7 +962,17 @@ impl Engine {
                 confirmed.push((p.seq, p.lane, p.step, latency));
             }
         }
+        if !confirmed.is_empty() && self.unanswered_triggers > 0 {
+            if self.osc_unanswered() {
+                self.notice("Resolume reacts to OSC again");
+            }
+            self.unanswered_triggers = 0;
+        }
         for (seq, lane, step, latency) in &confirmed {
+            log::debug!(
+                "trigger of clip {clip_id} (lane {lane}, step {step}) confirmed after {:.1} ms",
+                latency.as_secs_f64() * 1000.0
+            );
             if let Some(v) = self.not_confirmed.get_mut(&(*seq, *lane)) {
                 v.retain(|s| s != step);
             }
@@ -928,6 +1010,19 @@ impl Engine {
                             .map(|s| s.id)
                     });
                     match found {
+                        // Waiting for its boundary: the § clip takes over the waiting start
+                        // instead of making a second one (SPEC §7.1).
+                        Some(seq) if self.scheduler.is_pending(seq) => {
+                            self.scheduler
+                                .link_pending(seq, Origin::SeqClip { clip_id });
+                            self.runtime_dirty = true;
+                        }
+                        // Already running (started from the app): the § clip adopts the run, no
+                        // restart (SPEC §7.1).
+                        Some(seq) if self.scheduler.adopt(seq, Origin::SeqClip { clip_id }) => {
+                            log::info!("§ clip {name:?} connected: linked to the running sequence");
+                            self.runtime_dirty = true;
+                        }
                         Some(seq) => self.start_now(seq, Origin::SeqClip { clip_id }),
                         None => {
                             self.notice(format!("§ clip {name:?} matches no sequence in this deck"))
@@ -974,12 +1069,20 @@ impl Engine {
     }
 
     fn on_clip_disconnected(&mut self, clip_id: u64) {
+        let origin = Origin::SeqClip { clip_id };
         let runs: Vec<Uuid> = self
             .scheduler
             .status()
             .into_iter()
-            .filter(|r| r.origin == Origin::SeqClip { clip_id })
+            .filter(|r| r.origin == origin)
             .map(|r| r.seq)
+            .chain(
+                self.scheduler
+                    .pending()
+                    .into_iter()
+                    .filter(|p| p.origin == origin)
+                    .map(|p| p.seq),
+            )
             .collect();
         for seq in runs {
             let acts = self.scheduler.stop(seq, StopMode::AfterLastPass);
@@ -992,6 +1095,19 @@ impl Engine {
     pub fn on_command(&mut self, cmd: EngineCommand) {
         match cmd {
             EngineCommand::Start { seq } => self.start(seq),
+            EngineCommand::Cue { seq, at } => self.cue(seq, at),
+            EngineCommand::CancelCue => {
+                let acts = self.scheduler.cancel_cue();
+                self.execute(acts);
+            }
+            EngineCommand::SetLaneMute { seq, lane, on } => {
+                let acts = self.scheduler.set_mute(seq, lane, on);
+                self.execute(acts);
+            }
+            EngineCommand::SetLaneSolo { seq, lane, on } => {
+                let acts = self.scheduler.set_solo(seq, lane, on);
+                self.execute(acts);
+            }
             EngineCommand::StartByName { name } => {
                 self.deferred_start = Some(name);
                 self.try_deferred_start();
@@ -1047,6 +1163,7 @@ impl Engine {
                     self.clock_connected = false;
                     self.clock_running = false;
                     self.phase_synced = false;
+                    self.bar_phase_unknown();
                     self.tempo = TempoEstimator::new();
                     self.feed_resolume_state();
                     self.notice(match source {
@@ -1214,24 +1331,69 @@ impl Engine {
         self.runtime_dirty = true;
     }
 
-    /// Resolves and starts a sequence of the live deck.
+    /// Resolves and starts a sequence of the live deck by its start mode (SPEC §3.2). Starting a
+    /// sequence that already waits for its boundary starts it at once.
     fn start_now(&mut self, seq: Uuid, origin: Origin) {
-        let Some(index) = self.index.clone() else {
+        let at_once = self.scheduler.is_pending(seq);
+        let Some((live, sequence, spec)) = self.run_spec(seq) else {
             return;
         };
-        let Some(live) = index.live_deck.clone() else {
+        let mode = if at_once {
+            Start::Immediate
+        } else {
+            sequence.start
+        };
+        let name = sequence.name.clone();
+        self.queued.insert(seq, (live, sequence));
+        match self.scheduler.start(spec, origin, mode) {
+            Ok(acts) => self.execute(acts),
+            Err(e) => {
+                self.queued.remove(&seq);
+                self.notice(format!("cannot start {name:?}: {e}"));
+            }
+        }
+        self.runtime_dirty = true;
+    }
+
+    /// Cues a sequence of the live deck (SPEC §3.3).
+    fn cue(&mut self, seq: Uuid, at: CuePoint) {
+        let Some((live, sequence, spec)) = self.run_spec(seq) else {
             return;
         };
-        let Some(model) = self.model.as_mut() else {
-            return;
+        let wait = match at {
+            CuePoint::StartMode => Wait::Mode(sequence.start),
+            CuePoint::Bars8 => Wait::Mode(Start::Bar { bars: 8 }),
+            CuePoint::Bars16 => Wait::Mode(Start::Bar { bars: 16 }),
+            CuePoint::EndOfPass { of } => Wait::EndOfPass(of),
         };
+        let name = sequence.name.clone();
+        self.queued.insert(seq, (live, sequence));
+        match self.scheduler.cue(spec, Origin::Ui, wait) {
+            Ok(acts) => {
+                log::info!("cued {name:?} ({at:?})");
+                self.execute(acts);
+            }
+            Err(e) => {
+                self.queued.remove(&seq);
+                self.notice(format!("cannot cue {name:?}: {e}"));
+            }
+        }
+        self.runtime_dirty = true;
+    }
+
+    /// The snapshot and run spec of a sequence of the live deck, resolved now (ids refreshed and
+    /// saved). `None` with a notice when it is not in the live deck.
+    fn run_spec(&mut self, seq: Uuid) -> Option<(String, Sequence, RunSpec)> {
+        let index = self.index.clone()?;
+        let live = index.live_deck.clone()?;
+        let model = self.model.as_mut()?;
         let Some(sequence) = model
             .decks
             .get_mut(&live)
             .and_then(|d| d.sequences.iter_mut().find(|s| s.id == seq))
         else {
             self.notice("sequence is not in the live deck");
-            return;
+            return None;
         };
         let resolution = resolve_sequence(sequence, &index);
         let refreshed = refresh_ids(sequence, &resolution) > 0;
@@ -1244,20 +1406,17 @@ impl Engine {
             self.structure_dirty = true;
         }
         let mut spec = RunSpec::new(&sequence, &resolution);
+        // A fresh seed per start for `random` picks (SPEC §6); seq-core itself reads no clock.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        spec.seed = nanos ^ seq.as_u128() as u64;
         for (lane, run_lane) in sequence.lanes.iter().zip(spec.lanes.iter_mut()) {
             if lane.layer == self.cfg.seq_layer {
                 run_lane.layer_id = None; // lanes may not play on the SEQ layer
             }
         }
-        match self.scheduler.start(spec, origin) {
-            Ok(acts) => {
-                self.not_confirmed.retain(|(s, _), _| *s != seq);
-                self.snapshots.insert(seq, (live, sequence));
-                self.execute(acts);
-            }
-            Err(e) => self.notice(format!("cannot start {:?}: {e}", sequence.name)),
-        }
-        self.runtime_dirty = true;
+        Some((live, sequence, spec))
     }
 
     // ---- actions ----
@@ -1297,8 +1456,51 @@ impl Engine {
                     }
                     self.runtime_dirty = true;
                 }
-                Action::Started { .. }
-                | Action::PassStarted { .. }
+                Action::Started { seq, .. } => {
+                    if let Some(snapshot) = self.queued.remove(&seq) {
+                        self.not_confirmed.retain(|(s, _), _| *s != seq);
+                        self.snapshots.insert(seq, snapshot);
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::Pending { seq, .. } => {
+                    if let Some(p) = self.scheduler.pending().iter().find(|p| p.seq == seq) {
+                        log::info!(
+                            "{:?} starts in {} tick(s) ({:?}{})",
+                            p.name,
+                            p.wait_ticks,
+                            p.wait,
+                            if p.cue { ", cue" } else { "" }
+                        );
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::LaneMuteChanged { seq, lane, silent } => {
+                    let layer = self
+                        .snapshots
+                        .get(&seq)
+                        .and_then(|(_, s)| s.lanes.get(lane))
+                        .map(|l| l.layer.clone())
+                        .unwrap_or_default();
+                    let (bar, beat) = self
+                        .scheduler
+                        .status()
+                        .iter()
+                        .find(|r| r.seq == seq)
+                        .map(|r| bar_beat(r.pos))
+                        .unwrap_or((1, 1));
+                    if silent {
+                        log::info!("{layer} muted at {bar}.{beat}");
+                    } else {
+                        log::info!("{layer} unmuted at {bar}.{beat} (plays from its next step)");
+                    }
+                    self.runtime_dirty = true;
+                }
+                Action::PendingCancelled { seq, .. } => {
+                    self.queued.remove(&seq);
+                    self.runtime_dirty = true;
+                }
+                Action::PassStarted { .. }
                 | Action::StepStarted { .. }
                 | Action::LaneStateChanged { .. } => self.runtime_dirty = true,
             }
@@ -1442,13 +1644,21 @@ impl Engine {
     }
 
     fn osc_sent(&mut self, addr: String, took: Duration) {
-        log::debug!("OSC {addr}");
+        log::debug!(
+            "OSC → {addr} (sent in {:.1} ms)",
+            took.as_secs_f64() * 1000.0
+        );
         self.osc_ok = true;
         self.last_osc = Some(OscView {
             addr,
             send_us: took.as_micros() as u64,
         });
         self.runtime_dirty = true;
+    }
+
+    /// Several triggers in a row went unanswered although Resolume was listening on the WebSocket.
+    fn osc_unanswered(&self) -> bool {
+        self.unanswered_triggers >= OSC_UNANSWERED_AFTER
     }
 
     fn osc_error(&mut self, e: std::io::Error) {
@@ -1658,6 +1868,16 @@ impl Engine {
                 .or_default()
                 .push(step);
             self.runtime_dirty = true;
+            // Only when Resolume could have confirmed it: WebSocket up and every subscription answered.
+            if self.ws_connected && self.unacked.is_empty() {
+                self.unanswered_triggers += 1;
+                if self.unanswered_triggers == OSC_UNANSWERED_AFTER {
+                    self.notice(
+                        "Resolume doesn't react to OSC triggers: is OSC Input on in Resolume \
+                         (Preferences → OSC), on the port the sequencer sends to?",
+                    );
+                }
+            }
         }
         let bpm = self
             .clock_running
@@ -1916,6 +2136,10 @@ impl Engine {
                         .enumerate()
                         .map(|(i, l)| RunLaneView {
                             state: lane_state_name(l.state),
+                            mute: l.mute,
+                            solo: l.solo,
+                            silent: l.silent,
+                            option: l.option,
                             step: if l.state == LaneState::Inactive {
                                 None
                             } else {
@@ -1932,6 +2156,26 @@ impl Engine {
                 }
             })
             .collect();
+        let pending = self
+            .scheduler
+            .pending()
+            .into_iter()
+            .map(|p| PendingView {
+                seq: p.seq,
+                name: p.name,
+                from_seq_clip: origin_is_seq_clip(p.origin),
+                mode: match p.wait {
+                    Wait::Mode(mode) => Some(mode),
+                    Wait::EndOfPass(_) => None,
+                },
+                end_of_pass: match p.wait {
+                    Wait::EndOfPass(of) => Some(of),
+                    Wait::Mode(_) => None,
+                },
+                cue: p.cue,
+                wait_ticks: p.wait_ticks,
+            })
+            .collect();
         RuntimeState {
             clock: if self.follows_resolume() {
                 let ctl = self.tempo_ctl.as_ref().filter(|_| self.ws_connected);
@@ -1943,6 +2187,7 @@ impl Engine {
                     bpm: ctl.map(|t| t.bpm),
                     transport: ctl.map(|t| t.play.clone()),
                     synced: self.phase_synced,
+                    bar_synced: self.bar_synced,
                 }
             } else {
                 ClockView {
@@ -1953,13 +2198,16 @@ impl Engine {
                     bpm: self.clock_running.then(|| self.tempo.bpm()).flatten(),
                     transport: None,
                     synced: false,
+                    bar_synced: self.bar_synced,
                 }
             },
             ws: self.ws_connected,
             ws_synced: self.ws_connected && self.index.is_some() && self.unacked.is_empty(),
             rest: self.rest_ok,
             osc: self.osc_ok,
+            osc_unanswered: self.osc_unanswered(),
             running,
+            pending,
             switching: self.switch.as_ref().map(|s| SwitchView {
                 seq: s.seq,
                 deck: s.deck.clone(),

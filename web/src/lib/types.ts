@@ -243,6 +243,12 @@ export interface LutEffect {
 
 export interface RunLaneView {
   state: 'idle' | 'playing' | 'yielded' | 'resume_pending' | 'taken_over';
+  /** Mute and solo (SPEC §7.8); `silent`: sends nothing now (muted, or another lane is soloed). */
+  mute: boolean;
+  solo: boolean;
+  silent: boolean;
+  /** Option the current step played (0 = its own); `null` when its pass condition kept it silent. */
+  option: number | null;
   step: number | null;
   not_confirmed: number[];
 }
@@ -276,7 +282,27 @@ export interface ClockView {
   transport: string | null;
   /** Resolume source: in phase with Resolume's beat since the last Resync. */
   synced: boolean;
+  /** The bar phase for quantized starts comes from a MIDI Start or Resync (SPEC §3.2). */
+  bar_synced: boolean;
 }
+
+/** A start waiting for its beat or bar (SPEC §3.2). */
+export interface PendingView {
+  seq: Uuid;
+  name: string;
+  from_seq_clip: boolean;
+  /** The start mode boundary it waits for; `null` when a cue waits for `end_of_pass`. */
+  mode: Start | null;
+  /** A cue waiting for the end of the current pass of this running sequence (SPEC §3.3). */
+  end_of_pass: Uuid | null;
+  /** A cue: what plays stops when it starts. */
+  cue: boolean;
+  /** Ticks until it starts (24 per beat). */
+  wait_ticks: number;
+}
+
+/** Cue points (SPEC §3.3). */
+export type CueAt = { at: 'start_mode' } | { at: 'bars_8' } | { at: 'bars_16' } | { at: 'end_of_pass'; of: Uuid };
 
 export interface RuntimeState {
   clock: ClockView;
@@ -284,7 +310,11 @@ export interface RuntimeState {
   ws_synced: boolean;
   rest: boolean;
   osc: boolean;
+  /** Triggers sent but not confirmed several times in a row: Resolume's OSC input is probably off. */
+  osc_unanswered: boolean;
   running: RunView[];
+  /** Starts waiting for their boundary, in the order they were made. */
+  pending: PendingView[];
   switching: { seq: Uuid; deck: string } | null;
   last_osc: { addr: string; send_us: number } | null;
   last_confirm: string | null;
@@ -334,6 +364,16 @@ export type EditOp =
 
 export type Command =
   | { cmd: 'start'; seq: Uuid }
+  | ({ cmd: 'cue'; seq: Uuid } & CueAt)
+  | { cmd: 'cancel_cue' }
+  | { cmd: 'set_guide_lines'; every: number | null }
+  | { cmd: 'set_debug_log'; on: boolean }
+  | { cmd: 'check_update' }
+  | { cmd: 'update_answer'; skip: boolean }
+  | { cmd: 'install_update' }
+  | { cmd: 'set_update_check'; on: boolean }
+  | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
+  | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
   | { cmd: 'stop_all' }
   | { cmd: 'resume_lane'; seq: Uuid; lane: number }
@@ -359,8 +399,46 @@ export type Command =
   | { cmd: 'lut_clear_base'; name: string }
   | { cmd: 'lut_apply'; name: string; file_param: number };
 
+/** In-app update (SPEC §15), `update` message. */
+export interface Release {
+  version: string;
+  notes: string;
+  page: string;
+  zip_name: string;
+  zip_url: string;
+  zip_size: number;
+  sums_url: string;
+}
+
+export type CheckResult =
+  | { state: 'up_to_date'; current: string }
+  | { state: 'available'; current: string; release: Release }
+  | { state: 'error'; current: string; message: string };
+
+export type UpdatePhase =
+  | { state: 'downloading'; done: number; total: number }
+  | { state: 'restarting' }
+  | { state: 'failed'; message: string };
+
+export interface UpdateView {
+  current: string;
+  checking: boolean;
+  result: CheckResult | null;
+  /** The start-up check found a version to offer: ask Download and install / Skip this version / Later. */
+  ask: boolean;
+  phase: UpdatePhase | null;
+  /** Why this copy can't update itself (not a release folder, folder not writable). */
+  blocked: string | null;
+  startup_check: boolean;
+  releases_page: string;
+}
+
 /** Theme settings from the app (`appearance` message, SPEC §9.7). */
 export interface Appearance {
+  /** Editor guide lines every 8, 16 or 32 bars, or `null` = off (SPEC §9.3). */
+  guide_lines: number | null;
+  /** Preferences → Log debug messages. */
+  debug_log: boolean;
   /** Selected theme id; `null` = the default. */
   theme: string | null;
   custom_themes: CustomTheme[];

@@ -43,6 +43,7 @@ for (const f of [...fonts, 'OFL.txt']) cpSync(join(fontsSrc, f), join(site, 'sha
 writeFileSync(join(site, 'shared/fonts.css'), fonts.map((f) => fontFace(f, 'fonts/')).join(''));
 cpSync(join(root, 'web/public/favicon.png'), join(site, 'shared/favicon.png'));
 cpSync(join(root, 'web/public/icon.png'), join(site, 'shared/icon.png'));
+cpSync(join(root, 'web/public/logo-mark.png'), join(site, 'shared/logo-mark.png'));
 
 // mdBook replaces its own fonts when the theme has fonts/fonts.css; the files land in manual/fonts/.
 const themeFonts = join(site, 'manual/theme/fonts');

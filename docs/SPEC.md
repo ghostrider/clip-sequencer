@@ -100,8 +100,26 @@ Each sequence has a **start mode** (`start` in the file, §6): `immediate` (as b
   moment the new deck is confirmed.
 - **Clock loss or pause** freezes a waiting start like a running sequence; it starts when the boundary is reached
   after the ticks resume.
-- **Cue (G1):** a cued sequence uses its start mode by default; the cue can choose another point (e.g. the end of
-  the current pass of a running sequence). Specified with the cue milestone; the choice is not saved.
+- **Cue (G1):** §3.3.
+
+### 3.3 Cue (release 0.5, decided 2026-11-25)
+
+A **cue** says "play this next": the cued sequence starts at a cue point and **every other running sequence stops
+there** (layers the cued one also uses are taken over as in §7.3; the others get their `after_last_pass`). Cues are
+not saved.
+
+- **How:** Shift+click on ▶ (card or editor header) or Shift+Space with the sequence selected cues it at its start
+  mode (§3.2). The card's context menu **Cue at…** offers the cue points: *start mode* · *end of the current pass of
+  <running sequence>* (one entry per running sequence) · *next 8 bars* · *next 16 bars*. Only sequences of the live
+  deck can be cued (a cue never switches decks).
+- **Cue points:** *start mode* and *next 8 / 16 bars* wait on the bar phase like a quantized start (§3.2; 8 and 16
+  bars are the `bar` boundaries with N = 8 or 16). *End of the current pass* is the tick where that sequence's pass
+  ends; if that sequence stops or finishes earlier, the cue starts then. With nothing running, a cue is a start.
+- **One cue:** a new cue replaces the previous one. ▶ on the cued sequence starts it at once (replacing what plays);
+  Stop on it, or × on its badge, cancels the cue. Stop all cancels it too.
+- **Waiting:** the card shows `CUED · in 2 bars` (`· at end of pass` for that point), the editor header the same. A
+  cue freezes with the clock like a quantized start, and a phase reset (MIDI Start, Resync) computes its wait again.
+- A cued sequence that is already running restarts at the cue point (§7.1), the others stop.
 
 ## 4. Resolume interface
 
@@ -483,6 +501,20 @@ disturbs a fade that is still running, whether a layer clear fades, and what `la
   and deletes the file. Entries whose layer is gone are dropped with a log line.
 - The log shows `transition on BG restored (0.0 s, Alpha)`.
 
+### 7.8 Mute and solo (release 0.5, decided 2026-11-25)
+
+Live switches per lane of a **running** sequence (G2). They belong to that run: not saved, and a restart starts
+with every lane unmuted.
+
+- **Mute:** the lane's layer is cleared at once (if the lane was playing); the lane keeps counting but sends nothing
+  (no triggers, no clears). **Unmute:** it plays again from its next step boundary, in time, like "Resume lane".
+- **Solo:** while any lane of the sequence is soloed, every lane of it that is not soloed is muted (several solos
+  are allowed). Removing the last solo brings the other lanes back, except those muted by hand.
+- A muted lane keeps its layer (§7.3): another sequence starting on that layer takes it over as usual, and a clip
+  started by hand on it yields it (§7.3; unmuting then also resumes it). Muting a yielded lane clears the layer.
+- Stopping and finishing apply as usual; a muted lane's layer is already dark.
+- The log says `BG muted at 3.2` / `BG unmuted at 3.4 (plays from its next step)`.
+
 ## 8. Thumbnails
 
 - **Clip thumbnails** are fetched via REST for the active deck and cached on disk, keyed by clip
@@ -507,7 +539,7 @@ themes change token values only, never the layout (§9.7).
 Single screen, everything controlled from here (no separate live view).
 
 ### 9.1 Top bar
-- `§ SEQ` logo, composition name.
+- The Clip Sequencer logo mark (`logo/cs_logo.png`, decided 2026-11-26), composition name.
 - **View tabs:** Sequencer (Ctrl+1), LUTs (Ctrl+2, §14), Console (Ctrl+3).
 - **Deck tabs** (see 7.2): selected tab = what is shown; `LIVE` badge = active deck in Resolume.
 - **Stop all** (always visible).
@@ -530,8 +562,8 @@ Single screen, everything controlled from here (no separate live view).
 - Lane grid:
   - Left column per lane: layer name (choose from the deck's layers), end behaviour
     (`Loop to end` / `Hold` / `Clear`), the lane's default transition as a chip `↗ 1 beat` (click to edit;
-    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded`; yielded has a
-    "Resume lane" action), delete lane.
+    `Resolume's own` when none), state pill (`idle` / `playing` / `yielded` / `muted`; yielded has a
+    "Resume lane" action), **M** and **S** buttons while the sequence runs (§7.8), delete lane.
   - Ruler: bars numbered, eighth subdivisions, sixteenths when zoomed in; zoom with Ctrl+wheel.
   - Steps as blocks, width proportional to length. States: normal (clip colour/thumbnail),
     rest (dashed), unresolved (red), selected (accent outline), playing (accent top edge),
@@ -560,7 +592,7 @@ Single screen, everything controlled from here (no separate live view).
     sixteenths (min 1/16).
   - Drag a block → reorder within its lane. Alt-drag → duplicate.
   - Del → remove step. `R` → insert rest after selected step.
-  - Space → start/stop selected sequence. Esc → deselect.
+  - Space → start/stop selected sequence; Shift+Space → cue it (§3.3). Esc → deselect.
   - Undo/redo (Ctrl+Z / Ctrl+Shift+Z) for all edits in the session.
 - Slot lanes (§4.5):
   - Lane header: mode switch `Clip` / `Slot`. Switching converts the steps (undoable):
@@ -584,10 +616,14 @@ Single screen, everything controlled from here (no separate live view).
   thumbnails and resolution status, add, remove, reorder, relink each; pick random / cycle).
 
 ### 9.5 Status bar
-Current sequence and position (`bar.beat`, tick), last OSC message sent and its send time,
-last WebSocket confirmation, yield and error notices. On the right, small connection chips: CLOCK (BPM, locked /
-no clock; click opens Preferences → Clock), REST, WS, OSC — green when OK, red when not (moved here from the top
-bar, 2026-11-22).
+Current sequence and position (`bar.beat`, tick), yield and error notices. On the right, small connection chips:
+CLOCK (BPM, locked / no clock; click opens Preferences → Clock), REST, WS, OSC — green when OK, red when not (moved
+here from the top bar, 2026-11-22). OSC is UDP, so a send that works says nothing about Resolume hearing it: OSC is
+also red when 3 triggers in a row time out (§7.5) while the WebSocket is up and subscribed (OSC input off, wrong
+port), with a notice; the next confirmed trigger turns it green (2026-11-26).
+The last OSC message and the last confirmation are no longer shown here (2026-11-26): they are DEBUG log lines,
+in the Console tab and the log file when Preferences → Log → **Log debug messages** is on (`debug_log` in
+`settings.json`, off by default; applies at once; adds the app's own DEBUG records to what `RUST_LOG` allows).
 
 Menu bar (File, View, Help) above the top bar, in the browser UI and in the desktop app (no native menu since
 2026-11-22, so it follows the theme); desktop actions go to the shell as `shell` commands (§9.6).
@@ -600,7 +636,10 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
 - UI → engine: commands (`start`, `stop`, `stop_all`, `resume_lane`, `select_deck_view`,
   `edit` operations (format v4 adds: set start mode, set/clear lane transition, set/clear step transition,
   set/clear step condition, add/remove/reorder/relink a choice, set pick, add/move/rename/delete a section;
-  all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), and for the
+  all with undo; the step's flat form gains the optional `when`, `choices`, `pick`, `transition`), `push_thumbnail`, `sync_seq_layer` with `remove_orphans` (§7.6), `cue` with `seq` and
+  `at` (`start_mode`, `end_of_pass` with the running sequence's id, `bars_8`, `bars_16`) and `cancel_cue` (§3.3),
+  `set_lane_mute` / `set_lane_solo` with `seq`, `lane`, `on` (§7.8), `set_guide_lines` with `every` (8, 16, 32 or
+  `null` = off; saved as `guide_lines` in `settings.json`, sent back in `appearance`, §9.3), and for the
   browser UI's File menu `reload_composition`, `save_now`). The live deck's `seq_sync` plan comes with
   the decks, `seq_sync_busy` with the runtime state. Edits are sent as operations, the engine applies them to the stored model, saves,
   and echoes the new state.
@@ -637,10 +676,10 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
   `{ source, port, connected, running, bpm, transport, synced }`: with the Resolume source `connected` means
   the WebSocket is up with a tempo controller, `bpm` is Resolume's tempo, `transport` its `Play`/`Pause`/`Stop`
   and `synced` true after a resync (`transport` `null` and `synced` false with MIDI).
-- Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes }` on connect and after every
+- Preferences (theme, §9.7): engine → UI `appearance` `{ theme, custom_themes, guide_lines, debug_log }` on connect and after every
   change (to every connected UI). UI → engine `{"cmd": "set_theme", "id": "<id>" | null}` (`null` = default),
   `{"cmd": "save_theme", "theme": {...}, "select": bool}` (adds, or replaces the one with the same id),
-  `{"cmd": "delete_theme", "id": "<id>"}`. Commands of one UI are applied in the order sent; refused ones
+  `{"cmd": "delete_theme", "id": "<id>"}`, `{"cmd": "set_debug_log", "on": bool}` (§9.5). Commands of one UI are applied in the order sent; refused ones
   (bad id, name or colour, more than 50 saved themes) leave the settings unchanged and show a notice.
 - `GET /api/version`: `{ app, name, version, build, commit, ui_port, desktop }` (`desktop`: running in the
   shell's window). Also used by a second instance to detect a running one (M12 Phase B).
@@ -670,8 +709,9 @@ Menu bar (File, View, Help) above the top bar, in the browser UI and in the desk
 - The browser remembers the last theme shown (localStorage) and applies it before connecting, so there is no
   flash of the default theme. The splash screen and the desktop window's first paint use the default theme.
 - Fonts are bundled (no network at the venue): all SIL OFL 1.1, Latin and Latin Extended subsets, with their
-  copyright and licence in the third-party notices (Help → Licenses). The `§ SEQ` logo uses Unbounded in
-  every theme, the `§` in the accent colour.
+  copyright and licence in the third-party notices (Help → Licenses). The logo is an image (white on
+  transparent) shown as a mask in the theme's text colour: the mark alone in the top bar, the whole logo with its
+  lettering on the splash screen.
 
 ## 10. Architecture
 
@@ -821,9 +861,12 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
 
 - Left: the library (name, "used by N LUT effects", "imported"), **+ New** (neutral), **Import…** (several
   `.cube` files; names from the file names, made unique).
-- Middle: name (double-click renames), Rename, Duplicate, Export .cube, Delete…; the preview: an image with the LUT
-  right of a draggable split, the original left of it. Images: drawn test images (ramps, colour chart, skin tones,
-  neon) and the live deck's clip thumbnails. WebGL2 with the table the app baked, so it matches Resolume. Below:
+- Middle: name (double-click renames), Rename, Duplicate, Export .cube, Delete…; the preview: two panels side by side
+  (decided 2026-11-25, replaces the draggable split), the original on the left and the same image with the LUT on
+  the right, each scaled to fit its panel with its aspect kept. Images: drawn test images (ramps, colour chart,
+  skin tones, neon), the 24 photos of the Kodak Lossless True Color Image Suite (`web/public/kodak`, released by
+  Kodak for unrestricted use; source and note in its README and the licence list) and the live deck's clip
+  thumbnails. WebGL2 with the table the app baked, so it matches Resolume. Below:
   Resolume's LUT effects (where, which file or LUT) with **Use <LUT>**.
 - Right: Basic (exposure, contrast, saturation, temperature, tint), Lift/Gamma/Gain (all, R, G, B), Curves (Master,
   R, G, B). Double-click on a slider resets it. Changes go to the app every 40 ms while dragging; a control being
@@ -840,26 +883,69 @@ comments; other keywords are ignored. It becomes the base table, resampled to 33
   `x-lut-rev`, `x-lut-size`), `GET /api/luts/cube?name=` (export), `POST /api/luts/import?name=` (body: the
   `.cube` text; `{ ok, name }` or 400 `{ ok: false, error }`).
 
-## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23)
+## 15. In-app update (M14, release 0.5; replacement decided 2026-11-23, details 2026-11-25)
 
-The user can check by hand whether a newer release exists and install it from the app. Details (dialog texts,
-helper, file list) are worked out at the start of M14; what is decided:
+The app checks once at start-up whether a newer release exists (changed 2026-11-25: before, only by hand), and the
+user can check by hand any time; an update is installed from the app. The first version that can update itself is
+0.5.0 (0.4.x has no such feature).
 
-- **Only by hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar);
-  `seq-app-cli --check-update`. No automatic or background check, none at start-up, no setting for it.
-- **Check:** `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login), semver compare
-  with the running version, drafts and pre-releases ignored. In its own task, never on the timing path. Result:
-  "up to date", the new version with its release notes, or the error.
-- **Install (full replacement):** download the release zip to a temp folder and verify it against `SHA256SUMS.txt`
-  (and the signature once releases are signed). Not while a sequence runs (the button says why). The app quits; a
-  helper (shipped in the zip, or the new exe in a helper mode) waits for it to exit, moves the old files of the
-  `clip-sequencer` folder aside, moves the new ones in and starts the new version. Only that folder is touched,
-  never the data folder.
-- **Rollback:** the old files are deleted only after the new version has started and reported OK; otherwise the
-  helper puts them back and starts the old version. The new version saves no sequence file before it reports OK,
-  so a rolled-back 0.4 still reads it (§6).
-- **Failure:** folder not writable, download or verification failed → say why and offer the release page.
-- **FFGL plugin:** not replaced by the update (Resolume may hold it open); the existing "FFGL plugin update
-  available" hint takes over after the restart (§12.1).
-- **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app contacts GitHub only when
-  the user chooses Check for updates.
+**Check**
+- **At start-up, once** (decided 2026-11-25): after the start-up is done ("Ready"), in the background. If a newer
+  version is found that the user hasn't skipped, the UI shows *Version 0.5.1 is available (you have 0.5.0)* with the
+  release notes and **Download and install**, **Skip this version**, **Later**. *Skip* is saved (`update_skipped` in
+  `settings.json`) and that version is not offered at start-up again (a newer one is); *Later* asks again at the
+  next start. A failed start-up check (no network, GitHub unreachable) shows nothing; it is only logged. Off with
+  Preferences → **Check for updates at start-up** (`update_check: false` in `settings.json`, on by default) or
+  `--no-update-check` for the run. The headless app does the same; its browser UI shows the question when it connects.
+- **By hand:** Help → **Check for updates…** (desktop app and the browser UI's menu bar), or
+  `seq-app-cli --check-update`; also offers a skipped version.
+- `GET https://api.github.com/repos/ghostrider/clip-sequencer/releases/latest` (no login, `User-Agent:
+  clip-sequencer/<version>`, 10 s timeout), in a worker task, never on the timing path. That endpoint never returns
+  drafts or pre-releases. Its `tag_name` (`v0.5.1`) is compared by semver with the running version.
+- The release must carry `clip-sequencer-<version>-windows-x64.zip` and `SHA256SUMS.txt` (the release workflow
+  makes both); otherwise the result is an error ("the release has no Windows zip").
+- **Result** in a dialog: *Checking…*; *Clip Sequencer 0.5.0 is up to date*; *Version 0.5.1 is available (you
+  have 0.5.0)* with the release notes (the release body, as plain text) and **Install and restart**, **Release page**,
+  **Close**; or the error with **Release page**. `--check-update` prints the same and exits 0 (up to date), 2
+  (update available) or 1 (error).
+- **Test source** (hidden, for testing only, also in release builds): `--update-source <url>` replaces
+  `https://api.github.com` for this run; downloads then come from the asset URLs that source returns. Documented in
+  `docs/RELEASING.md`, not in the manual.
+
+**Install**
+- **Install and restart** is disabled while a sequence runs, waits or is cued ("Stop all sequences first"), and
+  when the program folder is not writable (checked by creating and deleting a file in it): the dialog says why and
+  offers the release page.
+- Steps shown in the dialog: *Downloading 3.1 / 13.2 MB*, *Verifying*, *Restarting*. The zip and `SHA256SUMS.txt`
+  are downloaded to `%TEMP%\clip-sequencer-update-<version>\`; the zip's SHA-256 must match its line in
+  `SHA256SUMS.txt`, it is extracted there, and every extracted file that has a line (the two exes, the plugin DLL)
+  must match too. Once releases are signed (SignPath), the new exes' Authenticode signatures are checked as well:
+  the hashes come from the same place as the zip and prove an intact download, not its origin.
+- **Program folder:** the folder of the running exe (the `clip-sequencer` folder of the portable zip). Only it is
+  changed; never the data folder, never Resolume's plugin folder.
+
+**Helper** (decided 2026-11-25: the **new** `seq-app-cli.exe` in a hidden helper mode, no separate updater)
+- The app starts `%TEMP%\clip-sequencer-update-<version>\clip-sequencer\seq-app-cli.exe --apply-update` with the
+  program folder, its own process id, the exe to start again (`seq-app.exe` or `seq-app-cli.exe`) and that exe's
+  arguments, then quits like File → Quit. Running from the temp folder, the helper locks nothing in the program
+  folder.
+- The helper waits for the old process to end (at most 30 s; else it stops and changes nothing), moves the entries
+  of the program folder that the new release also has (the exes, `ffgl\`, the texts; anything else the user keeps
+  there stays) into `.update-backup\<old version>\` inside it, copies the new ones in and starts the new exe
+  with the old arguments plus `--after-update <ok file>`. A folder without `seq-app-cli.exe` is not touched.
+- The new version writes the ok file when its start-up is done ("Ready") and before it saves any sequence file (so a
+  rolled-back older version still reads them, §6). It shows *Updated to 0.5.1* and deletes leftover
+  `clip-sequencer-update-*` temp folders.
+- **Rollback:** the new version quits before writing the ok file (at once), no ok file within 30 s (a hang;
+  60 s until 2026-11-26), or a step failing (a file in use, disk full) → the helper stops the new
+  process if it runs, removes the new files, moves the backup back and starts the old exe with
+  `--update-failed <reason>`; the old version shows *Update to 0.5.1 failed: <reason>. Still 0.5.0.*
+- With the ok file the helper deletes `.update-backup`. Its own log: `.update-backup\update.log` while it runs,
+  copied to `<data-dir>/logs/update-<date>.log` by the new (or the restored old) version.
+
+**Other**
+- **FFGL plugin:** the copy in Resolume's plugin folder is not replaced by the update (Resolume may hold it open);
+  the existing "FFGL plugin update available" hint takes over after the restart (§12.1).
+- **Privacy:** the privacy note, the code signing policy and SECURITY.md say that the app asks GitHub for the latest
+  release once at each start (unless turned off) and when the user chooses Check for updates, sends nothing else,
+  and downloads only when the user chooses to install.

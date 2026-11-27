@@ -65,6 +65,37 @@ pub struct Config {
     /// Install or update the bundled FFGL plugin in Resolume's plugin folder and exit (0 = done).
     #[arg(long)]
     pub install_ffgl: bool,
+    /// Ask GitHub whether a newer release exists and exit (0 = up to date, 2 = update available,
+    /// 1 = error) (SPEC §15).
+    #[arg(long)]
+    pub check_update: bool,
+    /// No update check at start-up for this run (SPEC §15).
+    #[arg(long)]
+    pub no_update_check: bool,
+    /// Testing only: ask this server instead of https://api.github.com (SPEC §15, docs/RELEASING.md).
+    #[arg(long, value_name = "URL", hide = true)]
+    pub update_source: Option<String>,
+    /// Set by the update helper: write this file once start-up is done (SPEC §15).
+    #[arg(long, value_name = "FILE", hide = true)]
+    pub after_update: Option<PathBuf>,
+    /// Set by the update helper after a rollback: why the update failed.
+    #[arg(long, value_name = "REASON", hide = true)]
+    pub update_failed: Option<String>,
+    /// Update helper mode (the new seq-app-cli, run from the temp folder; SPEC §15).
+    #[arg(long, hide = true, requires_all = ["update_target", "update_wait_pid", "update_restart", "update_from", "update_to"])]
+    pub apply_update: bool,
+    #[arg(long, value_name = "DIR", hide = true)]
+    pub update_target: Option<PathBuf>,
+    #[arg(long, value_name = "PID", hide = true)]
+    pub update_wait_pid: Option<u32>,
+    #[arg(long, value_name = "EXE", hide = true)]
+    pub update_restart: Option<String>,
+    #[arg(long, value_name = "ARG", hide = true, allow_hyphen_values = true)]
+    pub update_restart_arg: Vec<String>,
+    #[arg(long, value_name = "VERSION", hide = true)]
+    pub update_from: Option<String>,
+    #[arg(long, value_name = "VERSION", hide = true)]
+    pub update_to: Option<String>,
 }
 
 impl Config {

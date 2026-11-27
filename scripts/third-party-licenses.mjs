@@ -135,7 +135,6 @@ for (const [name, pkg, url] of [
   ['Archivo', '@fontsource/archivo', 'https://github.com/Omnibus-Type/Archivo'],
   ['Archivo Narrow', '@fontsource/archivo-narrow', 'https://github.com/Omnibus-Type/ArchivoNarrow'],
   ['DM Mono', '@fontsource/dm-mono', 'https://github.com/googlefonts/dm-mono'],
-  ['Unbounded', '@fontsource/unbounded', 'https://github.com/googlefonts/unbounded'],
 ]) {
   packages.push({
     name,
@@ -146,6 +145,16 @@ for (const [name, pkg, url] of [
     texts: [fontLicense(pkg)],
   });
 }
+
+// LUT tab test images (SPEC §14.4): their source and the release statement travel with them.
+packages.push({
+  name: 'Kodak Lossless True Color Image Suite',
+  version: 'kodim01–kodim24',
+  license: 'Released by Eastman Kodak for unrestricted usage',
+  part: 'LUT preview test images',
+  url: 'https://r0k.us/graphics/kodak/',
+  texts: [addText(read('web/public/kodak/README.txt'))],
+});
 
 let ffglCommit = '';
 try {

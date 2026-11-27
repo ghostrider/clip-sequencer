@@ -194,15 +194,19 @@ Sequences are saved automatically (about 1 s after an edit) to
 - Switching decks in Resolume by hand stops running sequences without clearing anything.
 - A sequence started from its `§` clip clears the SEQ layer when it finishes, so the next click
   starts it again.
-- Start a sequence from one place at a time. Starting it from the UI while its `§` clip is
-  connected restarts it from step 1 as a UI start: clearing the SEQ layer then no longer stops it,
-  and clicking the `§` clip does nothing until the layer is cleared (known limitation, SPEC §7.1).
+- Starting a running sequence from the app restarts it from step 1 and keeps it linked to its `§`
+  clip (clearing the SEQ layer still stops it); clicking its `§` clip while it runs links the run to
+  the clip without restarting it (SPEC §7.1).
 
 ## Security
 
 The UI server listens on `127.0.0.1` only, so the UI and its API are reachable from this computer and nowhere
 else; there is no option to open it to the network. It has no login: anything running on the machine can use
 it, like Resolume's own webserver. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+The app asks GitHub for the latest release once at each start (Preferences → Updates turns that off; `--no-update-check`
+for one run) and when you choose Help → Check for updates, and installs a new version only when you say so. It sends
+nothing else anywhere.
 
 ## Building from source
 

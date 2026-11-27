@@ -3,8 +3,8 @@
 
 import { applyTheme, resolveTheme } from './themes';
 import type {
-  Appearance, ClipRef, ClipView, Command, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, RunView,
-  RuntimeState, SequenceView, Step, StructureState, Uuid, VersionInfo,
+  Appearance, ClipRef, ClipView, Command, CueAt, DeckView, EditOp, FfglStatus, Lane, LogRecord, LogStats, LutsView, PendingView,
+  Repeat, RunView, RuntimeState, SequenceView, Start, Step, StructureState, UpdateView, Uuid, VersionInfo, When,
 } from './types';
 
 /** Top-level tabs: Ctrl+1 Sequencer, Ctrl+2 LUTs, Ctrl+3 Console. */
@@ -66,9 +66,12 @@ class AppState {
   /** Preferences dialog (clock source and MIDI input, theme). */
   prefsOpen = $state(false);
   /** Preferences tab shown when it opens (the clock chip opens the Clock tab). */
-  prefsTab = $state<'clock' | 'appearance'>('clock');
+  prefsTab = $state<'clock' | 'appearance' | 'updates' | 'log'>('clock');
+  /** In-app update state (SPEC §15) and whether its dialog is open. */
+  update = $state<UpdateView | null>(null);
+  updateOpen = $state(false);
   /** Theme settings from the app (SPEC §9.7). */
-  appearance = $state<Appearance>({ theme: null, custom_themes: [] });
+  appearance = $state<Appearance>({ theme: null, custom_themes: [], guide_lines: null, debug_log: false });
   /** True while Preferences shows a theme that is not saved yet: updates from the app do not repaint. */
   themePreview = false;
   /** Info dialogs of the Help menu (M11 Phase F); one at a time. */
@@ -87,6 +90,10 @@ class AppState {
   search = $state('');
   /** Waiting for a clip click in the browser to relink the selected step. */
   relinking = $state(false);
+  /** Selected section marker of the selected sequence (index in its sorted list; SPEC §9.3). */
+  selectedSection = $state<number | null>(null);
+  /** What a clip click relinks (format v4 choices): the step itself, a new choice, or choice option `n` (1…). */
+  relinkTarget = $state<'step' | 'add' | number>('step');
   /** Pending deck-switch confirmation (SPEC §7.2 step 1). */
   confirmSwitch = $state<{ seq: Uuid; name: string; deck: string; running: string[] } | null>(null);
 
@@ -124,6 +131,11 @@ class AppState {
       } else if (msg.type === 'log') this.addLogs(msg.data);
       else if (msg.type === 'log_stats') this.logStats = msg.data;
       else if (msg.type === 'luts') this.luts = msg.data;
+      else if (msg.type === 'update') {
+        this.update = msg.data;
+        // The start-up check found something to offer, or an install runs: show the dialog.
+        if (msg.data.ask || msg.data.phase) this.updateOpen = true;
+      }
       else if (msg.type === 'appearance') {
         this.appearance = msg.data;
         if (!this.themePreview) this.applySavedTheme();
@@ -161,6 +173,12 @@ class AppState {
   }
 
   // ---- menus (M11 Phase F) ----
+
+  /** Help → Check for updates… */
+  checkForUpdates() {
+    this.updateOpen = true;
+    this.send({ cmd: 'check_update' });
+  }
 
   openDialog(d: InfoDialog) {
     this.prefsOpen = false;
@@ -234,6 +252,12 @@ class AppState {
     return this.runtime?.running.find((r) => r.seq === seq) ?? null;
   }
 
+  /** The start of `seq` waiting for its beat or bar (SPEC §3.2). */
+  pendingStart(seq: Uuid | null | undefined): PendingView | null {
+    if (!seq) return null;
+    return this.runtime?.pending?.find((p) => p.seq === seq) ?? null;
+  }
+
   /** Clip of the deck being viewed, by id. */
   clip(id: number | null | undefined): ClipView | null {
     if (id == null) return null;
@@ -255,7 +279,10 @@ class AppState {
 
   // ---- actions ----
 
-  /** ▶ on a card or Space: start, or stop when running. Switching decks asks first. */
+  /**
+   * ▶ on a card or Space: start, or stop when running. A start waiting for its beat or bar starts at once
+   * (the engine does that for a second start). Switching decks asks first.
+   */
   toggle(view: SequenceView, deck: DeckView) {
     const id = view.sequence.id;
     if (this.run(id)) {
@@ -268,6 +295,41 @@ class AppState {
       return;
     }
     this.send({ cmd: 'start', seq: id });
+  }
+
+  /** Shift+▶ / Shift+Space / "Cue at…": cue a sequence of the live deck (SPEC §3.3). */
+  cue(view: SequenceView, deck: DeckView, at: CueAt = { at: 'start_mode' }) {
+    if (!deck.live) return; // a cue never switches decks
+    this.send({ cmd: 'cue', seq: view.sequence.id, ...at });
+  }
+
+  /**
+   * `M` (SPEC §9.3): a section at the playhead while the sequence runs, else at the selected step's start.
+   * Named `Section N` with the first free N.
+   */
+  addSectionHere(view: SequenceView) {
+    const run = this.run(view.sequence.id);
+    let at: number | null = null;
+    if (run) {
+      at = Math.floor(run.pos / TICKS_PER_SIXTEENTH);
+    } else if (this.selectedStep) {
+      const { lane, index } = this.selectedStep;
+      at = view.sequence.lanes[lane]?.steps.slice(0, index).reduce((a, s) => a + s.length, 0) ?? null;
+    }
+    if (at == null) return;
+    this.addSection(view, at);
+  }
+
+  addSection(view: SequenceView, at: number) {
+    const taken = new Set((view.sequence.sections ?? []).map((s) => s.name));
+    let n = (view.sequence.sections?.length ?? 0) + 1;
+    while (taken.has(`Section ${n}`)) n++;
+    this.edit({ op: 'add_section', seq: view.sequence.id, at, name: `Section ${n}` });
+  }
+
+  /** Cancels a waiting start: the cue, or a plain start of `seq`. */
+  cancelWaiting(p: PendingView) {
+    this.send(p.cue ? { cmd: 'cancel_cue' } : { cmd: 'stop', seq: p.seq });
   }
 
   uniqueName(deck: DeckView, base: string): string {
@@ -324,6 +386,61 @@ export function layerLabel(l: { name: string; index: number; ambiguous: boolean 
   if (l.name.includes('#')) return `${l.name.replace('#', String(l.index))} · unnamed, rename in Resolume to use it`;
   if (l.ambiguous) return `${l.name} · name used twice, rename in Resolume`;
   return l.name;
+}
+
+/** `starts in 3 beats`, `starts in 2 bars` for waits of more than a bar (SPEC §3.2). */
+export function startsIn(waitTicks: number): string {
+  const beats = Math.ceil(waitTicks / 24);
+  if (beats <= 4) return `starts in ${beats} ${beats === 1 ? 'beat' : 'beats'}`;
+  const bars = Math.ceil(waitTicks / 96);
+  return `starts in ${bars} bars`;
+}
+
+/** Step badge for a pass condition (SPEC §9.3): `1st`, `!1st`, `last`, `!last`, `2:4`. */
+export function whenLabel(w: When): string {
+  switch (w.is) {
+    case 'first':
+      return '1st';
+    case 'not_first':
+      return '!1st';
+    case 'last':
+      return 'last';
+    case 'not_last':
+      return '!last';
+    case 'cycle':
+      return `${w.pass}:${w.of}`;
+  }
+}
+
+/** Why a condition is odd with this repeat setting (no last pass with ∞), or `null`. */
+export function whenWarning(w: When | undefined, repeat: Repeat): string | null {
+  if (!w || repeat.mode !== 'infinite') return null;
+  if (w.is === 'last') return 'Never plays: with repeat ∞ there is no last pass';
+  if (w.is === 'not_last') return 'Always plays: with repeat ∞ there is no last pass';
+  return null;
+}
+
+/** `CUED · in 2 bars`, `CUED · at end of pass`, or `starts in 3 beats` for a plain waiting start. */
+export function waitLabel(p: PendingView): string {
+  if (!p.cue) return startsIn(p.wait_ticks);
+  if (p.end_of_pass) return 'CUED · at end of pass';
+  return `CUED · ${startsIn(p.wait_ticks).replace('starts ', '')}`;
+}
+
+/** Start modes in the editor header (SPEC §9.3): now, beat, bar, 2 · 4 · 8 · 16 bars. */
+export const START_MODES: { label: string; title: string; start: Start }[] = [
+  { label: 'now', title: 'Start on the tick ▶ is pressed', start: { mode: 'immediate' } },
+  { label: 'beat', title: 'Start on the next beat', start: { mode: 'beat' } },
+  { label: 'bar', title: 'Start on the next bar', start: { mode: 'bar', bars: 1 } },
+  ...[2, 4, 8, 16].map((bars) => ({
+    label: String(bars),
+    title: `Start on the next bar that is a multiple of ${bars} bars`,
+    start: { mode: 'bar' as const, bars },
+  })),
+];
+
+export function sameStart(a: Start, b: Start): boolean {
+  return a.mode === b.mode && (a.mode !== 'bar' || b.mode !== 'bar' || a.bars === b.bars);
 }
 
 /** Length in sixteenths as whole bars, else eighths, else sixteenths: `2 bars`, `3/8`, `5/16`. */

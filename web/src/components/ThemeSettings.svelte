@@ -74,7 +74,7 @@
     app.send({ cmd: 'save_theme', theme, select: true });
     // Shown at once; the app's answer brings the same list.
     const list = app.appearance.custom_themes.filter((c) => c.id !== id);
-    app.appearance = { theme: id, custom_themes: [...list, theme] };
+    app.appearance = { ...app.appearance, theme: id, custom_themes: [...list, theme] };
     selected = id;
     draft = null;
     error = null;
@@ -91,6 +91,7 @@
     const id = current.id;
     app.send({ cmd: 'delete_theme', id });
     app.appearance = {
+      ...app.appearance,
       theme: app.appearance.theme === id ? null : app.appearance.theme,
       custom_themes: app.appearance.custom_themes.filter((c) => c.id !== id),
     };

@@ -7,10 +7,14 @@
 //   NODE_PATH=$(npm root -g) node site/screenshots.mjs
 // The MIDI clock is not simulated, so the shots show the app idle (CLOCK chip red). The last shots switch the clock
 // source to Resolume's tempo (the mock's tempo controller, 120 BPM) for the clock page.
+// The update dialog (SPEC §15) is answered by a local stand-in for GitHub's release API offering the next patch
+// version. A debug build can't update itself, so the dialog would say so; the shot shows it as a release copy sees it.
+// overview.png is also the README and landing page screenshot (docs/images/screenshot.png).
 
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +29,7 @@ const exe = (name) => {
   if (!existsSync(p)) throw new Error(`${p} missing: cargo build -p mock-resolume -p seq-app --bin mock-resolume --bin seq-app-cli`);
   return p;
 };
-const PORTS = { rest: 18080, osc: 17000, ui: 18090 };
+const PORTS = { rest: 18080, osc: 17000, ui: 18090, github: 18765 };
 const ui = `http://127.0.0.1:${PORTS.ui}`;
 const rest = `http://127.0.0.1:${PORTS.rest}/api/v1`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -62,10 +66,33 @@ for (const layer of comp.layers) {
   }
 }
 
-// The sequencer, headless, on a fresh data folder with the demo sequences.
+// A newer release on "GitHub": the next patch version, with release notes.
+const current = /\[workspace\.package\][^[]*?\nversion\s*=\s*"([^"]+)"/.exec(readFileSync(join(root, 'Cargo.toml'), 'utf8'))[1];
+const next = current.replace(/(\d+)$/, (n) => String(Number(n) + 1));
+const github = createServer((req, res) => {
+  if (req.url !== '/repos/ghostrider/clip-sequencer/releases/latest') return res.writeHead(404).end();
+  const base = `http://127.0.0.1:${PORTS.github}`;
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({
+    tag_name: `v${next}`, name: `Clip Sequencer for Resolume ${next}`, html_url: `${base}/page`, draft: false, prerelease: false,
+    body: '### Fixed\n- The splash screen keeps its size and stays centred.\n- Step badges no longer cover the clip name.',
+    // Listed only: the shot never downloads them.
+    assets: [
+      { name: `clip-sequencer-${next}-windows-x64.zip`, size: 31_000_000, browser_download_url: `${base}/dl/clip-sequencer-${next}-windows-x64.zip` },
+      { name: 'SHA256SUMS.txt', size: 400, browser_download_url: `${base}/dl/SHA256SUMS.txt` },
+    ],
+  }));
+}).listen(PORTS.github, '127.0.0.1');
+
+// The sequencer, headless, on a fresh data folder with the demo sequences. Drop A gets two sections and a step
+// that plays on the last pass only (the editor and overview shots show them).
 const data = mkdtempSync(join(tmpdir(), 'seq-shots-'));
-cpSync(join(root, 'docs/samples/demo.seq.json'), join(data, 'Demo.seq.json'));
-children.push(spawn(exe('seq-app-cli'), ['--rest-port', PORTS.rest, '--osc-port', PORTS.osc, '--ui-port', PORTS.ui, '--strict-port', '--data-dir', data], { stdio: 'ignore' }));
+const demo = JSON.parse(readFileSync(join(root, 'docs/samples/demo.seq.json'), 'utf8'));
+const dropA = demo.decks['Act 2'].sequences.find((q) => q.name === 'Drop A');
+dropA.sections = [{ at: 0, name: 'Intro' }, { at: 32, name: 'Drop' }];
+dropA.lanes.find((l) => l.layer === 'Front').steps[3].when = { is: 'last' };
+writeFileSync(join(data, 'Demo.seq.json'), JSON.stringify(demo, null, 2));
+children.push(spawn(exe('seq-app-cli'), ['--rest-port', PORTS.rest, '--osc-port', PORTS.osc, '--ui-port', PORTS.ui, '--strict-port', '--data-dir', data, '--update-source', `http://127.0.0.1:${PORTS.github}`], { stdio: process.env.SHOTS_DEBUG ? 'inherit' : 'ignore' }));
 await waitFor(`${ui}/api/version`);
 
 mkdirSync(out, { recursive: true });
@@ -86,9 +113,37 @@ const zoomGrid = async (steps) => {
   }
 };
 
+// As a release copy: the update state without the "development build" reason.
+await page.routeWebSocket('**/ws', (ws) => {
+  const server = ws.connectToServer();
+  server.onMessage((m) => {
+    if (typeof m === 'string' && m.includes('"type":"update"')) {
+      const msg = JSON.parse(m);
+      msg.data.blocked = null;
+      m = JSON.stringify(msg);
+    }
+    ws.send(m);
+  });
+});
+
 await page.goto(ui);
 await page.waitForSelector('.seqcard');
+
+// The question after the update check at start-up.
+const updateDialog = page.locator('.info-dialog', { hasText: 'is available' });
+await updateDialog.waitFor();
+await shot('update-dialog', updateDialog);
+await updateDialog.getByRole('button', { name: 'Later' }).click();
+
 await card('Drop A').click();
+// Rings gets a pass condition and a second option, picked in the clip browser.
+await page.locator('.step', { hasText: 'Rings' }).click();
+await page.locator('.side select.pill-select').selectOption('cycle');
+await page.locator('.side .choices').getByRole('button', { name: /Choice from clip/ }).click();
+await page.locator('.side .clip', { hasText: 'Tunnel' }).first().click();
+await page.locator('.side .choices').getByRole('button', { name: /cycle/ }).click();
+await page.locator('.step', { hasText: 'Rings' }).locator('.badge', { hasText: '1/2' }).waitFor();
+await page.keyboard.press('Escape');
 await zoomGrid(3);
 await shot('overview');
 await shot('top-bar', page.locator('.topbar'));
@@ -214,7 +269,6 @@ await page.locator('.lut-controls').evaluate((el) => (el.scrollTop = 0));
 await page.locator('#lut-image').selectOption({ label: 'Skin tones' });
 await page.locator('.fx-row', { hasText: 'Composition' }).getByRole('button', { name: /Use Stage Warm/ }).click();
 await page.locator('.fx-row', { hasText: 'Composition' }).locator('.tag', { hasText: 'this LUT' }).waitFor();
-await page.locator('.preview').click({ position: { x: 420, y: 200 } }); // split a little left of the middle
 await sleep(800);
 await shot('luts-tab');
 await shot('luts-effects', page.locator('.in-resolume'));
@@ -223,7 +277,20 @@ await sleep(300);
 await shot('luts-controls', page.locator('.lut-controls'));
 await page.setViewportSize({ width: 1440, height: 820 });
 
+// Preferences → Updates.
+await page.keyboard.press('Control+1');
+await page.getByRole('menuitem', { name: 'File' }).click();
+await page.getByRole('menuitem', { name: /Preferences/ }).click();
+await page.locator('.prefs').waitFor();
+await page.locator('.prefs').getByRole('tab', { name: 'Updates' }).click();
+await sleep(300);
+await shot('prefs-updates', page.locator('.prefs'));
+await page.locator('.prefs').getByRole('button', { name: 'Cancel' }).click();
+
 await browser.close();
+github.close();
+cpSync(join(out, 'overview.png'), join(root, 'docs/images/screenshot.png'));
+console.log('copied overview.png to docs/images/screenshot.png');
 rmSync(data, { recursive: true, force: true });
 console.log(`screenshots in ${out}: ${readdirSync(out).length} files`);
 process.exit(0);

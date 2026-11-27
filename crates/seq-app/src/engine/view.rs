@@ -266,8 +266,14 @@ pub struct RuntimeState {
     /// Every parameter subscription is acknowledged: clip state changes will be seen.
     pub ws_synced: bool,
     pub rest: bool,
+    /// The last OSC send worked on this computer (UDP: says nothing about Resolume hearing it).
     pub osc: bool,
+    /// Several triggers in a row were sent but never confirmed while the WebSocket was up: Resolume's
+    /// OSC input is probably off or on another port.
+    pub osc_unanswered: bool,
     pub running: Vec<RunView>,
+    /// Starts waiting for their beat or bar (SPEC §3.2), in the order they were made.
+    pub pending: Vec<PendingView>,
     /// Sequence being started after a deck switch.
     pub switching: Option<SwitchView>,
     pub last_osc: Option<OscView>,
@@ -297,6 +303,25 @@ pub struct ClockView {
     pub transport: Option<String>,
     /// Resolume source: in phase with Resolume's beat since the last resync.
     pub synced: bool,
+    /// The bar phase for quantized starts comes from a MIDI Start or a Resync (SPEC §3.2); false
+    /// while it counts from the first tick (`bar phase not synced`).
+    pub bar_synced: bool,
+}
+
+/// A start waiting for its boundary (SPEC §3.2).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PendingView {
+    pub seq: Uuid,
+    pub name: String,
+    pub from_seq_clip: bool,
+    /// The start mode boundary it waits for; `None` when a cue waits for `end_of_pass`.
+    pub mode: Option<seq_core::Start>,
+    /// A cue waiting for the end of the current pass of this running sequence (SPEC §3.3).
+    pub end_of_pass: Option<Uuid>,
+    /// A cue: what plays stops when it starts.
+    pub cue: bool,
+    /// Ticks until it starts, if the clock keeps running (24 per beat).
+    pub wait_ticks: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -331,6 +356,13 @@ pub struct RunView {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunLaneView {
+    /// Muted by hand, soloed, and whether it sends nothing now (SPEC §7.8).
+    pub mute: bool,
+    pub solo: bool,
+    pub silent: bool,
+    /// The option the current step played (0 = its own clip or column); `None` when its pass
+    /// condition kept it from playing (format v4).
+    pub option: Option<usize>,
     /// `idle`, `playing`, `yielded`, `resume_pending`, `taken_over`.
     pub state: &'static str,
     pub step: Option<usize>,

@@ -11,7 +11,7 @@ go back to the default width. The app remembers the widths.
 
 ![Top bar](images/top-bar.png)
 
-- **§ SEQ** and the tabs **Sequencer | LUTs | Console** (Ctrl+1 / Ctrl+2 / Ctrl+3). The LUTs tab edits colour LUTs
+- The **logo** and the tabs **Sequencer | LUTs | Console** (Ctrl+1 / Ctrl+2 / Ctrl+3). The LUTs tab edits colour LUTs
   for Resolume ([Colour LUTs](luts.md)). The Console tab shows the log; a red number on it counts new errors.
 - **Composition**: the name of the composition open in Resolume. Sequences are saved per composition.
 - **Deck tabs**: one per Resolume deck. The tab you select is the deck shown below; **LIVE** marks the deck
@@ -62,8 +62,9 @@ Click a card to edit the sequence. **+ New** adds a sequence to the deck shown. 
 there is none); start, length, grid and what happens after the last pass (click *clear* / *hold* to switch).
 While the sequence runs and you edit it, an **edited · applies at next start** badge appears.
 
-Below: **Repeat** (Once / × with a number / ∞), the pass counter while it runs, **+ Lane**,
-**Push thumbnail to Resolume** ([Thumbnails](thumbnails.md)) and **▶ Start / ■ Stop**.
+Below: **Start** (now / beat / bar / 2 · 4 · 8 · 16 bars: when a start begins, [Playing live](playing-live.md)),
+**Repeat** (Once / × with a number / ∞), the pass counter while it runs, **+ Lane**,
+**Push thumbnail to Resolume** ([Thumbnails](thumbnails.md)) and **▶ Start / ■ Stop** (**Shift**+click cues it).
 
 **Lanes.** Each lane has a head on the left:
 
@@ -73,10 +74,19 @@ Below: **Repeat** (Once / × with a number / ∞), the pass counter while it run
 - **▲ ▼** to reorder lanes (display only) and **×** to delete the lane;
 - the **end behaviour** for when the lane is shorter than the sequence: *Loop to end* (start the lane's steps
   again), *Hold* (keep the last clip playing), *Clear* (clear the layer and stay silent);
-- the lane's **state**: `idle`, `playing`, or `yielded` with **Resume lane** ([Playing live](playing-live.md)).
+- the lane's **state**: `idle`, `playing`, `muted`, or `yielded` with **Resume lane**, and while the sequence runs
+  **M** (mute) and **S** (solo) ([Playing live](playing-live.md)).
 
 The **ruler** numbers the bars, with eighth (and, zoomed in, sixteenth) ticks. Zoom with **Ctrl+mouse wheel** over
 the grid.
+
+**Sections** are named markers ("Intro", "Drop") shown as flags in the ruler with a line down through the lanes.
+Add one by right-clicking the ruler, or press **M** for one at the playhead (while it runs) or at the selected step.
+Drag a flag to move it (1/8 grid, **Shift** for 1/16), double-click it to rename, select it and press **Del** (or
+right-click it) to delete. A section beyond the end of the sequence is greyed out; shortening lanes never moves or
+deletes sections. They are only marks for you: they don't change what plays.
+
+**View → Guide lines** draws a dashed line every 8, 16 or 32 bars (or none); the choice is remembered.
 
 **Steps** are blocks as wide as their length, with the clip's thumbnail:
 
@@ -90,6 +100,8 @@ the grid.
 | ⚠ | the clip was found on another layer than the lane's; it plays there |
 | accent top edge | playing now |
 | red top edge | "not confirmed": Resolume didn't report the clip as playing |
+| `1st`, `!1st`, `last`, `!last`, `2:4` badge | plays only on some passes (see Play on below); red: never or always plays with repeat ∞ |
+| `1/3 ⤨` or `1/3 ↻` badge | the step has choices, picked at random or in turn; while it plays, the first number is the option playing; red: a choice is unresolved |
 
 Editing: drag clips from the browser onto a lane; drag a step's **right edge** to resize (1/8 grid, **Shift** for
 1/16); drag a step to move it within the lane, **Alt+drag** to copy it; **Del** removes the selected step, **R**
@@ -109,18 +121,29 @@ The **step inspector** shows the selected step:
   ([Files and data](files.md) explains the order);
 - **Relink to clip…**: then click a clip in the browser to use it for this step (Esc cancels);
 - **Make rest**;
-- **Length** in sixteenths, with − / +, and the length in bars.
+- **Length** in sixteenths, with − / +, and the length in bars;
+- **Play on**: every pass, the first, all but the first, the last, all but the last, or pass *A* of every *B* (2:4 =
+  passes 2, 6, 10 …). On other passes the step sends nothing, so the clip before it keeps playing; for silence on
+  some passes, use a rest with a condition, or a rest among the choices;
+- **Choices**: up to 3 more clips (columns in a slot lane) or rests; each time the step plays, one option is picked,
+  **⤨ random** or **↻ cycle** (1, 2, 3 … in turn; every start begins at 1). Add one with **+ Choice from clip…** and
+  a click in the browser, by dropping a clip onto the box, or **+ Rest**; reorder with ↑ ↓ (moving one to the top
+  makes it the step's own clip), relink with ⇄, remove with ×. An unresolved choice is red and plays nothing when
+  it is picked.
 
 For a step of a slot lane it shows the column and the clip in it now instead ([Slot lanes](slot-lanes.md)).
 
 ## Status bar
 
-The bottom line shows what is playing and where (`bar.beat`), the last trigger sent to Resolume and its
-confirmation, and notices: a lane that yielded, a failed trigger, a problem with a file.
+The bottom line shows what is playing and where (`bar.beat`) and notices: a lane that yielded, a failed trigger,
+a problem with a file. Each trigger sent to Resolume and its confirmation can be logged in the Console tab
+(**Preferences → Log → Log debug messages**).
 
 On its right are the **connection chips**: **CLOCK** (MIDI clock, with BPM; **RESOLUME** when it follows
 Resolume's tempo), **REST**, **WS** and **OSC** (Resolume). Green is fine, red needs attention
-([Troubleshooting](troubleshooting.md)). Click the clock chip to choose the clock ([Setting up the clock](clock.md)).
+([Troubleshooting](troubleshooting.md)). **OSC** also turns red when Resolume ignores the triggers (they are sent
+but never start a clip), typically because Resolume's OSC input is off. Click the clock chip to choose the clock
+([Setting up the clock](clock.md)).
 
 ## Console tab
 

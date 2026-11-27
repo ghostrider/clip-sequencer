@@ -4,7 +4,7 @@
 </script>
 
 <header class="topbar">
-  <div class="logo" aria-label="§ SEQ"><span class="mark">§</span>SEQ</div>
+  <div class="logo" role="img" aria-label="Clip Sequencer" title="Clip Sequencer"></div>
   <div class="tabs view-tabs" role="tablist" aria-label="View">
     <button class="tab" role="tab" aria-selected={app.tab === 'sequencer'} title="Ctrl+1"
       onclick={() => app.setTab('sequencer')}>Sequencer</button>

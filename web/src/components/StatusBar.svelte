@@ -17,17 +17,20 @@
     }
     if (!c.connected) return 'CLOCK · no port';
     if (!c.running) return 'CLOCK · no clock';
-    return `CLOCK ${c.bpm?.toFixed(1) ?? '—'} BPM · locked`;
+    // SPEC §3.2: bars count from the first tick until a MIDI Start sets the bar phase.
+    return `CLOCK ${c.bpm?.toFixed(1) ?? '—'} BPM · locked${c.bar_synced ? '' : ' · bar phase not synced'}`;
   });
   let clockTitle = $derived(
     rt?.clock.source === 'resolume'
       ? `Following Resolume's tempo${rt.clock.synced ? '' : '; press Resync in Resolume to line up with its beat'} · click to change (Ctrl+,)`
-      : (rt?.clock.port ?? 'no MIDI port selected') + ' · click to choose (Ctrl+,)',
+      : (rt?.clock.port ?? 'no MIDI port selected') +
+          (rt?.clock.bar_synced === false ? ' · bars count from the first tick until the clock sends MIDI Start' : '') +
+          ' · click to choose (Ctrl+,)',
   );
   let current = $derived(app.run(app.selectedSeq) ?? rt?.running[0] ?? null);
   let notices = $derived((rt?.notices ?? []).slice(-3));
   function isProblem(n: string) {
-    return /yielded|failed|rejected|not confirmed|no clock|lost|problem|cannot|matches no|disconnected/i.test(n);
+    return /yielded|failed|rejected|not confirmed|no clock|lost|problem|cannot|matches no|disconnected|doesn't react/i.test(n);
   }
 </script>
 
@@ -40,12 +43,6 @@
   {#if rt?.switching}
     <span style="color:var(--accent-text)">switching to {rt.switching.deck}…</span>
   {/if}
-  {#if rt?.last_osc}
-    <span>last OSC → {rt.last_osc.addr} · {(rt.last_osc.send_us / 1000).toFixed(1)} ms</span>
-  {/if}
-  {#if rt?.last_confirm}
-    <span style="color:var(--info-text)">WS {rt.last_confirm}</span>
-  {/if}
   {#if rt?.save_error}
     <span style="color:var(--err-text)">save failed: {rt.save_error}</span>
   {/if}
@@ -56,7 +53,7 @@
     </button>
   {/if}
   {#each notices as n, i (i + n)}
-    <span style:color={isProblem(n) ? 'var(--err-text)' : 'var(--muted)'}>{n}</span>
+    <span class="notice" title={n} style:color={isProblem(n) ? 'var(--err-text)' : 'var(--muted)'}>{n}</span>
   {/each}
   <span class="status-spacer"></span>
   <div class="chips sm">
@@ -64,12 +61,19 @@
       onclick={() => { app.prefsTab = 'clock'; app.prefsOpen = true; }}>{clockText}</button>
     <span class="chip" class:bad={!rt?.rest} title="Resolume REST API">REST</span>
     <span class="chip" class:bad={!rt?.ws} title="Resolume WebSocket">WS</span>
-    <span class="chip" class:bad={!rt?.osc} title="OSC to Resolume">OSC</span>
+    <!-- Red when sending fails here, or when Resolume ignores the triggers (UDP: sending alone can't tell). -->
+    <span class="chip" class:bad={!rt?.osc || rt?.osc_unanswered}
+      title={!rt?.osc ? 'OSC to Resolume: sending fails'
+        : rt?.osc_unanswered ? "OSC to Resolume: sent, but Resolume doesn't react. Is OSC Input on in Resolume (Preferences → OSC), on the port the sequencer sends to?"
+        : 'OSC to Resolume'}>OSC</span>
   </div>
 </footer>
 
 <style>
   .status-spacer { flex: 1 1 auto; }
+  /* One line always: notices give way (cut with …, whole text as tooltip), the chips never do. */
+  .notice { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips.sm { flex: none; }
   .chips.sm { gap: 4px; font-size: 10px; align-items: center; }
   .chips.sm .chip { padding: 1px 6px; gap: 4px; }
   .chips.sm .chip::before { width: 6px; height: 6px; }

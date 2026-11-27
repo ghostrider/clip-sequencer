@@ -1,11 +1,10 @@
 <script lang="ts">
   // LUT tab (SPEC §14): the LUT library, a before/after preview and the controls. Every change goes to the app at
   // once; it rewrites the LUT's .cube, and Resolume's LUT effects that use that file reload it by themselves.
-  import { untrack } from 'svelte';
   import { app } from '../lib/app.svelte';
   import type { Curves, Grade, LutView, Wheel } from '../lib/types';
   import {
-    SAMPLE_IMAGES, LutPreview, defaultGrade, fetchTable, fileName, freeLutName, lutOfEffect, placeLabel,
+    SAMPLE_IMAGES, KODAK_IMAGES, LutPreview, defaultGrade, fetchTable, fileName, freeLutName, lutOfEffect, placeLabel,
   } from '../lib/lut';
   import CurveEditor from './CurveEditor.svelte';
 
@@ -62,8 +61,9 @@
   let preview = $state.raw<LutPreview | null>(null);
   let previewCanvas: HTMLCanvasElement | null = null;
   let glError = $state<string | null>(null);
-  let split = $state(0.5);
   let image = $state('sample:ramps');
+  /** Width / height of the preview image: the canvas is as high as one half shows it whole. */
+  let imgAspect = $state(16 / 9);
   let liveClips = $derived(
     (app.decks.find((d) => d.live)?.layers ?? []).filter((l) => !l.is_seq_layer).flatMap((l) => l.clips.filter((c) => c.thumb)),
   );
@@ -87,28 +87,49 @@
     }
   });
 
+  // The canvas fills its box (wide screens too); its pixels follow the box size, then it draws again.
+  $effect(() => {
+    const c = canvas;
+    if (!c) return;
+    const ro = new ResizeObserver(() => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.min(4096, Math.max(1, Math.round(c.clientWidth * dpr)));
+      const h = Math.min(2048, Math.max(1, Math.round(c.clientHeight * dpr)));
+      if (c.width === w && c.height === h) return;
+      c.width = w;
+      c.height = h;
+      preview?.draw();
+    });
+    ro.observe(c);
+    return () => ro.disconnect();
+  });
+
   // Image source.
   $effect(() => {
     const src = image;
     const p = preview;
     if (!p || !canvas) return;
-    if (src.startsWith('sample:')) {
-      const s = SAMPLE_IMAGES.find((x) => `sample:${x.id}` === src) ?? SAMPLE_IMAGES[0];
+    const s = src.startsWith('sample:')
+      ? ([...SAMPLE_IMAGES, ...KODAK_IMAGES].find((x) => `sample:${x.id}` === src) ?? SAMPLE_IMAGES[0])
+      : null;
+    if (s && 'draw' in s) {
       const off = document.createElement('canvas');
       off.width = 960;
       off.height = 540;
       s.draw(off.getContext('2d')!, off.width, off.height);
       p.setImage(off);
-      p.draw(untrack(() => split));
+      imgAspect = off.width / off.height;
+      p.draw();
     } else {
-      const clip = app.clip(Number(src.slice(5))) ?? liveClips.find((c) => `clip:${c.id}` === src) ?? null;
-      const url = clip ? app.thumbUrl(clip) : null;
+      const clip = s ? null : (app.clip(Number(src.slice(5))) ?? liveClips.find((c) => `clip:${c.id}` === src) ?? null);
+      const url = s ? s.url : clip ? app.thumbUrl(clip) : null;
       if (!url) return;
       const img = new Image();
       img.onload = () => {
         if (image !== src || preview !== p) return;
         p.setImage(img);
-        p.draw(split);
+        imgAspect = img.naturalWidth / img.naturalHeight || 16 / 9;
+        p.draw();
       };
       img.src = url;
     }
@@ -130,7 +151,7 @@
         preview.setTable(t.size, t.data);
         tableFor = s.name;
         tableRev = t.rev;
-        preview.draw(split);
+        preview.draw();
       }
     } catch {
       /* next change retries */
@@ -145,16 +166,6 @@
     sel?.name;
     if (preview) loadTable();
   });
-  $effect(() => {
-    split;
-    preview?.draw(split);
-  });
-
-  let dragging = false;
-  function splitAt(e: PointerEvent) {
-    const r = canvas!.getBoundingClientRect();
-    split = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-  }
 
   // ---- library actions ----
   let renaming = $state(false);
@@ -313,20 +324,19 @@
           <optgroup label="Test images">
             {#each SAMPLE_IMAGES as s (s.id)}<option value="sample:{s.id}">{s.label}</option>{/each}
           </optgroup>
+          <optgroup label="Kodak test photos">
+            {#each KODAK_IMAGES as s (s.id)}<option value="sample:{s.id}">{s.label}</option>{/each}
+          </optgroup>
           {#if liveClips.length}
             <optgroup label="Clips of the live deck">
               {#each liveClips as c (c.id)}<option value="clip:{c.id}">{c.name || `Clip ${c.column}`}</option>{/each}
             </optgroup>
           {/if}
         </select>
-        <span class="meta">left: original · right: with the LUT · drag to move the split</span>
       </div>
       <div class="preview-box">
-        <canvas bind:this={canvas} width="960" height="540" class="preview" aria-label="Preview"
-          onpointerdown={(e) => { dragging = true; canvas!.setPointerCapture(e.pointerId); splitAt(e); }}
-          onpointermove={(e) => dragging && splitAt(e)}
-          onpointerup={() => (dragging = false)}></canvas>
-        <div class="split-line" style:left="{split * 100}%"></div>
+        <div class="preview-captions"><span class="caps">Original</span><span class="caps">With {sel.name}</span></div>
+        <canvas bind:this={canvas} width="1932" height="540" class="preview" style:--img-aspect={imgAspect} aria-label="Preview: original and with the LUT"></canvas>
         {#if glError}<p class="meta bad">Preview not available: {glError}</p>{/if}
       </div>
 
@@ -405,9 +415,10 @@
   .link-btn { display: inline-flex; align-items: center; text-decoration: none; }
   .preview-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .image-select { max-width: 260px; }
-  .preview-box { position: relative; width: 100%; max-width: 960px; }
-  .preview { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--track); cursor: ew-resize; touch-action: none; }
-  .split-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+  .preview-box { position: relative; width: 100%; display: flex; flex-direction: column; gap: 4px; container-type: inline-size; }
+  .preview-captions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* As wide as the tab; as high as one half shows the image whole, within what the window leaves free. */
+  .preview { display: block; width: 100%; height: clamp(160px, min(calc(100vh - 380px), calc((100cqw - 12px) / 2 / var(--img-aspect, 1.78))), 1200px); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--track); }
   .in-resolume { display: flex; flex-direction: column; gap: 8px; max-width: 960px; border-top: 1px solid var(--line); padding-top: 12px; }
   .fx-list { display: flex; flex-direction: column; gap: 4px; }
   .fx-row { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

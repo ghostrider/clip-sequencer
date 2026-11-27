@@ -110,13 +110,17 @@ export function freeLutName(luts: LutsView | null, base: string): string {
   for (let i = 2; ; i++) if (!taken.has(`${b} ${i}`.toLowerCase())) return `${b} ${i}`;
 }
 
-// ---- bundled test images (drawn, no files) ----
+// ---- bundled test images: drawn ones, and the Kodak suite (web/public/kodak, see its README) ----
 
-export interface SampleImage {
-  id: string;
-  label: string;
-  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
-}
+export type SampleImage =
+  | { id: string; label: string; draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void }
+  | { id: string; label: string; url: string };
+
+/** Kodak Lossless True Color Image Suite: 24 photos (768 × 512, six portrait). */
+export const KODAK_IMAGES: SampleImage[] = Array.from({ length: 24 }, (_, i) => {
+  const n = String(i + 1).padStart(2, '0');
+  return { id: `kodak${n}`, label: `Kodak ${n}`, url: `/kodak/kodim${n}.jpg` };
+});
 
 /** sRGB values of the 24 patches of a classic colour checker (published reference values, rounded). */
 const CHECKER = [
@@ -223,21 +227,40 @@ precision highp sampler3D;
 uniform sampler2D img;
 uniform sampler3D lut;
 uniform float size;
-uniform float split;
 uniform bool hasLut;
+uniform vec2 canvasPx;
+uniform float gapPx;
+uniform float imgAspect;
 in vec2 uv;
 out vec4 color;
 void main() {
-  vec2 t = vec2(uv.x, 1.0 - uv.y);
-  vec4 c = texture(img, t);
-  if (hasLut && uv.x >= split) {
+  // Two panels side by side: left the original, right with the LUT. Each shows the whole image, fitted.
+  float panelW = (canvasPx.x - gapPx) * 0.5;
+  vec2 p = gl_FragCoord.xy;
+  bool right = p.x >= panelW + gapPx;
+  if (!right && p.x >= panelW) discard;
+  float x = right ? p.x - panelW - gapPx : p.x;
+  vec2 fit = panelW / canvasPx.y > imgAspect
+    ? vec2(canvasPx.y * imgAspect, canvasPx.y)
+    : vec2(panelW, panelW / imgAspect);
+  vec2 off = (vec2(panelW, canvasPx.y) - fit) * 0.5;
+  vec2 q = (vec2(x, p.y) - off) / fit;
+  if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) discard;
+  vec4 c = texture(img, vec2(q.x, 1.0 - q.y));
+  if (hasLut && right) {
     vec3 s = clamp(c.rgb, 0.0, 1.0) * ((size - 1.0) / size) + 0.5 / size;
     c.rgb = texture(lut, s).rgb;
   }
   color = c;
 }`;
 
-/** Draws an image with the LUT applied right of `split` (0..1), the original left of it. */
+/** Gap between the two panels, in CSS pixels (scaled to the canvas in `draw`). */
+const GAP_PX = 12;
+
+/**
+ * Draws an image twice, side by side (SPEC §14.4): the original on the left, with the LUT applied on the right; each
+ * fitted into its half with its aspect kept. Outside the images the canvas stays transparent.
+ */
 export class LutPreview {
   private gl: WebGL2RenderingContext;
   private prog: WebGLProgram;
@@ -245,6 +268,7 @@ export class LutPreview {
   private lut: WebGLTexture;
   private size = 0;
   private hasImage = false;
+  private aspect = 16 / 9;
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true });
@@ -277,8 +301,11 @@ export class LutPreview {
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
-  setImage(src: TexImageSource) {
+  setImage(src: HTMLImageElement | HTMLCanvasElement) {
     const gl = this.gl;
+    const w = src instanceof HTMLImageElement ? src.naturalWidth : src.width;
+    const h = src instanceof HTMLImageElement ? src.naturalHeight : src.height;
+    this.aspect = w > 0 && h > 0 ? w / h : 16 / 9;
     gl.bindTexture(gl.TEXTURE_2D, this.img);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
@@ -302,11 +329,11 @@ export class LutPreview {
     this.size = size;
   }
 
-  draw(split: number) {
+  draw() {
     const gl = this.gl;
     const c = gl.canvas as HTMLCanvasElement;
     gl.viewport(0, 0, c.width, c.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (!this.hasImage) return;
     gl.useProgram(this.prog);
@@ -317,7 +344,10 @@ export class LutPreview {
     gl.uniform1i(gl.getUniformLocation(this.prog, 'img'), 0);
     gl.uniform1i(gl.getUniformLocation(this.prog, 'lut'), 1);
     gl.uniform1f(gl.getUniformLocation(this.prog, 'size'), this.size || 2);
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'split'), split);
+    gl.uniform2f(gl.getUniformLocation(this.prog, 'canvasPx'), c.width, c.height);
+    // The gap is in CSS pixels; the canvas has device pixels.
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'gapPx'), GAP_PX * (c.clientWidth ? c.width / c.clientWidth : 1));
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'imgAspect'), this.aspect);
     gl.uniform1i(gl.getUniformLocation(this.prog, 'hasLut'), this.size > 0 ? 1 : 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }

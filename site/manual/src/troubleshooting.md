@@ -25,6 +25,9 @@ With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
 ## REST, WS or OSC is red
 
 - Resolume isn't running, or its webserver or OSC input is off: see [Setting up Resolume](resolume-setup.md).
+- **Only OSC is red, and clips don't start:** the sequencer sends its triggers, but Resolume doesn't react. In
+  Resolume, **Preferences → OSC**: switch on *OSC Input*, port `7000`. (OSC can't tell whether anyone listens, so
+  the chip turns red only after a few triggers went unanswered.)
 - The ports differ: Resolume's webserver port must match `--rest-port` (8080), its OSC input `--osc-port` (7000).
 - The sequencer retries by itself; the chips turn green once Resolume answers.
 
@@ -50,8 +53,6 @@ With **Resolume tempo** as the clock source ([Setting up the clock](clock.md)):
 - **Sync SEQ** used *Blank* instead of the plugin: Resolume didn't load "1000A Sequence" at start-up. Install it
   ([Installing the FFGL plugin](ffgl-plugin.md)), restart Resolume, clear the Blank placeholders and sync again.
 - The `§` clip starts the sequence of that name **in the live deck** only.
-- You started it from the app while its `§` clip was still playing: see "one place at a time" in
-  [Playing live](playing-live.md). Clear the SEQ layer, then start it again.
 
 ## "Port in use" or "already running"
 

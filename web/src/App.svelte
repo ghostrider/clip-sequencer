@@ -14,6 +14,7 @@
   import LicensesDialog from './components/LicensesDialog.svelte';
   import ShortcutsDialog from './components/ShortcutsDialog.svelte';
   import PluginDialog from './components/PluginDialog.svelte';
+  import UpdateDialog from './components/UpdateDialog.svelte';
   import LutTab from './components/LutTab.svelte';
   import Splitter from './components/Splitter.svelte';
 
@@ -76,12 +77,25 @@
     }
     if (e.key === 'Escape') {
       app.selectedStep = null;
+      app.selectedSection = null;
       app.relinking = false;
+      return;
+    }
+    if (view && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      app.addSectionHere(view); // SPEC §9.3
+      return;
+    }
+    if (view && app.selectedSection != null && (e.key === 'Delete' || e.key === 'Backspace')) {
+      e.preventDefault();
+      app.edit({ op: 'delete_section', seq: view.sequence.id, section: app.selectedSection });
+      app.selectedSection = null;
       return;
     }
     if (e.key === ' ' && view && deck) {
       e.preventDefault();
-      app.toggle(view, deck);
+      if (e.shiftKey) app.cue(view, deck); // SPEC §3.3
+      else app.toggle(view, deck);
       return;
     }
     const sel = app.selectedStep;
@@ -128,3 +142,4 @@
 {#if app.dialog === 'licenses'}<LicensesDialog />{/if}
 {#if app.dialog === 'shortcuts'}<ShortcutsDialog />{/if}
 {#if app.dialog === 'ffgl'}<PluginDialog />{/if}
+{#if app.updateOpen}<UpdateDialog />{/if}

@@ -57,13 +57,20 @@ pub struct ServerCtx {
     pub appearance: Arc<watch::Sender<Appearance>>,
     /// The LUT library (SPEC §14); every UI gets it on connect and on each change.
     pub luts: Arc<crate::luts::LutLibrary>,
+    /// In-app update (SPEC §15); every UI gets its state (`update`) on connect and on each change.
+    pub update: Arc<crate::update_ctl::UpdateCtl>,
 }
 
-/// The theme part of the settings, as sent to the UI (`appearance` message).
+/// The UI part of the settings, as sent to every UI (`appearance` message): theme, the editor's guide lines
+/// and whether debug messages are logged.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Appearance {
     pub theme: Option<String>,
     pub custom_themes: Vec<CustomTheme>,
+    /// Guide lines every this many bars (SPEC §9.3); `None` = off.
+    pub guide_lines: Option<u32>,
+    /// Preferences → Log debug messages.
+    pub debug_log: bool,
 }
 
 impl From<&Settings> for Appearance {
@@ -71,6 +78,8 @@ impl From<&Settings> for Appearance {
         Appearance {
             theme: s.theme.clone(),
             custom_themes: s.custom_themes.clone(),
+            guide_lines: s.guide_lines,
+            debug_log: s.debug_log,
         }
     }
 }
@@ -350,6 +359,24 @@ enum ClientMsg {
     Start {
         seq: Uuid,
     },
+    /// SPEC §3.3.
+    Cue {
+        seq: Uuid,
+        #[serde(flatten)]
+        at: crate::engine::CuePoint,
+    },
+    CancelCue,
+    /// SPEC §7.8.
+    SetLaneMute {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
+    SetLaneSolo {
+        seq: Uuid,
+        lane: usize,
+        on: bool,
+    },
     Stop {
         seq: Uuid,
     },
@@ -403,6 +430,26 @@ enum ClientMsg {
     DeleteTheme {
         id: String,
     },
+    /// Help → Check for updates… (SPEC §15).
+    CheckUpdate,
+    /// The answer to the start-up question: `skip` = Skip this version, else Later.
+    UpdateAnswer {
+        skip: bool,
+    },
+    /// Download and install the version found by the last check.
+    InstallUpdate,
+    /// Preferences → Check for updates at start-up.
+    SetUpdateCheck {
+        on: bool,
+    },
+    /// View menu: editor guide lines every 8, 16 or 32 bars, or `null` = off (SPEC §9.3).
+    SetGuideLines {
+        every: Option<u32>,
+    },
+    /// Preferences → Log debug messages (applies at once).
+    SetDebugLog {
+        on: bool,
+    },
     /// LUT tab (SPEC §14): a new LUT, a copy of `from` or one that changes nothing.
     LutCreate {
         name: String,
@@ -446,6 +493,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
     let mut runtime = ctx.runtime.clone();
     let mut appearance = ctx.appearance.subscribe();
     let mut luts = ctx.luts.subscribe();
+    let mut update = ctx.update.subscribe();
     // Log records go out only while this UI shows its Console tab; the stats (error count for
     // the tab's badge, dropped records) always.
     let mut logs: Option<broadcast::Receiver<LogRecord>> = None;
@@ -458,6 +506,7 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
         msg("runtime", &*runtime.borrow_and_update()),
         msg("log_stats", &stats),
         msg("appearance", &*appearance.borrow_and_update()),
+        msg("update", &*update.borrow_and_update()),
         {
             luts.borrow_and_update();
             msg("luts", &ctx.luts.view())
@@ -480,6 +529,10 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
             },
             r = appearance.changed() => match r {
                 Ok(()) => msg("appearance", &*appearance.borrow_and_update()),
+                Err(_) => return,
+            },
+            r = update.changed() => match r {
+                Ok(()) => msg("update", &*update.borrow_and_update()),
                 Err(_) => return,
             },
             r = luts.changed() => match r {
@@ -507,7 +560,9 @@ async fn session(mut socket: WebSocket, ctx: ServerCtx) {
                     Ok(
                         cmd @ (ClientMsg::SetTheme { .. }
                         | ClientMsg::SaveTheme { .. }
-                        | ClientMsg::DeleteTheme { .. }),
+                        | ClientMsg::DeleteTheme { .. }
+                        | ClientMsg::SetGuideLines { .. }
+                        | ClientMsg::SetDebugLog { .. }),
                     ) => {
                         theme_command(&ctx, cmd).await;
                         continue;
@@ -623,6 +678,10 @@ fn handle(ctx: &ServerCtx, text: &str) {
     };
     let engine_cmd = match cmd {
         ClientMsg::Start { seq } => EngineCommand::Start { seq },
+        ClientMsg::Cue { seq, at } => EngineCommand::Cue { seq, at },
+        ClientMsg::CancelCue => EngineCommand::CancelCue,
+        ClientMsg::SetLaneMute { seq, lane, on } => EngineCommand::SetLaneMute { seq, lane, on },
+        ClientMsg::SetLaneSolo { seq, lane, on } => EngineCommand::SetLaneSolo { seq, lane, on },
         ClientMsg::Stop { seq } => EngineCommand::Stop { seq },
         ClientMsg::StopAll => EngineCommand::StopAll,
         ClientMsg::ResumeLane { seq, lane } => EngineCommand::ResumeLane { seq, lane },
@@ -638,6 +697,10 @@ fn handle(ctx: &ServerCtx, text: &str) {
             tokio::spawn(push_thumbnail(ctx.clone(), seq));
             return;
         }
+        ClientMsg::CheckUpdate => return ctx.update.check(false),
+        ClientMsg::UpdateAnswer { skip } => return ctx.update.answer(skip),
+        ClientMsg::InstallUpdate => return ctx.update.install(),
+        ClientMsg::SetUpdateCheck { on } => return ctx.update.set_startup_check(on),
         ClientMsg::Shell { action } => {
             if let Some(shell) = &ctx.shell {
                 let _ = shell.send(action);
@@ -690,6 +753,8 @@ fn handle(ctx: &ServerCtx, text: &str) {
         ClientMsg::SetTheme { .. }
         | ClientMsg::SaveTheme { .. }
         | ClientMsg::DeleteTheme { .. }
+        | ClientMsg::SetGuideLines { .. }
+        | ClientMsg::SetDebugLog { .. }
         | ClientMsg::LutCreate { .. }
         | ClientMsg::LutRename { .. }
         | ClientMsg::LutDelete { .. }
@@ -852,6 +917,27 @@ async fn theme_command(ctx: &ServerCtx, cmd: ClientMsg) {
                 if s.theme.as_deref() == Some(id.as_str()) {
                     s.theme = None;
                 }
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SetGuideLines { every } => {
+            update_appearance(ctx, move |s| {
+                if let Some(n) = every {
+                    anyhow::ensure!(
+                        crate::settings::GUIDE_LINES.contains(&n),
+                        "guide lines every 8, 16 or 32 bars (got {n})"
+                    );
+                }
+                s.guide_lines = every;
+                Ok(())
+            })
+            .await;
+        }
+        ClientMsg::SetDebugLog { on } => {
+            crate::logging::set_debug(on);
+            update_appearance(ctx, move |s| {
+                s.debug_log = on;
                 Ok(())
             })
             .await;
@@ -1097,5 +1183,77 @@ async fn static_file(uri: Uri) -> Response {
             "UI not built: run `npm run build` in web/",
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SEQ: &str = "00000000-0000-0000-0000-00000000000a";
+
+    #[test]
+    fn cue_and_mute_messages_parse() {
+        let p = |t: String| serde_json::from_str::<ClientMsg>(&t).unwrap();
+        let seq: Uuid = SEQ.parse().unwrap();
+        for (at, want) in [
+            ("start_mode", crate::engine::CuePoint::StartMode),
+            ("bars_8", crate::engine::CuePoint::Bars8),
+            ("bars_16", crate::engine::CuePoint::Bars16),
+        ] {
+            let m = p(format!(r#"{{"cmd":"cue","seq":"{SEQ}","at":"{at}"}}"#));
+            assert!(matches!(m, ClientMsg::Cue { seq: s, at: a } if s == seq && a == want));
+        }
+        let of = Uuid::from_u128(0xb);
+        let m = p(format!(
+            r#"{{"cmd":"cue","seq":"{SEQ}","at":"end_of_pass","of":"{of}"}}"#
+        ));
+        assert!(matches!(
+            m,
+            ClientMsg::Cue {
+                at: crate::engine::CuePoint::EndOfPass { of: o },
+                ..
+            } if o == of
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"cancel_cue"}"#.into()),
+            ClientMsg::CancelCue
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_guide_lines","every":16}"#.into()),
+            ClientMsg::SetGuideLines { every: Some(16) }
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_guide_lines","every":null}"#.into()),
+            ClientMsg::SetGuideLines { every: None }
+        ));
+        assert!(matches!(
+            p(r#"{"cmd":"set_debug_log","on":true}"#.into()),
+            ClientMsg::SetDebugLog { on: true }
+        ));
+        assert!(matches!(
+            p(format!(
+                r#"{{"cmd":"set_lane_mute","seq":"{SEQ}","lane":1,"on":true}}"#
+            )),
+            ClientMsg::SetLaneMute {
+                lane: 1,
+                on: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            p(format!(
+                r#"{{"cmd":"set_lane_solo","seq":"{SEQ}","lane":0,"on":false}}"#
+            )),
+            ClientMsg::SetLaneSolo {
+                lane: 0,
+                on: false,
+                ..
+            }
+        ));
+        assert!(serde_json::from_str::<ClientMsg>(&format!(
+            r#"{{"cmd":"cue","seq":"{SEQ}","at":"later"}}"#
+        ))
+        .is_err());
     }
 }

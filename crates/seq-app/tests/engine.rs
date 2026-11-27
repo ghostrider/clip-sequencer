@@ -248,6 +248,23 @@ impl Harness {
         }
     }
 
+    /// Clears the mock's OSC log once nothing new has arrived for 100 ms (at most 3 s): OSC is UDP, so
+    /// messages sent before the clear can still be on their way and would land after it (seen on CI).
+    /// Only for moments without a running clock.
+    async fn clear_osc_log_when_quiet(&self) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut len = self.mock.osc_log().len();
+        while Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let now = self.mock.osc_log().len();
+            if now == len {
+                break;
+            }
+            len = now;
+        }
+        self.mock.clear_osc_log();
+    }
+
     fn cmd(&self, c: EngineCommand) {
         self.app.commands.send(c).unwrap();
     }
@@ -314,6 +331,355 @@ async fn two_lane_sequence_plays_on_exact_ticks_and_is_confirmed() {
         s.lanes[0].steps[0].clip.as_ref().unwrap().id,
         Some(1792956592496)
     );
+    h.app.shutdown().await;
+}
+
+/// SPEC §9.5: OSC is UDP, so a send that works says nothing. With Resolume's OSC input off, triggers time out
+/// while the WebSocket is fine: after a few in a row the OSC indicator turns red with a notice, and the next
+/// confirmed trigger turns it green again.
+#[tokio::test]
+async fn osc_indicator_turns_red_when_resolume_ignores_triggers() {
+    let h = harness().await;
+    // Ticks as a steady stream (a pause would freeze the sequences): a step every sixteenth, ~120 ms.
+    async fn ticks_until(h: &Harness, pred: impl Fn(&RuntimeState) -> bool) -> RuntimeState {
+        for _ in 0..150 {
+            h.ticks(1);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let r = h.app.outputs.runtime.borrow().clone();
+            if pred(&r) {
+                return r;
+            }
+        }
+        panic!("runtime state never matched");
+    }
+
+    h.mock.set_osc_input(false);
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.running.len() == 1).await;
+    let r = ticks_until(&h, |r| r.osc_unanswered).await;
+    assert!(r.osc, "sending itself works");
+    assert!(r.ws, "the WebSocket is fine");
+    assert!(
+        r.notices.iter().any(|n| n.contains("doesn't react to OSC")),
+        "{:?}",
+        r.notices
+    );
+
+    h.mock.set_osc_input(true);
+    let r = ticks_until(&h, |r| !r.osc_unanswered).await;
+    assert!(r.notices.iter().any(|n| n.contains("reacts to OSC again")));
+    h.app.shutdown().await;
+}
+
+/// SPEC §3.2: a sequence with start mode `bar` waits for the next bar of the bar phase; ▶ again
+/// starts it at once, Stop cancels, MIDI Start sets the phase (and never starts anything).
+#[tokio::test]
+async fn quantized_starts_wait_for_their_boundary() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    let set_start = |seq, start| {
+        h.cmd(EngineCommand::Edit {
+            op: EditOp::SetStart { seq, start },
+        })
+    };
+    set_start(SEQ_A, seq_core::Start::Bar { bars: 1 });
+    set_start(SEQ_B, seq_core::Start::Beat);
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_B && v.sequence.start == seq_core::Start::Beat)
+    })
+    .await;
+    let r = h.runtime(|r| !r.clock.bar_synced).await;
+    assert!(r.pending.is_empty());
+
+    h.ticks(10); // last tick: phase 9
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    let r = h.runtime(|r| r.pending.len() == 1).await;
+    assert_eq!((r.pending[0].seq, r.pending[0].wait_ticks), (SEQ_A, 87));
+    assert!(r.running.is_empty());
+    h.ticks(86);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(h.mock.osc_log().is_empty(), "nothing before the bar");
+    h.ticks(1);
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+    let sent = h.mock.osc_log().len();
+
+    // Stop cancels a waiting start: nothing is sent.
+    h.ticks(5);
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.cmd(EngineCommand::Stop { seq: SEQ_B });
+    h.runtime(|r| r.pending.is_empty()).await;
+    h.ticks(48);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), sent);
+
+    // ▶ again while waiting: at once.
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.cmd(EngineCommand::StopAll);
+    h.runtime(|r| r.running.is_empty()).await;
+
+    // MIDI Start: the next tick is bar 1, so a waiting start begins on it.
+    h.ticks(30);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    let r = h.runtime(|r| r.pending.len() == 1).await;
+    assert!(r.pending[0].wait_ticks > 1);
+    h.clock
+        .send(ClockEvent::Msg {
+            msg: ClockMsg::Start,
+            at: Instant::now(),
+        })
+        .unwrap();
+    let r = h
+        .runtime(|r| r.clock.bar_synced && r.pending.first().is_some_and(|p| p.wait_ticks == 1))
+        .await;
+    assert!(r.running.is_empty(), "MIDI Start starts nothing by itself");
+    h.ticks(1);
+    h.runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §3.3: a cue starts at its point and stops what plays; §7.8: mute clears the layer once,
+/// the lane counts silently and plays again at its next step.
+#[tokio::test]
+async fn cue_replaces_what_plays_and_mute_silences_a_lane() {
+    use seq_app::engine::CuePoint;
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetStart {
+            seq: SEQ_A,
+            start: seq_core::Start::Bar { bars: 1 },
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_A && v.sequence.start != seq_core::Start::Immediate)
+    })
+    .await;
+    h.ticks(1); // phase 0
+    h.cmd(EngineCommand::Start { seq: SEQ_B });
+    h.runtime(|r| r.running.len() == 1).await;
+    h.ticks(10);
+    h.cmd(EngineCommand::Cue {
+        seq: SEQ_A,
+        at: CuePoint::StartMode,
+    });
+    let r = h
+        .runtime(|r| r.pending.first().is_some_and(|p| p.cue))
+        .await;
+    assert_eq!(r.pending[0].wait_ticks, 86);
+    assert_eq!(r.pending[0].mode, Some(seq_core::Start::Bar { bars: 1 }));
+    h.ticks(85);
+    h.runtime(|r| r.running.iter().map(|x| x.seq).collect::<Vec<_>>() == [SEQ_B])
+        .await;
+    h.ticks(1);
+    let r = h
+        .runtime(|r| r.running.iter().map(|x| x.seq).collect::<Vec<_>>() == [SEQ_A])
+        .await;
+    assert!(r.pending.is_empty());
+
+    // Mute lane 0 (L2): cleared at once, then silent; unmuted it plays at its next step (tick 96).
+    h.clear_osc_log_when_quiet().await;
+    h.ticks(10);
+    h.cmd(EngineCommand::SetLaneMute {
+        seq: SEQ_A,
+        lane: 0,
+        on: true,
+    });
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.lanes[0].silent))
+        .await;
+    assert!(r.running[0].lanes[0].mute && !r.running[0].lanes[1].silent);
+    assert_eq!(h.osc(2).await, clear(2).to_vec());
+    h.cmd(EngineCommand::SetLaneMute {
+        seq: SEQ_A,
+        lane: 0,
+        on: false,
+    });
+    h.runtime(|r| r.running.first().is_some_and(|x| !x.lanes[0].silent))
+        .await;
+    h.ticks(85);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2, "nothing while unmuting");
+    h.ticks(1);
+    assert_eq!(h.osc(3).await[2], connect(2, 3));
+    h.app.shutdown().await;
+}
+
+/// Format v4 (SPEC §6), played: step 1 of lane L2 alternates TWISTED / LIQUID (`cycle`), step 2
+/// only plays on the last of two passes.
+#[tokio::test]
+async fn pass_conditions_and_choices_play() {
+    use seq_core::edit::EditOp;
+    use seq_core::model::{Choice, Pick, When};
+    use seq_core::ClipRef;
+    let h = harness().await;
+    let named = |name: &str| ClipRef {
+        name: Some(name.into()),
+        ..Default::default()
+    };
+    for op in [
+        EditOp::SetRepeat {
+            seq: SEQ_A,
+            repeat: seq_core::Repeat::Count { count: 2 },
+        },
+        EditOp::AddChoice {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            choice: Some(Choice::Clip(named(LIQUID))),
+        },
+        EditOp::SetPick {
+            seq: SEQ_A,
+            lane: 0,
+            index: 0,
+            pick: Some(Pick::Cycle),
+        },
+        EditOp::SetStepWhen {
+            seq: SEQ_A,
+            lane: 0,
+            index: 1,
+            when: Some(When::Last),
+        },
+    ] {
+        h.cmd(EngineCommand::Edit { op });
+    }
+    let s = h
+        .structure(|s| {
+            s.decks
+                .iter()
+                .flat_map(|d| &d.sequences)
+                .any(|v| v.sequence.id == SEQ_A && v.sequence.lanes[0].steps[1].when.is_some())
+        })
+        .await;
+    // The choice is resolved one by one like the step itself.
+    let v = s
+        .decks
+        .iter()
+        .flat_map(|d| &d.sequences)
+        .find(|v| v.sequence.id == SEQ_A)
+        .unwrap();
+    assert_eq!(
+        v.resolution.as_ref().unwrap().lanes[0].choices[0][0].state,
+        "ok"
+    );
+
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.running.len() == 1).await;
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    let r = h.runtime(|r| r.running[0].lanes[0].option == Some(0)).await;
+    assert_eq!(r.running[0].lanes[1].option, Some(0));
+    // Pass 1, step 2 (`last`): nothing; L2 keeps TWISTED.
+    h.ticks(96);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2);
+    h.runtime(|r| r.running[0].lanes[0].step == Some(1) && r.running[0].lanes[0].option.is_none())
+        .await;
+    // Pass 2: step 1 plays its second option (LIQUID), then step 2 plays.
+    h.ticks(96);
+    let log = h.osc(4).await;
+    assert!(log[2..].contains(&connect(2, 3)), "{log:?}");
+    h.ticks(96);
+    assert_eq!(h.osc(5).await[4], connect(2, 3));
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.1, started from Resolume then ▶ in the app: it restarts from step 1 and stays linked
+/// to its § clip, so clearing the SEQ layer still stops it.
+#[tokio::test]
+async fn restart_from_the_app_keeps_the_seq_clip_link() {
+    let h = harness().await;
+    h.mock.manual_connect(4, 1); // "§ Drop"
+    h.runtime(|r| r.running.first().is_some_and(|x| x.from_seq_clip))
+        .await;
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.ticks(40);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    // Step 1 again (L2 TWISTED, L1 TIME_TRAVEL), still linked.
+    assert_eq!(h.osc(4).await[2..], [connect(2, 1), connect(1, 2)]);
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.pos == 0))
+        .await;
+    assert!(r.running[0].from_seq_clip);
+    // Clearing the SEQ layer in Resolume stops it.
+    h.mock.manual_clear(4);
+    h.runtime(|r| r.running.is_empty()).await;
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.1, started from the app, then its § clip connects: the clip adopts the run (no
+/// restart), and finishing clears the SEQ layer like a run started from the clip.
+#[tokio::test]
+async fn seq_clip_adopts_a_sequence_started_in_the_app() {
+    let h = harness().await;
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
+    h.ticks(40);
+    h.runtime(|r| r.running.first().is_some_and(|x| x.pos == 40))
+        .await;
+    h.mock.manual_connect(4, 1);
+    let r = h
+        .runtime(|r| r.running.first().is_some_and(|x| x.from_seq_clip))
+        .await;
+    assert_eq!(r.running[0].pos, 40, "no jump to step 1");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(h.mock.osc_log().len(), 2, "no restart");
+    // It finishes at tick 192; the SEQ layer is cleared because the § clip is linked now.
+    h.ticks(152);
+    h.runtime(|r| r.running.is_empty()).await;
+    let [s1, s2] = clear(4);
+    let log = h.osc(8).await;
+    assert!(log.ends_with(&[s1, s2]), "{log:?}");
+    h.app.shutdown().await;
+}
+
+/// SPEC §7.1, waiting for its bar after ▶ in the app: its § clip connecting links the waiting
+/// start, it doesn't start a second one.
+#[tokio::test]
+async fn seq_clip_links_a_waiting_start() {
+    use seq_core::edit::EditOp;
+    let h = harness().await;
+    h.cmd(EngineCommand::Edit {
+        op: EditOp::SetStart {
+            seq: SEQ_A,
+            start: seq_core::Start::Bar { bars: 1 },
+        },
+    });
+    h.structure(|s| {
+        s.decks
+            .iter()
+            .flat_map(|d| &d.sequences)
+            .any(|v| v.sequence.id == SEQ_A && v.sequence.start != seq_core::Start::Immediate)
+    })
+    .await;
+    h.ticks(10);
+    h.cmd(EngineCommand::Start { seq: SEQ_A });
+    h.runtime(|r| r.pending.len() == 1).await;
+    h.mock.manual_connect(4, 1);
+    let r = h
+        .runtime(|r| r.pending.first().is_some_and(|p| p.from_seq_clip))
+        .await;
+    assert!(r.running.is_empty());
+    h.ticks(87);
+    let r = h
+        .runtime(|r| r.running.len() == 1 && r.pending.is_empty())
+        .await;
+    assert!(r.running[0].from_seq_clip);
+    assert_eq!(h.osc(2).await, vec![connect(2, 1), connect(1, 2)]);
     h.app.shutdown().await;
 }
 
@@ -384,7 +750,7 @@ async fn manual_trigger_on_an_owned_layer_yields_the_lane() {
         "{:?}",
         r.notices
     );
-    h.mock.clear_osc_log();
+    h.clear_osc_log_when_quiet().await;
     h.ticks(48);
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(h.mock.osc_log().is_empty(), "yielded lane must not trigger");
@@ -1857,7 +2223,10 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
         .await
         .unwrap();
     let first = appearance(&mut a, |_| true).await;
-    assert_eq!(first, json!({"theme": null, "custom_themes": []}));
+    assert_eq!(
+        first,
+        json!({"theme": null, "custom_themes": [], "guide_lines": null, "debug_log": false})
+    );
 
     let theme = json!({
         "id": "custom-0a1b", "name": "Club night", "base": "ink",
@@ -1903,6 +2272,25 @@ async fn theme_settings_are_saved_and_sent_to_every_ui() {
     assert!(got["theme"].is_null(), "{got}");
     let saved = seq_app::settings::Settings::load(dir.path());
     assert_eq!((saved.theme, saved.custom_themes.len()), (None, 0));
+
+    // Editor guide lines (SPEC §9.3): 8, 16 or 32 bars or off; other values are refused.
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": 12})).await;
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": 16})).await;
+    appearance(&mut b, |d| d["guide_lines"] == 16).await;
+    assert_eq!(
+        seq_app::settings::Settings::load(dir.path()).guide_lines,
+        Some(16)
+    );
+    send(&mut a, json!({"cmd": "set_guide_lines", "every": null})).await;
+    appearance(&mut b, |d| d["guide_lines"].is_null()).await;
+
+    // Preferences → Log debug messages: saved and sent to every UI.
+    send(&mut a, json!({"cmd": "set_debug_log", "on": true})).await;
+    appearance(&mut b, |d| d["debug_log"] == true).await;
+    assert!(seq_app::settings::Settings::load(dir.path()).debug_log);
+    send(&mut a, json!({"cmd": "set_debug_log", "on": false})).await;
+    appearance(&mut b, |d| d["debug_log"] == false).await;
+    assert!(!seq_app::settings::Settings::load(dir.path()).debug_log);
     app.shutdown().await;
 }
 

@@ -7,6 +7,14 @@
         "what": "Start / stop the selected sequence"
       },
       {
+        "keys": "Shift+Space",
+        "what": "Cue the selected sequence (plays next, at its start mode)"
+      },
+      {
+        "keys": "M",
+        "what": "Add a section marker at the playhead (running) or the selected step"
+      },
+      {
         "keys": "Del",
         "what": "Remove the selected step"
       },

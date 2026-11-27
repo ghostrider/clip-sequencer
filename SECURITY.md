@@ -23,3 +23,9 @@ Only the latest release gets security fixes.
   writes sequence files, settings, caches and logs in its data folder (`%APPDATA%\clip-sequencer`).
 - The FFGL plugin only connects to the sequencer's UI server (`127.0.0.1:8090` by default).
 - Release binaries are built by GitHub Actions from the tagged source; each release lists SHA-256 checksums.
+- Update check and install (SPEC §15): the app asks `api.github.com` for the latest release once at each start
+  (unless turned off) and when the user chooses Check for updates. An install downloads the release zip and
+  `SHA256SUMS.txt` over HTTPS, checks the zip and the exes and plugin in it against those sums, and swaps the files
+  of the program folder with a helper that keeps the old ones until the new version has started (else it puts them
+  back). The sums come from the same release as the zip, so they prove an intact download, not its origin; signed
+  releases will add a signature check. It never touches the data folder.

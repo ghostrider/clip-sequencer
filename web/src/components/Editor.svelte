@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { app, formatLength } from '../lib/app.svelte';
+  import { app, formatLength, waitLabel, START_MODES, sameStart } from '../lib/app.svelte';
   import type { Repeat } from '../lib/types';
   import LaneGrid from './LaneGrid.svelte';
 
   let view = $derived(app.selected);
   let deck = $derived(app.viewDeck);
   let run = $derived(app.run(view?.sequence.id));
+  let waiting = $derived(app.pendingStart(view?.sequence.id));
   let editingName = $state(false);
   let nameText = $state('');
   let countText = $state('4');
@@ -61,13 +62,21 @@
         <span class="tag bad">no {prefix}{s.name} clip on the {app.structure?.seq_layer} layer</span>
       {/if}
       <span class="hint">
-        Start: immediate · {formatLength(view.pass_sixteenths)} · grid 1/8 (Shift 1/16) · after last pass:
+        {formatLength(view.pass_sixteenths)} · grid 1/8 (Shift 1/16) · after last pass:
         <button class="linkish" title="Toggle what happens after the last pass"
           onclick={() => app.edit({ op: 'set_after_last_pass', seq: s.id, value: s.after_last_pass === 'clear' ? 'hold' : 'clear' })}
         >{s.after_last_pass}</button>
       </span>
       {#if run?.edited}<span class="tag pending">● edited · applies at next start</span>{/if}
+      {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{waitLabel(waiting)}</span>{/if}
       <div class="spacer"></div>
+      <div class="repeat startmode" role="group" aria-label="Start mode">
+        <span>Start</span>
+        {#each START_MODES as m (m.label)}
+          <button aria-pressed={sameStart(s.start, m.start)} title={m.title}
+            onclick={() => !sameStart(s.start, m.start) && app.edit({ op: 'set_start', seq: s.id, start: m.start })}>{m.label}</button>
+        {/each}
+      </div>
       <div class="repeat" role="group" aria-label="Repeat">
         <span>Repeat</span>
         <button aria-pressed={s.repeat.mode === 'once'} onclick={() => setRepeat({ mode: 'once' })}>Once</button>
@@ -82,9 +91,12 @@
       <button class="btn" onclick={addLane} disabled={!app.freeLayer(s.lanes.map((l) => l.layer))}>+ Lane</button>
       <button class="btn" disabled={!deck.live || !view.binding} title={!deck.live ? 'Only for the live deck' : !view.binding ? 'Needs a § clip on the SEQ layer' : ''}
         onclick={() => app.send({ cmd: 'push_thumbnail', seq: s.id })}>Push thumbnail to Resolume</button>
-      <button class="btn primary" disabled={deck.orphaned || app.runtime?.switching?.seq === s.id} onclick={() => app.toggle(view, deck)}>
-        {#if app.runtime?.switching?.seq === s.id}switching…{:else if run}■ Stop{:else if deck.live}▶ Start{:else}▶ Start on {deck.name}{/if}
+      <button class="btn primary" disabled={deck.orphaned || app.runtime?.switching?.seq === s.id}
+        title={deck.live ? 'Shift+click: cue it (plays next, at its start mode)' : ''}
+        onclick={(e) => (e.shiftKey && deck.live ? app.cue(view, deck) : app.toggle(view, deck))}>
+        {#if app.runtime?.switching?.seq === s.id}switching…{:else if run}■ Stop{:else if waiting}▶ Start now{:else if deck.live}▶ Start{:else}▶ Start on {deck.name}{/if}
       </button>
+      {#if waiting}<button class="btn" onclick={() => app.cancelWaiting(waiting)}>Cancel</button>{/if}
     </div>
 
     <LaneGrid {view} {deck} />

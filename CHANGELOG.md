@@ -7,6 +7,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Start mode** per sequence (sequence file format **v4**): start now, on the next beat, on the next bar, or on the
+  next 2, 4, 8 or 16 bars. Bars count from the clock's MIDI Start (or Resolume's Resync); the card and the editor
+  show `starts in …` while a start waits.
+- **Cue:** Shift+▶ or Shift+Space cues a sequence to play next; at its cue point (its start mode, the end of a
+  playing sequence's pass, or the next 8 or 16 bars) it starts and everything else stops.
+- **Mute and solo** per lane of a running sequence: a muted lane goes dark, keeps counting and comes back in time.
+- **Play on:** a step can play only on some passes (first, all but the first, last, all but the last, or pass A of
+  every B); on the others it sends nothing.
+- **Choices:** up to 3 more clips (or columns, or rests) per step, picked at random or in turn each time it plays.
+- **Section markers** in the editor ("Intro", "Drop"): add with M or from the ruler, drag, rename, delete. View →
+  Guide lines draws a line every 8, 16 or 32 bars.
+- **LUT test photos:** the 24 images of the Kodak test suite in the LUT tab's preview.
+- **Updates from the app:** once at each start the app asks GitHub whether a newer version exists and offers it
+  (Download and install, Skip this version, Later); Help → Check for updates… any time. Installing replaces the
+  program files and restarts; if the new version doesn't start, the old one comes back. Turn the check at start-up
+  off in Preferences → Updates. `seq-app-cli --check-update` prints the result.
+
+### Changed
+
+- **New logo**: in the top bar, on the splash screen, as the app and window icon, in the About dialog and on the
+  website, replacing the "§ SEQ" mark. The Unbounded font (used only by the old mark) is no longer bundled.
+- **Starting a running sequence** works from either side: ▶ in the app restarts it and keeps its link to the `§`
+  clip, and its `§` clip clicked while it runs takes it over without a restart (no more "start it from one place
+  at a time").
+- The LUT preview shows the original and the result **side by side**, each fitted to its panel, instead of one
+  picture with a split to drag. It uses the whole width of the tab and is as high as the image needs.
+
+- **Log debug messages** (Preferences → Log): every OSC message sent to Resolume and each trigger's confirmation
+  go to the Console tab and the log file, with their times. Off by default; applies at once. They are no longer
+  shown in the status bar.
+
+### Fixed
+
+- The **OSC** chip turns red when Resolume ignores the triggers (for example with its OSC input off): before, it
+  stayed green because sending over OSC succeeds whether or not anyone listens.
+- Step badges (Play on, choices) sit next to the length and no longer cover the clip name.
+- A disabled main button (such as **Download and install** when the app can't update itself) looks disabled.
+- The splash screen keeps its own size and stays centred instead of reopening at the main window's last size.
+- Picking a clip for a choice or a relink no longer shifts the clip browser down.
+- Sequence files are saved in format **v4**. Files of earlier builds are read as before; the first save keeps the
+  original as `.v3.bak` (or `.v1.bak`, `.v2.bak`). 0.4.x cannot read v4 files.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

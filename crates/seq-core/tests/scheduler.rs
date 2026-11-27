@@ -2,9 +2,9 @@
 
 use seq_core::scheduler::{
     bar_beat, Action, EndReason, LaneState, Origin, RunLane, RunSpec, RunStep, Scheduler,
-    StartError, StepTarget, StopMode,
+    StartError, StepTarget, StopMode, Wait,
 };
-use seq_core::{AfterLastPass, LaneEnd, Repeat};
+use seq_core::{AfterLastPass, LaneEnd, Repeat, Start};
 use uuid::Uuid;
 
 const E: u64 = 12; // ticks per eighth
@@ -19,10 +19,7 @@ fn lane(layer: u64, end: LaneEnd, steps: &[(u64, StepTarget)]) -> RunLane {
         end,
         steps: steps
             .iter()
-            .map(|&(eighths, target)| RunStep {
-                ticks: eighths * E,
-                target,
-            })
+            .map(|&(eighths, target)| RunStep::new(eighths * E, target))
             .collect(),
     }
 }
@@ -34,6 +31,7 @@ fn spec(id: u128, repeat: Repeat, after: AfterLastPass, lanes: Vec<RunLane>) -> 
         repeat,
         after_last_pass: after,
         lanes,
+        seed: 7,
     }
 }
 
@@ -95,7 +93,7 @@ fn start_triggers_first_steps_immediately_and_boundaries_fall_on_exact_ticks() {
             lane(200, LaneEnd::LoopToEnd, &[(13, Clip(9))]),
         ],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     assert!(matches!(start[0], Action::Started { .. }));
     assert!(matches!(start[1], Action::PassStarted { pass: 1, .. }));
     let log = run(&mut s, start, 13 * E);
@@ -124,7 +122,7 @@ fn loop_to_end_restarts_short_lane_until_pass_end() {
             lane(200, LaneEnd::Hold, &[(8, Clip(2))]),
         ],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, BAR);
     let l1: Vec<_> = triggers(&log)
         .into_iter()
@@ -150,12 +148,9 @@ fn sixteenth_steps_fire_every_six_ticks() {
     );
     sp.lanes[0].steps = [(1, Clip(1)), (1, Clip(2)), (3, Clip(3))]
         .iter()
-        .map(|&(sixteenths, target)| RunStep {
-            ticks: sixteenths * S,
-            target,
-        })
+        .map(|&(sixteenths, target)| RunStep::new(sixteenths * S, target))
         .collect();
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, BAR);
     let l1: Vec<_> = triggers(&log).into_iter().filter(|t| t.1 != 9).collect();
     // 5-sixteenth loop: 0, 6, 12, then again from 30.
@@ -185,7 +180,7 @@ fn hold_lane_keeps_last_clip_and_clear_lane_clears_at_its_end() {
             lane(300, LaneEnd::LoopToEnd, &[(8, Clip(4))]),
         ],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 2 * BAR);
     let t = triggers(&log);
     assert!(t.contains(&(2 * E, 2)));
@@ -211,7 +206,7 @@ fn rest_clears_the_layer_and_unresolved_does_nothing() {
             &[(1, Clip(1)), (1, Rest), (1, Unresolved), (1, Clip(2))],
         )],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 4 * E - 1);
     assert_eq!(triggers(&log), vec![(0, 1), (3 * E, 2)]);
     assert_eq!(clears(&log), vec![(E, 100)]);
@@ -238,7 +233,9 @@ fn repeat_once_finishes_with_after_last_pass_clear() {
             lane(200, LaneEnd::Hold, &[(4, Clip(2))]),
         ],
     );
-    let start = s.start(sp, Origin::SeqClip { clip_id: 77 }).unwrap();
+    let start = s
+        .start(sp, Origin::SeqClip { clip_id: 77 }, Start::Immediate)
+        .unwrap();
     let log = run(&mut s, start, BAR + 10);
     assert_eq!(triggers(&log), vec![(0, 1), (0, 2)]);
     assert_eq!(clears(&log), vec![(BAR, 100), (BAR, 200)]);
@@ -262,7 +259,7 @@ fn after_last_pass_hold_leaves_layers_alone() {
         AfterLastPass::Hold,
         vec![lane(100, LaneEnd::Hold, &[(1, Clip(1))])],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 2 * E);
     assert!(clears(&log).is_empty());
     assert_eq!(ended(&log), vec![(E, seq(1), EndReason::Finished)]);
@@ -280,7 +277,7 @@ fn repeat_count_plays_exactly_n_passes() {
             lane(200, LaneEnd::Clear, &[(1, Clip(3))]),
         ],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 20 * E);
     let passes: Vec<_> = log
         .iter()
@@ -308,7 +305,7 @@ fn infinite_repeat_keeps_going_without_drift() {
         AfterLastPass::Clear,
         vec![lane(100, LaneEnd::LoopToEnd, &[(8, Clip(1)), (8, Clip(2))])],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 1000 * BAR);
     let t = triggers(&log);
     assert_eq!(t.len(), 1001);
@@ -330,7 +327,7 @@ fn no_ticks_freezes_and_ticks_resume_where_it_stopped() {
         AfterLastPass::Clear,
         vec![lane(100, LaneEnd::LoopToEnd, &[(1, Clip(1)), (1, Clip(2))])],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     for _ in 0..5 {
         s.on_tick();
     }
@@ -355,7 +352,7 @@ fn restart_takes_a_new_snapshot_and_releases_shared_layers_without_clearing() {
             lane(200, LaneEnd::LoopToEnd, &[(8, Clip(2))]),
         ],
     );
-    s.start(v1, Origin::Ui).unwrap();
+    s.start(v1, Origin::Ui, Start::Immediate).unwrap();
     for _ in 0..30 {
         s.on_tick();
     }
@@ -366,7 +363,7 @@ fn restart_takes_a_new_snapshot_and_releases_shared_layers_without_clearing() {
         AfterLastPass::Clear,
         vec![lane(100, LaneEnd::LoopToEnd, &[(8, Clip(5))])],
     );
-    let acts = s.start(v2, Origin::Ui).unwrap();
+    let acts = s.start(v2, Origin::Ui, Start::Immediate).unwrap();
     let log: Vec<_> = acts.into_iter().map(|a| (0, a)).collect();
     assert_eq!(
         clears(&log),
@@ -391,7 +388,7 @@ fn starting_on_an_owned_layer_takes_over_only_that_lane() {
             lane(200, LaneEnd::LoopToEnd, &[(1, Clip(2))]),
         ],
     );
-    s.start(a, Origin::Ui).unwrap();
+    s.start(a, Origin::Ui, Start::Immediate).unwrap();
     s.on_tick();
     let b = spec(
         2,
@@ -399,7 +396,7 @@ fn starting_on_an_owned_layer_takes_over_only_that_lane() {
         AfterLastPass::Clear,
         vec![lane(200, LaneEnd::LoopToEnd, &[(1, Clip(9))])],
     );
-    let acts = s.start(b, Origin::Ui).unwrap();
+    let acts = s.start(b, Origin::Ui, Start::Immediate).unwrap();
     assert!(acts.contains(&Action::LaneStateChanged {
         seq: seq(1),
         lane: 1,
@@ -427,6 +424,7 @@ fn sequence_whose_lanes_are_all_taken_over_ends() {
             vec![lane(100, LaneEnd::LoopToEnd, &[(1, Clip(1))])],
         ),
         Origin::Ui,
+        Start::Immediate,
     )
     .unwrap();
     let acts = s
@@ -438,6 +436,7 @@ fn sequence_whose_lanes_are_all_taken_over_ends() {
                 vec![lane(100, LaneEnd::LoopToEnd, &[(1, Clip(2))])],
             ),
             Origin::Ui,
+            Start::Immediate,
         )
         .unwrap();
     let log: Vec<_> = acts.into_iter().map(|a| (0, a)).collect();
@@ -462,7 +461,7 @@ fn yielded_lane_counts_silently_and_resumes_at_next_boundary() {
             lane(200, LaneEnd::LoopToEnd, &[(1, Clip(9))]),
         ],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     s.on_tick();
     let y = s.yield_layer(100);
     assert_eq!(
@@ -522,7 +521,7 @@ fn yield_survives_pass_boundaries_and_is_not_cleared_on_finish() {
             lane(200, LaneEnd::LoopToEnd, &[(1, Clip(2))]),
         ],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     s.yield_layer(100);
     let log = run(&mut s, Vec::new(), 2 * E);
     assert!(!triggers(&log).iter().any(|&(_, c)| c == 1));
@@ -556,18 +555,18 @@ fn stop_modes() {
     };
 
     let mut s = Scheduler::new();
-    s.start(two_lanes(), Origin::Ui).unwrap();
+    s.start(two_lanes(), Origin::Ui, Start::Immediate).unwrap();
     s.yield_layer(200);
     assert_eq!(
         clear_layers(&s.stop(seq(1), StopMode::AfterLastPass)),
         vec![100]
     );
 
-    s.start(two_lanes(), Origin::Ui).unwrap();
+    s.start(two_lanes(), Origin::Ui, Start::Immediate).unwrap();
     s.yield_layer(200);
     assert_eq!(clear_layers(&s.stop_all(StopMode::Clear)), vec![100, 200]);
 
-    s.start(two_lanes(), Origin::Ui).unwrap();
+    s.start(two_lanes(), Origin::Ui, Start::Immediate).unwrap();
     let acts = s.stop(seq(1), StopMode::Release);
     assert!(clear_layers(&acts).is_empty());
     assert!(matches!(
@@ -598,7 +597,7 @@ fn silent_lanes_neither_play_nor_own() {
             lane(300, LaneEnd::Hold, &[]),
         ],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 2 * BAR);
     // The silent 16-eighth lane still sets the pass length (2 bars).
     assert_eq!(triggers(&log), vec![(0, 2), (BAR, 2)]);
@@ -615,12 +614,15 @@ fn start_errors() {
         AfterLastPass::Clear,
         vec![lane(100, LaneEnd::Hold, &[])],
     );
-    assert_eq!(s.start(empty, Origin::Ui), Err(StartError::Empty));
+    assert_eq!(
+        s.start(empty, Origin::Ui, Start::Immediate),
+        Err(StartError::Empty)
+    );
     let mut l = lane(100, LaneEnd::Hold, &[(1, Clip(1))]);
     l.layer_id = None;
     let no_layer = spec(1, Repeat::Once, AfterLastPass::Clear, vec![l]);
     assert_eq!(
-        s.start(no_layer, Origin::Ui),
+        s.start(no_layer, Origin::Ui, Start::Immediate),
         Err(StartError::NoPlayableLanes)
     );
 }
@@ -637,7 +639,7 @@ fn status_reports_position_pass_and_steps() {
             lane(200, LaneEnd::Hold, &[(4, Clip(3))]),
         ],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     for _ in 0..(2 * BAR + BAR + 30) {
         s.on_tick();
     }
@@ -749,26 +751,17 @@ fn run_spec_from_sequence_and_resolution() {
     assert_eq!(
         rs.lanes[0].steps,
         vec![
-            RunStep {
-                ticks: 96,
-                target: Clip(10)
-            },
-            RunStep {
-                ticks: 24,
-                target: Rest
-            },
-            RunStep {
-                ticks: 12,
-                target: Unresolved
-            },
+            RunStep::new(96, Clip(10)),
+            RunStep::new(24, Rest),
+            RunStep::new(12, Unresolved),
         ]
     );
     assert_eq!(rs.lanes[1].layer_id, None);
     assert_eq!(rs.pass_ticks(), 132);
     assert_eq!(rs.passes(), Some(2));
 
-    // Format v4 fields are carried but not acted on yet (M20–M22): the snapshot the scheduler gets
-    // is the same with all of them set, so it plays exactly as before.
+    // Format v4: condition, choices (resolved like option 1) and pick reach the snapshot (M22);
+    // sections and transitions don't change it (transitions: M21).
     use seq_core::model::{Choice, Pick, Section, Transition, When};
     let mut v4 = sequence.clone();
     v4.start = seq_core::Start::Bar { bars: 4 };
@@ -793,7 +786,211 @@ fn run_spec_from_sequence_and_resolution() {
             blend: None,
         });
     }
-    assert_eq!(RunSpec::new(&v4, &resolve_sequence(&v4, &idx)), rs);
+    let v4rs = RunSpec::new(&v4, &resolve_sequence(&v4, &idx));
+    let mut expected = rs.clone();
+    for (i, step) in expected.lanes[0].steps.iter_mut().enumerate() {
+        step.when = Some(When::Cycle { pass: 2, of: 2 });
+        step.choices = vec![Rest, Unresolved];
+        step.pick = if i % 2 == 0 {
+            Pick::Cycle
+        } else {
+            Pick::Random
+        };
+    }
+    assert_eq!(v4rs, expected);
+}
+
+// ---- pass conditions and choices (format v4, SPEC §6) ----
+
+#[test]
+fn conditions_per_pass() {
+    use seq_core::model::When;
+    use seq_core::scheduler::plays_on;
+    let on = |w, passes: Option<u32>| -> Vec<bool> {
+        (1..=4).map(|p| plays_on(Some(w), p, passes)).collect()
+    };
+    assert_eq!(on(When::First, Some(4)), [true, false, false, false]);
+    assert_eq!(on(When::NotFirst, Some(4)), [false, true, true, true]);
+    assert_eq!(on(When::Last, Some(4)), [false, false, false, true]);
+    assert_eq!(on(When::NotLast, Some(4)), [true, true, true, false]);
+    // Infinite: no last pass.
+    assert_eq!(on(When::Last, None), [false; 4]);
+    assert_eq!(on(When::NotLast, None), [true; 4]);
+    // `once` has one pass, which is first and last.
+    assert!(plays_on(Some(When::Last), 1, Some(1)) && plays_on(Some(When::First), 1, Some(1)));
+    assert_eq!(
+        on(When::Cycle { pass: 2, of: 2 }, None),
+        [false, true, false, true]
+    );
+    assert_eq!(
+        on(When::Cycle { pass: 1, of: 3 }, None),
+        [true, false, false, true]
+    );
+    assert!(plays_on(None, 3, Some(4)));
+}
+
+fn with(step: RunStep, f: impl FnOnce(&mut RunStep)) -> RunStep {
+    let mut step = step;
+    f(&mut step);
+    step
+}
+
+#[test]
+fn a_step_that_doesnt_play_sends_nothing_and_the_clip_plays_through() {
+    use seq_core::model::When;
+    // Two-step lane; step 2 (clip 20) only on the last of 3 passes.
+    let mut sp = spec(
+        1,
+        Repeat::Count { count: 3 },
+        AfterLastPass::Hold,
+        vec![lane(
+            500,
+            LaneEnd::LoopToEnd,
+            &[(8, Clip(10)), (8, Clip(20))],
+        )],
+    );
+    sp.lanes[0].steps[1].when = Some(When::Last);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 3 * 2 * BAR);
+    assert_eq!(
+        triggers(&log),
+        [(0, 10), (2 * BAR, 10), (4 * BAR, 10), (5 * BAR, 20)]
+    );
+    assert!(clears(&log).is_empty(), "no clear: clip 10 plays through");
+    // The step still begins (for the UI), with no option played.
+    assert!(log
+        .iter()
+        .any(|(t, a)| *t == BAR && matches!(a, Action::StepStarted { step: 1, .. })));
+}
+
+#[test]
+fn loops_of_a_short_lane_share_the_pass() {
+    use seq_core::model::When;
+    // Lane of one bar in a two-bar pass, `first`: plays twice in pass 1 (its loops), not in pass 2.
+    let mut sp = spec(
+        1,
+        Repeat::Count { count: 2 },
+        AfterLastPass::Hold,
+        vec![
+            lane(500, LaneEnd::LoopToEnd, &[(8, Clip(10))]),
+            lane(501, LaneEnd::Hold, &[(16, Clip(99))]),
+        ],
+    );
+    sp.lanes[0].steps[0].when = Some(When::First);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 4 * BAR - 1);
+    let tens: Vec<_> = triggers(&log)
+        .into_iter()
+        .filter(|&(_, c)| c == 10)
+        .collect();
+    assert_eq!(tens, [(0, 10), (BAR, 10)]);
+}
+
+#[test]
+fn cycle_pick_goes_through_the_options_and_starts_again_each_run() {
+    use seq_core::model::Pick;
+    let step = with(RunStep::new(8 * E, Clip(10)), |s| {
+        s.choices = vec![Clip(11), Rest, Unresolved];
+        s.pick = Pick::Cycle;
+    });
+    let sp = || RunSpec {
+        lanes: vec![RunLane {
+            layer_id: Some(500),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![step.clone()],
+        }],
+        ..spec(1, Repeat::Infinite, AfterLastPass::Hold, vec![])
+    };
+    let mut s = Scheduler::new();
+    let start = s.start(sp(), Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 5 * BAR);
+    // 10, 11, rest (clear), unresolved (nothing), 10, 11 — every loop counts.
+    assert_eq!(
+        triggers(&log),
+        [(0, 10), (BAR, 11), (4 * BAR, 10), (5 * BAR, 11)]
+    );
+    assert_eq!(clears(&log), [(2 * BAR, 500)]);
+    let options: Vec<_> = s.status()[0].lanes.iter().map(|l| l.option).collect();
+    assert_eq!(options, [Some(1)]);
+    // A new start begins at option 1.
+    let start = s.start(sp(), Origin::Ui, Start::Immediate).unwrap();
+    assert_eq!(triggers(&run(&mut s, start, 0)), [(0, 10)]);
+}
+
+#[test]
+fn random_pick_is_reproducible_from_the_seed_and_uses_every_option() {
+    use seq_core::model::Pick;
+    use seq_core::scheduler::pick_option;
+    let step = with(RunStep::new(8 * E, Clip(10)), |s| {
+        s.choices = vec![Clip(11), Clip(12), Clip(13)];
+        s.pick = Pick::Random;
+    });
+    let picks =
+        |seed| -> Vec<usize> { (0..64).map(|n| pick_option(&step, seed, 0, 0, n)).collect() };
+    assert_eq!(picks(1), picks(1), "same seed, same picks");
+    assert_ne!(picks(1), picks(2), "another seed, other picks");
+    for i in 0..4 {
+        assert!(picks(1).contains(&i), "option {i} is picked sometimes");
+    }
+    // Played: the triggers follow pick_option with the run's seed.
+    let mut sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![RunLane {
+            layer_id: Some(500),
+            end: LaneEnd::LoopToEnd,
+            steps: vec![step.clone()],
+        }],
+    );
+    sp.seed = 42;
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let log = run(&mut s, start, 7 * BAR);
+    let got: Vec<u64> = triggers(&log).into_iter().map(|(_, c)| c).collect();
+    let want: Vec<u64> = (0..8)
+        .map(|n| 10 + pick_option(&step, 42, 0, 0, n) as u64)
+        .collect();
+    assert_eq!(got, want);
+}
+
+#[test]
+fn slot_reads_follow_the_condition_and_the_pick() {
+    use seq_core::model::{Pick, When};
+    // Slot lane, one bar: column 1 or 2 in turn; a second step on column 5 only on pass 2+.
+    let mut sp = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![lane(500, LaneEnd::LoopToEnd, &[(8, Slot(1)), (8, Slot(5))])],
+    );
+    sp.lanes[0].steps[0].choices = vec![Slot(2)];
+    sp.lanes[0].steps[0].pick = Pick::Cycle;
+    sp.lanes[0].steps[1].when = Some(When::NotFirst);
+    let mut s = Scheduler::new();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
+    let cols = |s: &Scheduler, ahead| -> Vec<u32> {
+        s.slot_steps_ahead(ahead).iter().map(|u| u.column).collect()
+    };
+    // Step 2 of pass 1 does not play: nothing to read.
+    assert!(cols(&s, BAR).is_empty());
+    // Step 1 of pass 2 is its second play: column 2.
+    assert_eq!(cols(&s, 2 * BAR), [2]);
+    run(&mut s, start, 2 * BAR);
+    // Pass 2: step 2 plays (column 5), then step 1 plays the third time: column 1 again.
+    assert_eq!(cols(&s, BAR), [5]);
+    assert_eq!(cols(&s, 2 * BAR), [1]);
+    let log = run(&mut s, Vec::new(), 2 * BAR);
+    let played: Vec<_> = log
+        .iter()
+        .filter_map(|(t, a)| match a {
+            Action::TriggerSlot { column, .. } => Some((*t, *column)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(played, [(BAR, 5), (2 * BAR, 1)]);
 }
 
 /// (tick, column) of every slot trigger.
@@ -819,7 +1016,7 @@ fn slot_steps_trigger_their_column_each_pass() {
             &[(8, Slot(3)), (8, Rest), (8, Slot(1))],
         )],
     );
-    let start = s.start(sp, Origin::Ui).unwrap();
+    let start = s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let log = run(&mut s, start, 6 * BAR);
     assert_eq!(
         slot_triggers(&log),
@@ -849,7 +1046,7 @@ fn slot_lookahead_reports_each_upcoming_step_once() {
             lane(8, LaneEnd::Hold, &[(8, Clip(5))]),
         ],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     let ahead = 8;
     let mut seen = Vec::new();
     for t in 1..=4 * BAR {
@@ -879,7 +1076,7 @@ fn slot_lookahead_skips_lanes_that_will_not_trigger() {
         AfterLastPass::Clear,
         vec![lane(7, LaneEnd::LoopToEnd, &[(8, Slot(1)), (8, Slot(2))])],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     for _ in 0..BAR - 4 {
         s.on_tick();
     }
@@ -910,7 +1107,7 @@ fn rewind_jumps_to_step_one_now_and_keeps_counting_from_there() {
             lane(200, LaneEnd::Clear, &[(4, Clip(3))]),
         ],
     );
-    s.start(sp, Origin::Ui).unwrap();
+    s.start(sp, Origin::Ui, Start::Immediate).unwrap();
     // Into pass 2, past the clear lane's end.
     for _ in 0..(2 * BAR + BAR + 5) {
         s.on_tick();
@@ -949,6 +1146,7 @@ fn rewind_leaves_yielded_and_taken_over_lanes_silent() {
             ],
         ),
         Origin::Ui,
+        Start::Immediate,
     )
     .unwrap();
     s.start(
@@ -959,6 +1157,7 @@ fn rewind_leaves_yielded_and_taken_over_lanes_silent() {
             vec![lane(300, LaneEnd::LoopToEnd, &[(8, Clip(9))])],
         ),
         Origin::Ui,
+        Start::Immediate,
     )
     .unwrap();
     for _ in 0..20 {
@@ -988,4 +1187,562 @@ fn rewind_leaves_yielded_and_taken_over_lanes_silent() {
 #[test]
 fn rewind_without_running_sequences_does_nothing() {
     assert!(Scheduler::new().rewind_all().is_empty());
+}
+
+// ---- quantized start (SPEC §3.2) ----
+
+const BEAT: u64 = 24;
+
+fn one_clip(id: u128, layer: u64, clip: u64) -> RunSpec {
+    spec(
+        id,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![lane(layer, LaneEnd::LoopToEnd, &[(8, Clip(clip))])], // one bar
+    )
+}
+
+/// Advances `n` ticks.
+fn ticks(s: &mut Scheduler, n: u64) -> Vec<(u64, Action)> {
+    run(s, Vec::new(), n)
+}
+
+fn started(log: &[(u64, Action)]) -> Vec<(u64, Uuid)> {
+    log.iter()
+        .filter_map(|(t, a)| match a {
+            Action::Started { seq, .. } => Some((*t, *seq)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn beat_start_waits_for_the_next_beat() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 10); // last tick: phase 9
+    let acts = s
+        .start(one_clip(1, 500, 10), Origin::Ui, Start::Beat)
+        .unwrap();
+    assert_eq!(
+        acts,
+        [Action::Pending {
+            seq: seq(1),
+            origin: Origin::Ui
+        }]
+    );
+    assert!(s.is_pending(seq(1)) && !s.is_running(seq(1)));
+    let p = s.pending();
+    assert_eq!(
+        (p[0].wait_ticks, p[0].wait, p[0].cue),
+        (BEAT - 9, Wait::Mode(Start::Beat), false)
+    );
+    let log = ticks(&mut s, 20);
+    // Phase 24 is the 15th tick from here; the first step triggers on it.
+    assert_eq!(started(&log), [(15, seq(1))]);
+    assert_eq!(triggers(&log), [(15, 10)]);
+    assert!(s.pending().is_empty());
+    // From then on it counts from its own start: the next bar is 96 ticks later.
+    let log = ticks(&mut s, BAR);
+    assert_eq!(triggers(&log), [(BAR - 5, 10)]);
+}
+
+#[test]
+fn a_start_on_a_boundary_tick_starts_on_that_tick() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, BAR + 1); // last tick: phase 96 = bar 1
+    for (i, mode) in [Start::Beat, Start::Bar { bars: 1 }, Start::Immediate]
+        .into_iter()
+        .enumerate()
+    {
+        let id = i as u128 + 1;
+        let acts = s
+            .start(one_clip(id, 500 + id as u64, 10), Origin::Ui, mode)
+            .unwrap();
+        assert!(
+            acts.iter()
+                .any(|a| matches!(a, Action::Started { seq: x, .. } if *x == seq(id))),
+            "{mode:?}"
+        );
+    }
+    // Not a multiple of 2 bars: waits for bar 2.
+    let acts = s
+        .start(one_clip(9, 509, 10), Origin::Ui, Start::Bar { bars: 2 })
+        .unwrap();
+    assert!(matches!(acts[..], [Action::Pending { .. }]));
+    assert_eq!(s.pending()[0].wait_ticks, BAR);
+}
+
+#[test]
+fn bar_starts_wait_for_a_bar_index_that_is_a_multiple() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 100); // last tick: phase 99, in bar 1
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Bar { bars: 4 })
+        .unwrap();
+    s.start(one_clip(2, 501, 20), Origin::Ui, Start::Bar { bars: 1 })
+        .unwrap();
+    let waits: Vec<_> = s.pending().iter().map(|p| p.wait_ticks).collect();
+    assert_eq!(waits, [4 * BAR - 99, 2 * BAR - 99]);
+    let log = ticks(&mut s, 4 * BAR);
+    assert_eq!(
+        started(&log),
+        [(2 * BAR - 99, seq(2)), (4 * BAR - 99, seq(1))]
+    );
+}
+
+#[test]
+fn before_the_first_tick_every_mode_starts_on_it() {
+    let mut s = Scheduler::new();
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Bar { bars: 16 })
+        .unwrap();
+    assert_eq!(s.pending()[0].wait_ticks, 1);
+    let log = ticks(&mut s, 1);
+    assert_eq!(started(&log), [(1, seq(1))]);
+    assert_eq!(triggers(&log), [(1, 10)]);
+}
+
+#[test]
+fn starting_again_while_waiting_starts_at_once_and_stop_cancels() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 30);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Bar { bars: 8 })
+        .unwrap();
+    let acts = s
+        .start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    assert!(matches!(acts[0], Action::Started { .. }), "{acts:?}");
+    assert!(s.pending().is_empty() && s.is_running(seq(1)));
+
+    s.start(one_clip(2, 501, 20), Origin::Ui, Start::Beat)
+        .unwrap();
+    assert_eq!(
+        s.stop(seq(2), StopMode::AfterLastPass),
+        [Action::PendingCancelled {
+            seq: seq(2),
+            origin: Origin::Ui
+        }]
+    );
+    let log = ticks(&mut s, BAR);
+    assert!(started(&log).is_empty());
+    assert!(!triggers(&log).iter().any(|&(_, c)| c == 20));
+
+    s.start(one_clip(3, 502, 30), Origin::Ui, Start::Beat)
+        .unwrap();
+    let acts = s.stop_all(StopMode::Clear);
+    assert!(acts.contains(&Action::PendingCancelled {
+        seq: seq(3),
+        origin: Origin::Ui
+    }));
+    assert!(s.pending().is_empty() && s.running().next().is_none());
+}
+
+#[test]
+fn a_waiting_start_freezes_without_ticks() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 5);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Beat)
+        .unwrap();
+    // No ticks for a while (clock lost, Resolume paused): still waiting, same distance.
+    assert_eq!(s.pending()[0].wait_ticks, BEAT - 4);
+    let log = ticks(&mut s, BEAT - 5);
+    assert!(started(&log).is_empty());
+    assert_eq!(started(&ticks(&mut s, 1)), [(1, seq(1))]);
+}
+
+#[test]
+fn phase_resets_move_the_wait() {
+    // MIDI Start: the next tick is bar 0, so a waiting start begins on it.
+    let mut s = Scheduler::new();
+    ticks(&mut s, 50);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Bar { bars: 4 })
+        .unwrap();
+    assert_eq!(s.pending()[0].wait_ticks, 4 * BAR - 49);
+    s.phase_reset_next_tick();
+    assert_eq!(s.pending()[0].wait_ticks, 1);
+    assert_eq!(started(&ticks(&mut s, 1)), [(1, seq(1))]);
+
+    // Resync: this moment is bar 0; waiting starts begin now, together with the rewind.
+    let mut s = Scheduler::new();
+    ticks(&mut s, 50);
+    s.start(one_clip(2, 501, 20), Origin::Ui, Start::Bar { bars: 2 })
+        .unwrap();
+    let acts = s.phase_reset_now();
+    assert!(acts.iter().any(|a| matches!(a, Action::Started { .. })));
+    assert!(acts
+        .iter()
+        .any(|a| matches!(a, Action::Trigger { clip_id: 20, .. })));
+    // And later starts count from there: one tick after the resync is phase 1.
+    ticks(&mut s, 1);
+    s.start(one_clip(3, 502, 30), Origin::Ui, Start::Beat)
+        .unwrap();
+    assert_eq!(s.pending()[0].wait_ticks, BEAT - 1);
+}
+
+#[test]
+fn a_restart_at_the_boundary_replaces_the_run_without_a_double_trigger() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1); // phase 0
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 40);
+    // ▶ on the running sequence with mode bar: it keeps playing until bar 1, then restarts.
+    s.start(one_clip(1, 500, 11), Origin::Ui, Start::Bar { bars: 1 })
+        .unwrap();
+    assert!(s.is_running(seq(1)) && s.is_pending(seq(1)));
+    let log = ticks(&mut s, BAR - 40);
+    let at = BAR - 40;
+    assert_eq!(triggers(&log), [(at, 11)], "only the new run triggers");
+    assert!(log.iter().any(|(t, a)| *t == at
+        && matches!(
+            a,
+            Action::Ended {
+                reason: EndReason::Restarted,
+                ..
+            }
+        )));
+    assert_eq!(s.status()[0].pos, 0);
+}
+
+#[test]
+fn a_waiting_start_takes_over_before_the_other_sequence_acts() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 10);
+    s.start(one_clip(2, 500, 20), Origin::Ui, Start::Bar { bars: 1 })
+        .unwrap();
+    let log = ticks(&mut s, BAR - 10);
+    // Sequence 1 would trigger clip 10 on this tick (its bar 2); its lane is taken first.
+    assert_eq!(triggers(&log), [(BAR - 10, 20)]);
+}
+
+#[test]
+fn a_seq_clip_links_a_waiting_start() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 3);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Beat)
+        .unwrap();
+    s.link_pending(seq(1), Origin::SeqClip { clip_id: 77 });
+    assert_eq!(s.pending()[0].origin, Origin::SeqClip { clip_id: 77 });
+    let log = ticks(&mut s, BEAT);
+    assert!(log.iter().any(|(_, a)| matches!(
+        a,
+        Action::Started {
+            origin: Origin::SeqClip { clip_id: 77 },
+            ..
+        }
+    )));
+}
+
+// ---- cue (SPEC §3.3) ----
+
+fn ended_seqs(log: &[(u64, Action)]) -> Vec<(u64, Uuid)> {
+    ended(log).into_iter().map(|(t, s, _)| (t, s)).collect()
+}
+
+#[test]
+fn a_cue_replaces_what_plays_at_its_point() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1); // phase 0
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    s.start(one_clip(2, 501, 20), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 30);
+    // Cue 3 at the next bar; it shares layer 500 with sequence 1.
+    let acts = s
+        .cue(
+            one_clip(3, 500, 30),
+            Origin::Ui,
+            Wait::Mode(Start::Bar { bars: 1 }),
+        )
+        .unwrap();
+    assert!(matches!(acts[..], [Action::Pending { .. }]));
+    assert_eq!(s.cued(), Some((seq(3), Wait::Mode(Start::Bar { bars: 1 }))));
+    assert!(s.pending()[0].cue);
+    let log = ticks(&mut s, BAR - 30);
+    let at = BAR - 30;
+    assert_eq!(started(&log), [(at, seq(3))]);
+    assert_eq!(triggers(&log), [(at, 30)], "the others act no more");
+    // 1 lost its only lane to the cue; 2 is stopped with its after_last_pass (clear on 501).
+    let mut e = ended_seqs(&log);
+    e.sort();
+    assert_eq!(e, [(at, seq(1)), (at, seq(2))]);
+    assert_eq!(clears(&log), [(at, 501)]);
+    assert_eq!(s.running().collect::<Vec<_>>(), [seq(3)]);
+}
+
+#[test]
+fn a_cue_at_the_end_of_a_pass() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    // Two-bar pass.
+    let two_bars = spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Hold,
+        vec![lane(500, LaneEnd::LoopToEnd, &[(16, Clip(10))])],
+    );
+    s.start(two_bars, Origin::Ui, Start::Immediate).unwrap();
+    ticks(&mut s, 50);
+    s.cue(one_clip(2, 501, 20), Origin::Ui, Wait::EndOfPass(seq(1)))
+        .unwrap();
+    assert_eq!(s.pending()[0].wait_ticks, 2 * BAR - 50);
+    let log = ticks(&mut s, 2 * BAR);
+    let at = 2 * BAR - 50;
+    assert_eq!(started(&log), [(at, seq(2))]);
+    assert_eq!(ended_seqs(&log), [(at, seq(1))]);
+    assert!(
+        !triggers(&log).contains(&(at, 10)),
+        "1 does not start its next pass"
+    );
+}
+
+#[test]
+fn a_cue_at_the_end_of_a_pass_starts_when_that_sequence_stops() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 10);
+    s.cue(one_clip(2, 501, 20), Origin::Ui, Wait::EndOfPass(seq(1)))
+        .unwrap();
+    let acts = s.stop(seq(1), StopMode::AfterLastPass);
+    assert!(acts.iter().any(|a| matches!(
+        a,
+        Action::Started { seq: x, .. } if *x == seq(2)
+    )));
+    // Cueing at the end of the pass of a sequence that is not running starts at once.
+    let acts = s
+        .cue(one_clip(3, 502, 30), Origin::Ui, Wait::EndOfPass(seq(9)))
+        .unwrap();
+    assert!(acts.iter().any(|a| matches!(a, Action::Started { .. })));
+    assert_eq!(s.running().collect::<Vec<_>>(), [seq(3)]);
+}
+
+#[test]
+fn one_cue_at_a_time_and_how_it_is_cancelled() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 5);
+    s.cue(
+        one_clip(1, 500, 10),
+        Origin::Ui,
+        Wait::Mode(Start::Bar { bars: 8 }),
+    )
+    .unwrap();
+    let acts = s
+        .cue(
+            one_clip(2, 501, 20),
+            Origin::Ui,
+            Wait::Mode(Start::Bar { bars: 16 }),
+        )
+        .unwrap();
+    assert_eq!(
+        acts[0],
+        Action::PendingCancelled {
+            seq: seq(1),
+            origin: Origin::Ui
+        }
+    );
+    assert_eq!(s.pending().len(), 1);
+    assert_eq!(s.pending()[0].wait_ticks, 16 * BAR - 4);
+    // A plain waiting start is not a cue and stays.
+    s.start(one_clip(3, 502, 30), Origin::Ui, Start::Beat)
+        .unwrap();
+    assert_eq!(s.cancel_cue().len(), 1);
+    assert_eq!(s.cued(), None);
+    assert_eq!(s.pending().len(), 1);
+    // Stop on the cued sequence cancels it.
+    s.cue(one_clip(1, 500, 10), Origin::Ui, Wait::Mode(Start::Beat))
+        .unwrap();
+    s.stop(seq(1), StopMode::AfterLastPass);
+    assert_eq!(s.cued(), None);
+}
+
+#[test]
+fn starting_the_cued_sequence_starts_it_now_and_still_replaces() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 7);
+    s.cue(
+        one_clip(2, 501, 20),
+        Origin::Ui,
+        Wait::Mode(Start::Bar { bars: 4 }),
+    )
+    .unwrap();
+    let acts = s
+        .start(one_clip(2, 501, 20), Origin::Ui, Start::Immediate)
+        .unwrap();
+    assert!(acts.iter().any(|a| matches!(a, Action::Started { .. })));
+    assert!(acts
+        .iter()
+        .any(|a| matches!(a, Action::Ended { seq: x, .. } if *x == seq(1))));
+    assert_eq!(s.running().collect::<Vec<_>>(), [seq(2)]);
+}
+
+// ---- mute and solo (SPEC §7.8) ----
+
+fn three_lanes() -> RunSpec {
+    spec(
+        1,
+        Repeat::Infinite,
+        AfterLastPass::Clear,
+        vec![
+            lane(500, LaneEnd::LoopToEnd, &[(4, Clip(10)), (4, Clip(11))]),
+            lane(501, LaneEnd::LoopToEnd, &[(4, Clip(20)), (4, Clip(21))]),
+            lane(502, LaneEnd::LoopToEnd, &[(8, Clip(30))]),
+        ],
+    )
+}
+
+#[test]
+fn a_muted_lane_clears_counts_silently_and_comes_back_in_time() {
+    let mut s = Scheduler::new();
+    s.start(three_lanes(), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 10);
+    let acts = s.set_mute(seq(1), 0, true);
+    assert!(acts.contains(&Action::Clear {
+        seq: seq(1),
+        lane: 0,
+        layer_id: 500
+    }));
+    assert!(acts.contains(&Action::LaneMuteChanged {
+        seq: seq(1),
+        lane: 0,
+        silent: true
+    }));
+    let st = &s.status()[0].lanes[0];
+    assert!(st.mute && st.silent && st.state == LaneState::Playing);
+    // Half a bar later lane 0 would trigger clip 11: silent, the others play.
+    let log = ticks(&mut s, 4 * E - 10);
+    assert_eq!(triggers(&log), [(4 * E - 10, 21)]);
+    assert!(clears(&log).is_empty());
+    // Unmute mid-step: nothing now, the next step (bar 2) plays.
+    let acts = s.set_mute(seq(1), 0, false);
+    assert!(!acts
+        .iter()
+        .any(|a| matches!(a, Action::Trigger { .. } | Action::Clear { .. })));
+    let log = ticks(&mut s, 4 * E);
+    assert_eq!(triggers(&log), [(4 * E, 10), (4 * E, 20), (4 * E, 30)]);
+}
+
+#[test]
+fn solo_mutes_the_other_lanes_until_the_last_solo_goes() {
+    let mut s = Scheduler::new();
+    s.start(three_lanes(), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 5);
+    s.set_mute(seq(1), 2, true);
+    let acts = s.set_solo(seq(1), 0, true);
+    // Lane 1 falls silent (cleared); lane 2 was already muted.
+    assert_eq!(
+        acts.iter()
+            .filter_map(|a| match a {
+                Action::Clear { layer_id, .. } => Some(*layer_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        [501]
+    );
+    s.set_solo(seq(1), 1, true);
+    let log = ticks(&mut s, 8 * E - 5);
+    let at = 8 * E - 5;
+    assert_eq!(
+        triggers(&log),
+        [(4 * E - 5, 11), (4 * E - 5, 21), (at, 10), (at, 20)]
+    );
+    // Unsolo both: lane 2 stays muted by hand.
+    s.set_solo(seq(1), 0, false);
+    s.set_solo(seq(1), 1, false);
+    let st = s.status();
+    let silent: Vec<_> = st[0].lanes.iter().map(|l| l.silent).collect();
+    assert_eq!(silent, [false, false, true]);
+}
+
+#[test]
+fn unmuting_a_yielded_lane_resumes_it_at_the_next_step() {
+    let mut s = Scheduler::new();
+    s.start(three_lanes(), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 3);
+    s.yield_layer(500);
+    s.set_mute(seq(1), 0, true);
+    let acts = s.set_mute(seq(1), 0, false);
+    assert!(acts.contains(&Action::LaneStateChanged {
+        seq: seq(1),
+        lane: 0,
+        state: LaneState::Yielded {
+            resume_pending: true
+        }
+    }));
+    let log = ticks(&mut s, 4 * E - 3);
+    assert!(triggers(&log).contains(&(4 * E - 3, 11)));
+    assert_eq!(s.status()[0].lanes[0].state, LaneState::Playing);
+}
+
+#[test]
+fn a_restart_starts_unmuted_and_unknown_lanes_are_ignored() {
+    let mut s = Scheduler::new();
+    s.start(three_lanes(), Origin::Ui, Start::Immediate)
+        .unwrap();
+    s.set_mute(seq(1), 1, true);
+    assert!(s.set_mute(seq(1), 9, true).is_empty());
+    assert!(s.set_solo(seq(2), 0, true).is_empty());
+    s.start(three_lanes(), Origin::Ui, Start::Immediate)
+        .unwrap();
+    assert!(s.status()[0].lanes.iter().all(|l| !l.mute && !l.silent));
+}
+
+// ---- starting a running sequence (SPEC §7.1) ----
+
+fn origin_of(s: &Scheduler, id: u128) -> Origin {
+    s.status().iter().find(|r| r.seq == seq(id)).unwrap().origin
+}
+
+#[test]
+fn restarting_from_the_app_keeps_the_seq_clip_link() {
+    let linked = Origin::SeqClip { clip_id: 77 };
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), linked, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 30);
+    let acts = s
+        .start(one_clip(1, 500, 11), Origin::Ui, Start::Immediate)
+        .unwrap();
+    assert!(acts.contains(&Action::Started {
+        seq: seq(1),
+        origin: linked
+    }));
+    assert_eq!(origin_of(&s, 1), linked);
+    assert_eq!(s.status()[0].pos, 0, "from step 1");
+    // A quantized restart keeps it too, when it begins.
+    s.start(one_clip(1, 500, 12), Origin::Ui, Start::Bar { bars: 1 })
+        .unwrap();
+    ticks(&mut s, BAR);
+    assert_eq!(origin_of(&s, 1), linked);
+    // Stopping as the § clip would (its disconnect) still finds the run.
+    assert!(s
+        .status()
+        .iter()
+        .any(|r| r.origin == Origin::SeqClip { clip_id: 77 }));
+}
+
+#[test]
+fn a_seq_clip_adopts_a_running_sequence_without_a_restart() {
+    let mut s = Scheduler::new();
+    ticks(&mut s, 1);
+    s.start(one_clip(1, 500, 10), Origin::Ui, Start::Immediate)
+        .unwrap();
+    ticks(&mut s, 40);
+    assert!(s.adopt(seq(1), Origin::SeqClip { clip_id: 5 }));
+    let st = &s.status()[0];
+    assert_eq!((st.origin, st.pos), (Origin::SeqClip { clip_id: 5 }, 40));
+    assert!(!s.adopt(seq(2), Origin::SeqClip { clip_id: 5 }));
+    // Nothing is sent by the adoption itself; the run goes on as before.
+    let log = ticks(&mut s, BAR - 40);
+    assert_eq!(triggers(&log), [(BAR - 40, 10)]);
 }

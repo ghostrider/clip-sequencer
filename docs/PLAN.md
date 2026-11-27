@@ -220,13 +220,13 @@ Tasks:
 - [x] Docs: SPEC §14, manual page "Colour LUTs" with screenshots, interface, shortcuts, glossary, README,
       changelog, landing page.
 
-## M14 — In-app update  (planned 2026-11-04, not started; part of release 0.5.0, SPEC §15)
+## M14 — In-app update  (planned 2026-11-04; built 2026-11-25; Windows test passed 2026-11-26; SPEC §15)
 Goal: the user can check by hand whether a newer release exists, and install it from the app. Work out the
 details in SPEC first (new section), then build it.
 
 Decided (2026-11-04):
-- **Only by hand:** a menu entry **Help → Check for updates…** (desktop app, and the browser UI's menu bar). No
-  automatic or background checks, no check at start-up, no setting for it.
+- ~~**Only by hand**~~ Changed 2026-11-25: a check **once at start-up** (Download and install / Skip this version /
+  Later; off in Preferences or with `--no-update-check`), and **Help → Check for updates…** by hand (SPEC §15).
 - **If a newer release is found:** show its version and release notes, and offer to install it.
 - **Binary replacement (decided 2026-11-23): full replacement** by a helper after the app quits, with rollback
   (outline in `docs/release-0.5-plan.md` §D). Part of release 0.5.0.
@@ -247,13 +247,18 @@ Open points for the SPEC section:
 - **Console program:** `seq-app-cli --check-update` (and possibly `--update`).
 
 Tasks (to refine when it starts):
-- [ ] SPEC section: the menu entry, the dialog, the check, the replacement once decided, failure and rollback.
-- [ ] Update check (GitHub API, version compare) with tests against a local fake release server.
-- [ ] Menu entry Help → Check for updates… (native menu and browser UI menu bar) and the result dialog
-      ("up to date" / new version with notes / error).
-- [ ] Download, verification and binary replacement (after the decision).
-- [ ] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
-- [ ] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin.
+- [x] SPEC section: the menu entry, the dialog, the check, the replacement once decided, failure and rollback.
+- [x] Update check (GitHub API, version compare) with tests against a local fake release server.
+- [x] Menu entry Help → Check for updates… (one menu bar for the desktop app and the browser UI since 0.4) and the
+      result dialog ("up to date" / new version with notes / error); the check at start-up with Download and install /
+      Skip this version / Later; Preferences → Updates.
+- [x] Download, verification and binary replacement (helper = the new seq-app-cli, decided 2026-11-25), with
+      rollback; `scripts/fake-update-source.mjs` and `--update-source` for testing (docs/RELEASING.md).
+- [x] Privacy note, code signing policy, SECURITY.md, manual (installation → updating), README.
+- [x] Test on Windows: no update, update found, no network, read-only folder, Resolume running with the plugin
+      (with Uli 2026-11-26, 0.4.0 → 0.4.1, all passed), and the rollback (a broken 0.4.2: the old version came
+      back). Found: the helper waited the full 60 s for a version that had already quit; now it rolls back at once
+      when the new version quits, and waits 30 s for one that hangs.
 
 ---
 
@@ -276,19 +281,19 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       until their milestone); `--validate` reports v4 errors.
 - [x] Samples: update `docs/samples/demo.seq.json` to v4 (keep a v3 copy for the migration test).
 
-## M20 — Quantized start, cue, mute/solo (SPEC §3.2; G1, G2)  ⟵ next
-- [ ] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
-- [ ] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
+## M20 — Quantized start, cue, mute/solo (SPEC §3.2, §3.3, §7.8; G1, G2)  ✓ done 2026-11-25
+- [x] Bar phase in the engine: MIDI Start, Resync (and Play after Stop), else first tick; `bar phase not synced`.
+- [x] Scheduler (pure): pending starts with a target tick, ▶ again = now, Stop cancels, recompute on a phase reset,
       freeze with the clock; `§` starts wait too; deck switch first. Unit tests on boundaries.
-- [ ] UI: start mode in the editor header, `starts in …` on card and header.
-- [ ] SPEC section for **cue** (G1): how to cue (card action, key), cue points (start mode, end of the current pass
+- [x] UI: start mode in the editor header, `starts in …` on card and header.
+- [x] SPEC section for **cue** (G1): how to cue (card action, key), cue points (start mode, end of the current pass
       of a running sequence, next 8/16 bars), one cue or a queue, cancelling; then build it.
-- [ ] SPEC section for **mute/solo** (G2): lane header buttons, a muted lane counts but doesn't trigger and comes
+- [x] SPEC section for **mute/solo** (G2): lane header buttons, a muted lane counts but doesn't trigger and comes
       back at its next step, solo = mute the others; not saved; what a mute does to the layer (clear or hold);
       then build it.
-- [ ] Docs: manual (Playing live), shortcuts, changelog.
+- [x] Docs: manual (Playing live), shortcuts, changelog.
 
-## M21 — Transitions per step (SPEC §7.7; A)
+## M21 — Transitions per step (SPEC §7.7; A)  ⟵ next
 - [ ] **Probe** with Uli in Resolume (`tools/resolume-probe`), recorded in notes §19 with samples: set layer
       `transition.duration` / `blend_mode` over WS (by id, by path; units); a set just before an OSC `connect` (same
       tick, 1 ms, 1/16 ahead); changing it during a running fade; does a layer clear fade; what `layer_determined`
@@ -303,24 +308,24 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       warnings; lane default chip; inspector Transition. Checked with Playwright against the mock.
 - [ ] Live check with Uli; docs: manual page "Transitions", changelog, README.
 
-## M22 — Pass conditions and choices (SPEC §6; G4, G5)
-- [ ] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
+## M22 — Pass conditions and choices (SPEC §6; G4, G5)  ✓ done 2026-11-25 (UI not yet checked in a browser)
+- [x] Scheduler (pure): evaluate `when` per pass (loops of a short lane share the pass), `last` with count/once,
       infinite rules; pick (`cycle` counter per run, `random` from the engine's seed). Unit tests incl. a condition
       false (nothing sent) and a picked rest / unresolved option.
-- [ ] FFGL view and sequence mosaic: show option 1 (or the option playing).
-- [ ] UI: condition chip and `1/3` badge on blocks, inspector Play on and Choices (add from the browser by drag onto
+- [x] FFGL view and sequence mosaic: show option 1 (or the option playing). Both show option 1.
+- [x] UI: condition chip and `1/3` badge on blocks, inspector Play on and Choices (add from the browser by drag onto
       the inspector, reorder, relink), warning for `last` with infinite repeat.
-- [ ] Docs: manual (Editing), changelog.
+- [x] Docs: manual (Editing), changelog.
 
-## M23 — Section markers (SPEC §6, §9.3; G7)
-- [ ] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
+## M23 — Section markers (SPEC §6, §9.3; G7)  ✓ done 2026-11-25 (UI not yet checked in a browser)
+- [x] UI: flags in the ruler, lines through the lanes, add (`M`, context menu), move, rename, delete, greyed beyond
       the end; guide lines 8/16/32/off as a view setting in `settings.json`.
-- [ ] Docs: manual, shortcuts, changelog.
+- [x] Docs: manual, shortcuts, changelog.
 
-## M24 — Starting a running sequence (SPEC §7.1; C)
-- [ ] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
+## M24 — Starting a running sequence (SPEC §7.1; C)  ✓ done 2026-11-25
+- [x] Engine: ▶ on a running sequence restarts but keeps the `§` link; the `§` clip connecting adopts the run;
       `§` connecting while pending links the pending start. Tests for every order.
-- [ ] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
+- [x] Remove the "one place at a time" limitation from README and manual (Playing live); changelog.
 
 ## M25 — Record from Resolume (G6)
 - [ ] SPEC section: arm per sequence (which lanes, overwrite or insert, count-in), snap to 1/16, what a click on a
@@ -334,6 +339,38 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
       notes §2), clips with their own transition, unknown blend modes, clips shorter than their step that don't
       loop, `last` with infinite repeat), where it shows (button, dialog, jump to the step).
 - [ ] Build (pure checks in `seq-core` where possible), UI, docs.
+
+## M27 — LUT preview side by side (requested by Uli 2026-11-25, SPEC §14.4)  ✓ done 2026-11-25 (not yet checked in a browser)
+- [x] LUT tab preview: instead of the movable split, two panels next to each other: left the sample image as it is,
+      right the same image with the LUT applied. Both scale the image to fit their panel (aspect kept, no cropping).
+- [x] Keep the current sample images (and the "your clips" source); SPEC §14.4 and the manual (LUTs) updated.
+- [x] Test images: the Kodak Lossless True Color Image Suite (decided with Uli 2026-11-25; 24 JPEGs in
+      `web/public/kodak`, README and licence list entry). Not "Lenna": it is not free of copyright (a 1972 Playboy
+      photo) and many journals no longer accept it.
+- [x] New screenshot `site/manual/src/images/luts-tab.png` (`site/screenshots.mjs`, needs Playwright); also the update
+      dialog, Preferences → Updates, and sections and badges in the editor and overview (2026-11-26).
+
+## M28 — Remote Resolume (requested by Uli 2026-11-26)
+Resolume runs on a computer next to the projector (short HDMI cable), the sequencer on another one further away,
+connected over Ethernet. Today everything assumes one machine (`127.0.0.1`), although `--resolume-host` exists.
+- [ ] Probe with Uli on two machines: REST, WebSocket and OSC to Resolume over the LAN (Resolume's web server and
+      OSC input bound to the network, firewall), latency and jitter of OSC triggers, thumbnails; notes new §.
+- [ ] SPEC section: what works remotely and what needs the Resolume machine — files Resolume must read from its own
+      disk (LUT `.cube` files, M18; media dropped onto slots, M13), the FFGL plugin, which polls the sequencer on
+      localhost (§12: needs the sequencer's address and the UI server bound beyond `127.0.0.1`, see its security note),
+      "Resolume running" detection and FFGL install/update (local only), latency compensation per host.
+- [ ] Build, docs (manual: two-machine setup), live check with Uli.
+
+## M29 — UI access from other computers (requested by Uli 2026-11-26)
+Today the UI server answers only on `127.0.0.1` (SPEC §12.2). Let another computer on the network open the UI.
+- [ ] SPEC section: a setting "Allow access from other computers", **off by default**, in the Preferences dialog
+      (and a command-line flag); when on, the server also listens on the network (all interfaces or a chosen
+      one); what it means for security (anyone on the network can control the show: access key or PIN?, the
+      Origin check of §12.2 with other hosts, a warning in the dialog, Windows firewall prompt); does a change
+      apply at once or after a restart; the address to open shown in Preferences.
+- [ ] Build: setting in the preferences file, bind address in `seq-app`, Preferences UI, tests (off: no answer
+      on the LAN address; on: answers, foreign Origin still refused).
+- [ ] Docs: manual (Preferences, privacy/security), README, SECURITY.md, changelog. Shares the network part with M28.
 
 ## M14 — In-app update (SPEC §15) — see above, now part of 0.5 with full replacement
 
