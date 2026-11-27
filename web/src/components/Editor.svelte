@@ -7,6 +7,8 @@
   let deck = $derived(app.viewDeck);
   let run = $derived(app.run(view?.sequence.id));
   let waiting = $derived(app.pendingStart(view?.sequence.id));
+  // Recording from Resolume (SPEC §7.9): this sequence armed or recording.
+  let rec = $derived(app.runtime?.record?.seq === view?.sequence.id ? app.runtime?.record ?? null : null);
   let editingName = $state(false);
   let nameText = $state('');
   let countText = $state('4');
@@ -69,6 +71,8 @@
       </span>
       {#if run?.edited}<span class="tag pending">● edited · applies at next start</span>{/if}
       {#if waiting}<span class="tag pending mono" title="▶ again starts it now">{waitLabel(waiting)}</span>{/if}
+      {#if rec?.recording}<span class="tag rec mono" title="Click clips in Resolume in time: each pass is written when it ends">● REC · pass {rec.pass}{rec.clicks ? ` · ${rec.clicks} click${rec.clicks === 1 ? '' : 's'}` : ''}</span>
+      {:else if rec}<span class="tag rec armed mono" title="Records from its next start">● armed</span>{/if}
       <div class="spacer"></div>
       <div class="repeat startmode" role="group" aria-label="Start mode">
         <span>Start</span>
@@ -97,6 +101,9 @@
         {#if app.runtime?.switching?.seq === s.id}switching…{:else if run}■ Stop{:else if waiting}▶ Start now{:else if deck.live}▶ Start{:else}▶ Start on {deck.name}{/if}
       </button>
       {#if waiting}<button class="btn" onclick={() => app.cancelWaiting(waiting)}>Cancel</button>{/if}
+      <button class="btn rec-btn" aria-pressed={!!rec} disabled={!deck.live && !rec}
+        title={!deck.live ? 'Only a sequence of the live deck can record' : rec ? 'Disarm: stop recording (what was recorded stays)' : 'Arm: record clicks in Resolume from the next start, pass by pass (it loops until Stop)'}
+        onclick={() => app.send({ cmd: 'set_armed', seq: rec ? null : s.id })}>⏺</button>
     </div>
 
     <LaneGrid {view} {deck} />

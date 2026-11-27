@@ -328,6 +328,8 @@ export interface RuntimeState {
   save_error: string | null;
   /** "Sync SEQ layer" is running (SPEC §7.6). */
   seq_sync_busy: boolean;
+  /** The armed sequence (SPEC §7.9). */
+  record?: RecordView | null;
 }
 
 // Edit operations (seq-core/src/edit.rs, tagged by "op").
@@ -376,6 +378,7 @@ export type Command =
   | { cmd: 'update_answer'; skip: boolean }
   | { cmd: 'install_update' }
   | { cmd: 'set_update_check'; on: boolean }
+  | { cmd: 'set_armed'; seq: Uuid | null }
   | { cmd: 'set_lane_mute'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'set_lane_solo'; seq: Uuid; lane: number; on: boolean }
   | { cmd: 'stop'; seq: Uuid }
@@ -542,4 +545,13 @@ export interface FfglResult {
   message?: string;
   error?: string;
   status: FfglStatus;
+}
+
+/** Recording from Resolume (SPEC §7.9). */
+export interface RecordView {
+  seq: Uuid;
+  /** Its run goes and records; else armed, waiting for its start. */
+  recording: boolean;
+  pass: number;
+  clicks: number;
 }

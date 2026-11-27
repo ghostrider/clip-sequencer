@@ -72,7 +72,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 
 .grid { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--track); }
 .grid-inner { display: flex; min-width: 860px; }
-.lanehead-col { flex: 0 0 var(--lane-head-w); border-right: 1px solid var(--line); }
+.lanehead-col { flex: 0 0 var(--lane-head-w); min-width: 0; border-right: 1px solid var(--line); }
 .ruler-spacer { height: var(--ruler-h); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 12px; font: 11px var(--mono); color: var(--muted); }
 .lanehead { height: var(--lane-h); border-bottom: 1px solid var(--line-soft); padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; }
 .pill { font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); color: var(--text-2); }
@@ -188,7 +188,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .step.warn .len::after { content: " · ⚠"; color: var(--accent-text); }
 .lanehead.bad .layer-select { color: var(--err-text); border-color: var(--err-line); }
 .layer-select, .pill-select { background: var(--control); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 2px 4px; max-width: 120px; }
-.layer-select { font-weight: 600; }
+.layer-select { font-weight: 600; min-width: 0; flex: 1 1 auto; }
+.lanehead { min-width: 0; overflow: hidden; }
 .pill-select { font-size: 11px; color: var(--text-2); }
 .x { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 4px; }
 .x:disabled { opacity: .3; cursor: not-allowed; }
@@ -228,3 +229,14 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .fade-chip.none:hover { color: var(--text-2); border-color: var(--fade); }
 .fade-pick { color: var(--fade); }
 .fade-menu { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 220px; }
+
+/* Recording from Resolume (SPEC §7.9): the error colours stand for "on air". */
+.tag.rec { color: var(--err-text); border: 1px solid var(--err-line); background: var(--err-bg); }
+.tag.rec.armed { background: none; }
+.run-badge.rec { background: var(--err); color: var(--err-ink); }
+.run-badge.rec.armed { background: none; color: var(--err-text); border: 1px solid var(--err-line); }
+.btn.rec-btn { color: var(--err-text); }
+.btn.rec-btn[aria-pressed='true'] { background: var(--err-bg); border-color: var(--err-line); }
+.pill.rec { color: var(--err-ink); background: var(--err); border-color: var(--err); }
+button.pill { cursor: pointer; font: inherit; }
+.lane-tools .ms button { padding: 0 6px; }

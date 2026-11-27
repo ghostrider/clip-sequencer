@@ -351,7 +351,9 @@ Resolume and can run whenever he has time; the rest in the order below. One mile
 - [x] Engine: arm/disarm, loop while recording, clicks → take (own triggers and the SEQ layer excluded), yield from
       the first click, write the take at the pass end as one undo step and play it the next pass. Mock tests.
       Done 2026-11-27 (`engine/record.rs`; `Scheduler::set_next_pass` swaps the spec at the boundary).
-- [ ] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
+- [x] UI: ⏺ arm in the editor header, `armed` / `REC` on the card and the editor. Checked with Playwright.
+      Done 2026-11-27. The lane head keeps its height while running: M/S replace ▲▼, the yielded pill resumes the
+      lane (no extra button), a lane yielded to recording shows `rec`.
 - [ ] Docs (manual, changelog, README) and a live check with Uli.
 
 ## M26 — Pre-show check (G16)
