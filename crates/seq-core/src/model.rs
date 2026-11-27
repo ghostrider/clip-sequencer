@@ -625,13 +625,13 @@ pub struct Step {
     pub column: Option<u32>,
     /// In sixteenths, ≥ 1 (checked by validation). Version 1 files counted eighths.
     pub length: u32,
-    /// Plays only on some passes (format v4). Carried, not acted on yet (M22).
+    /// Plays only on some passes (format v4).
     pub when: Option<When>,
     /// Options 2… (format v4); the step's own `clip` / `column` is option 1. Empty = none.
     pub choices: Vec<Option<Choice>>,
     /// Only with `choices`; `None` means the default, [`Pick::Random`].
     pub pick: Option<Pick>,
-    /// How the clip comes in (format v4); wins over the lane's. Carried, not acted on yet (M21).
+    /// How the clip comes in (format v4); wins over the lane's (SPEC §7.7).
     pub transition: Option<Transition>,
 }
 

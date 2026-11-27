@@ -6,6 +6,7 @@
 //! - [`file`]: parse and serialize `.seq.json` text, including the version check.
 //! - [`index`]: the live deck's layers and clips as a plain value (built by `resolume-client`).
 //! - [`resolve`]: step clip and lane layer resolution against an index (SPEC §4.3, §4.4).
+//! - [`record`]: a take recorded from Resolume, written into a sequence (SPEC §7.9).
 //! - [`seq_sync`]: what "Sync SEQ layer" has to create, add and may clear (SPEC §7.6).
 //! - [`transition`]: layer transition values, originals and who changed them (SPEC §7.7).
 
@@ -13,6 +14,7 @@ pub mod edit;
 pub mod file;
 pub mod index;
 pub mod model;
+pub mod record;
 pub mod resolve;
 pub mod scheduler;
 pub mod seq_sync;
