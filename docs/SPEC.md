@@ -546,6 +546,10 @@ time. What you click lands on the grid, and the next pass plays it back, so a pa
   connected is the end of a fade and records nothing (notes §20). Clicks on the SEQ layer are not recorded (they start sequences as usual).
   Clicking the clip that already plays reports nothing in Resolume (notes §13), so it can't be recorded: the step
   just goes on.
+- **Piano trigger style** (checked 2026-11-27, notes §20): pressing a Piano clip is a click, releasing it a clear,
+  so a held clip records as the clip until the release and a rest from there. A tap shorter than a sixteenth
+  still records a sixteenth: a rest that snaps onto the sixteenth of the clip before it moves one sixteenth on.
+  *Toggle* works the same way (the second click disconnects: a rest).
 - **Snap:** each click goes to the nearest sixteenth of the pass, from its arrival time and the tempo. A click in
   the last half sixteenth of a pass belongs to the start of the next one. Two clicks on one layer that snap to the
   same sixteenth: the later one counts.

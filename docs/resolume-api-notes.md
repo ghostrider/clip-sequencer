@@ -431,6 +431,22 @@ a transition of 2.37 s (Displace), layer 2 none; every clip *Layer Determined*. 
 | Preview a clip | `Connected & previewing` (still connected), `Previewing` alone (not connected) | ✅ |
 | Transition duration typed in the layer | one `parameter_update` (`2`, later `0`) | ✅ |
 
+**Piano trigger style** (same day; per clip `triggerstyle` `Composition Determined` / `Normal` / `Piano` /
+`Toggle`, WS path `…/clips/{C}/cliptriggerstyle`; the composition default is `cliptriggerstyle`). Logs
+`m25-piano-osc.jsonl` (OSC, set by the probe) and `m25-piano-hand.jsonl` (by hand):
+
+| Action | WebSocket | Status |
+|---|---|---|
+| OSC `connect` 1 on a Piano clip, no release | `Connected`, and it stays (1.5 s watched) | ✅ |
+| OSC `connect` 0 afterwards | `Disconnected` at once | ✅ |
+| OSC 1 and 0 back to back | `Connected`; the release is ignored | ✅ |
+| Hold a Piano clip by hand ~1 s | `Connected` on press, `Disconnected` on release (1.08 s later) | ✅ |
+| Tap by hand | connected for **91 ms** (less than a sixteenth at 128 BPM) | ✅ |
+| Hold 1.8 s with a 1 s layer fade | `Disconnected` 2.84 s after the press: the release **fades out** like a clear | ✅ |
+
+So a release is a clear: recorded as a rest one fade before its `Disconnected`. The app's own triggers (1 only)
+keep a Piano clip playing until the next step or a rest replaces it.
+
 Consequences (SPEC §7.9): a click is a `Connected` that the app didn't cause. A clear is a `Disconnected` of the
 layer's last connected clip that no `Connected` on the same layer follows within a few milliseconds (a cut
 switch sends both together); with a fade it arrives one fade later, so the press was at that time minus the

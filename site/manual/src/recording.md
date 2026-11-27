@@ -38,6 +38,8 @@ Each pass is **one undo step**: **Ctrl+Z** removes the last pass you recorded.
 
 ## Limits
 
+- Clips in **Piano** trigger style record as you play them: the clip from press to release, then a rest. A
+  quick tap records at least a sixteenth. **Toggle** clips record a rest when you click them off.
 - Clicking the clip that is already playing does nothing in Resolume, so it can't be recorded: the step just
   goes on.
 - A layer's **Clear** with a fade is reported only when the fade has ended; the sequencer places it one fade

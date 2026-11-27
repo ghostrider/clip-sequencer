@@ -78,11 +78,19 @@ pub fn apply_take(seq: &Sequence, take: &Take, can_add: impl Fn(&str) -> bool) -
         new_lanes: Vec::new(),
     };
     // Layers in the order of their first click; per layer the clicks by position, the later of
-    // two on one sixteenth winning.
-    let mut layers: Vec<(String, Vec<&Click>)> = Vec::new();
+    // two on one sixteenth winning. A rest on the sixteenth of a clip (a tap shorter than a
+    // sixteenth: Piano trigger style, notes §20) moves one sixteenth on, so the tap stays.
+    let mut layers: Vec<(String, Vec<Click>)> = Vec::new();
     for c in take.clicks.iter().filter(|c| c.at < take.end) {
+        let mut c = c.clone();
         match layers.iter_mut().find(|(l, _)| *l == c.layer) {
             Some((_, v)) => {
+                let tapped = v
+                    .iter()
+                    .any(|o| o.at == c.at && matches!(o.hit, Hit::Clip { .. }));
+                if c.hit == Hit::Rest && tapped && c.at + 1 < take.end {
+                    c.at += 1;
+                }
                 v.retain(|o| o.at != c.at);
                 v.push(c);
             }
@@ -110,6 +118,7 @@ pub fn apply_take(seq: &Sequence, take: &Take, can_add: impl Fn(&str) -> bool) -
         out.steps += clicks.len();
         out.layers.push(layer);
         write_out(lane, take.end);
+        let clicks: Vec<&Click> = clicks.iter().collect();
         overwrite(lane, &clicks, take.end);
     }
     out
@@ -404,6 +413,25 @@ mod tests {
         assert_eq!(shape(&l[1]), sh(&[("h", 28), ("n", 4)]));
         assert_eq!(shape(&l[2]), sh(&[("c", 8), ("-", 20), ("n", 4)]));
         assert_eq!(l[0].end, LaneEnd::LoopToEnd, "the end mode stays");
+    }
+
+    #[test]
+    fn a_tap_shorter_than_a_sixteenth_stays_a_sixteenth() {
+        let s = seq(vec![lane("BG", LaneEnd::Hold, vec![step(None, 32)])]);
+        let take = Take {
+            clicks: vec![
+                click("BG", 8, Some("tap"), 1, None),
+                click("BG", 8, None, 0, None), // released in the same sixteenth
+                click("BG", 16, Some("held"), 1, None),
+                click("BG", 20, None, 0, None),
+            ],
+            end: 32,
+        };
+        let r = apply_take(&s, &take, |_| true);
+        assert_eq!(
+            shape(&r.sequence.lanes[0]),
+            sh(&[("-", 8), ("tap", 1), ("-", 7), ("held", 4), ("-", 12)])
+        );
     }
 
     #[test]
